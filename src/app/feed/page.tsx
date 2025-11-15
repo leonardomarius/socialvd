@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../../lib/supabase";
 
 type Post = {
   id: string;
@@ -31,7 +31,7 @@ export default function FeedPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComments, setNewComments] = useState<Record<string, string>>({});
 
-  // ----- Vérifier si l'utilisateur est connecté + charger les données -----
+  // Vérifier si connecté + charger les données
   useEffect(() => {
     const user_id = localStorage.getItem("user_id");
     if (!user_id) {
@@ -43,31 +43,27 @@ export default function FeedPage() {
     fetchComments();
   }, [router]);
 
-  // ----- Récupérer les posts -----
+  // POSTS
   const fetchPosts = async () => {
     const { data, error } = await supabase
       .from("posts")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error && data) {
-      setPosts(data);
-    }
+    if (!error && data) setPosts(data);
   };
 
-  // ----- Récupérer les commentaires -----
+  // COMMENTS
   const fetchComments = async () => {
     const { data, error } = await supabase
       .from("comments")
       .select("*")
       .order("created_at", { ascending: true });
 
-    if (!error && data) {
-      setComments(data);
-    }
+    if (!error && data) setComments(data);
   };
 
-  // ----- Créer un post -----
+  // CREATE POST
   const createPost = async () => {
     if (!content.trim()) return;
 
@@ -100,7 +96,7 @@ export default function FeedPage() {
     fetchPosts();
   };
 
-  // ----- Liker un post (simple increment) -----
+  // LIKE
   const likePost = async (postId: string, currentLikes: number) => {
     const { error } = await supabase
       .from("posts")
@@ -108,7 +104,6 @@ export default function FeedPage() {
       .eq("id", postId);
 
     if (!error) {
-      // Met à jour localement
       setPosts((prev) =>
         prev.map((p) =>
           p.id === postId ? { ...p, likes: p.likes + 1 } : p
@@ -117,7 +112,7 @@ export default function FeedPage() {
     }
   };
 
-  // ----- Saisir un commentaire -----
+  // COMMENT INPUT
   const handleCommentChange = (postId: string, value: string) => {
     setNewComments((prev) => ({
       ...prev,
@@ -125,17 +120,17 @@ export default function FeedPage() {
     }));
   };
 
-  // ----- Envoyer un commentaire -----
+  // SUBMIT COMMENT
   const submitComment = async (postId: string) => {
-    const content = newComments[postId]?.trim();
-    if (!content) return;
+    const text = newComments[postId]?.trim();
+    if (!text) return;
 
     const author_pseudo = localStorage.getItem("user_pseudo") || "Anonyme";
 
     const { error } = await supabase.from("comments").insert([
       {
         post_id: postId,
-        content,
+        content: text,
         author_pseudo,
       },
     ]);
@@ -146,18 +141,18 @@ export default function FeedPage() {
     }
   };
 
-  // ----- Regrouper les commentaires par post -----
+  // GROUP COMMENTS BY POST
   const commentsByPost: Record<string, Comment[]> = {};
-  for (const c of comments) {
+  comments.forEach((c) => {
     if (!commentsByPost[c.post_id]) commentsByPost[c.post_id] = [];
     commentsByPost[c.post_id].push(c);
-  }
+  });
 
   return (
     <div className="max-w-xl mx-auto pt-10 pb-16">
       <h1 className="text-3xl font-bold mb-8">Fil d’actualité</h1>
 
-      {/* FORMULAIRE DE POST */}
+      {/* FORMULAIRE */}
       <div className="mb-6 border p-4 rounded-lg bg-white shadow-sm">
         <textarea
           className="w-full p-3 border rounded-md mb-3"
@@ -179,7 +174,7 @@ export default function FeedPage() {
         </button>
       </div>
 
-      {/* LISTE DES POSTS */}
+      {/* POSTS */}
       <div className="space-y-6">
         {posts.map((post) => (
           <div
@@ -202,7 +197,7 @@ export default function FeedPage() {
 
             <p className="text-lg mb-3">{post.content}</p>
 
-            {/* Zone like */}
+            {/* LIKE */}
             <button
               className="text-sm text-blue-600 mb-3"
               onClick={() => likePost(post.id, post.likes)}
@@ -210,7 +205,7 @@ export default function FeedPage() {
               👍 J’aime ({post.likes})
             </button>
 
-            {/* Commentaires */}
+            {/* COMMENTS */}
             <div className="mt-2 border-t pt-3">
               <p className="text-sm font-semibold mb-2">Commentaires</p>
 
@@ -223,6 +218,7 @@ export default function FeedPage() {
                     : {c.content}
                   </div>
                 ))}
+
                 {(!commentsByPost[post.id] ||
                   commentsByPost[post.id].length === 0) && (
                   <p className="text-xs text-gray-400">
