@@ -4,15 +4,15 @@ export default function HomePage() {
       <h1>Bienvenue sur SocialVD 🚀</h1>
       <p>Le réseau social gaming arrive très bientôt !</p>
 
-      <a 
-        href="/login" 
+      <a
+        href="/login"
         style={{
           display: "inline-block",
           marginTop: "20px",
           padding: "10px 20px",
           background: "black",
           color: "white",
-          borderRadius: "6px"
+          borderRadius: "6px",
         }}
       >
         Se connecter
