@@ -2,39 +2,84 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { useEffect, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 
 export default function Navbar() {
   const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
 
-  const logout = () => {
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("user_pseudo");
+  // Vérifie si un utilisateur est connecté
+  useEffect(() => {
+    const getUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user ?? null);
+    };
+
+    getUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
     router.push("/login");
   };
 
-  const loggedIn = typeof window !== "undefined" && localStorage.getItem("user_id");
-
   return (
-    <nav className="w-full fixed top-0 left-0 bg-white shadow-md z-50 p-4 flex justify-between items-center">
-      <Link href="/feed" className="font-semibold text-lg">
-        SocialVD
+    <nav
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "15px 25px",
+        borderBottom: "1px solid #333",
+        background: "#0f0f0f",
+        color: "white",
+      }}
+    >
+      {/* Logo */}
+      <Link href="/feed" style={{ fontSize: 20, fontWeight: "bold" }}>
+        SOCIALVD
       </Link>
 
-      <div className="flex gap-4">
-        {loggedIn && (
+      {/* Liens */}
+      <div style={{ display: "flex", gap: "20px" }}>
+        <Link href="/feed">Feed</Link>
+        <Link href="/profile">Profil</Link>
+
+        {/* Si pas connecté → Signup / Login */}
+        {!user && (
           <>
-            <Link href="/profile">Profil</Link>
-            <button onClick={logout} className="text-red-500">
-              Déconnexion
-            </button>
+            <Link href="/signup">Inscription</Link>
+            <Link href="/login">Connexion</Link>
           </>
         )}
 
-        {!loggedIn && (
-          <>
-            <Link href="/login">Connexion</Link>
-            <Link href="/signup">Créer un compte</Link>
-          </>
+        {/* Si connecté → Logout */}
+        {user && (
+          <button
+            onClick={handleLogout}
+            style={{
+              background: "crimson",
+              border: "none",
+              padding: "6px 12px",
+              color: "white",
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            Déconnexion
+          </button>
         )}
       </div>
     </nav>
