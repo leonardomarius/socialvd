@@ -1,91 +1,91 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
+import { supabaseBrowser } from "@/utils/supabaseClient";
 
-export default function SignupPage() {
+const supabase = supabaseBrowser();
+
+export default function LoginPage() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
-  const [pseudo, setPseudo] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSignup = async (e: any) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMessage("");
 
-    console.log("ATTEMPT SIGNUP with:", { email, pseudo, password });
-
-    const { data, error } = await supabase
-      .from("users")
-      .insert([{ email, pseudo, password }]);
-
-    console.log("SIGNUP ERROR:", error);
-    console.log("SIGNUP DATA:", data);
-
-    setLoading(false);
+    // 1) Auth avec Supabase
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (error) {
-      setErrorMessage("Erreur lors de l'inscription.");
+      setErrorMessage("Email ou mot de passe incorrect.");
+      setLoading(false);
       return;
     }
 
-    // Redirection si réussite
-    window.location.href = "/login";
+    // 2) On récupère le profil dans ta table "users"
+    const { data: profile } = await supabase
+      .from("users")
+      .select("id, pseudo")
+      .eq("id", data.user.id)
+      .single();
+
+    // 3) On stocke localement le profil (pour affichage dans le feed)
+    localStorage.setItem("user_id", profile?.id);
+    localStorage.setItem("user_pseudo", profile?.pseudo || "Utilisateur");
+
+    router.push("/feed");
   };
 
   return (
-    <main className="p-6 max-w-sm mx-auto">
-      <h1 className="text-xl font-bold mb-6 text-black">Créer un compte</h1>
-
-      <form onSubmit={handleSignup} className="space-y-4">
-
-        <div>
-          <label className="block text-sm mb-1 text-black">Email</label>
-          <input
-            type="email"
-            className="w-full px-3 py-2 rounded bg-white text-black border border-gray-400"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm mb-1 text-black">Pseudo</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 rounded bg-white text-black border border-gray-400"
-            value={pseudo}
-            onChange={(e) => setPseudo(e.target.value)}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm mb-1 text-black">Mot de passe</label>
-          <input
-            type="password"
-            className="w-full px-3 py-2 rounded bg-white text-black border border-gray-400"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </div>
+    <div className="min-h-screen flex items-center justify-center px-6">
+      <form
+        onSubmit={handleLogin}
+        className="w-full max-w-md p-6 border rounded-lg shadow bg-white"
+      >
+        <h1 className="text-2xl font-bold mb-6 text-center">Connexion</h1>
 
         {errorMessage && (
-          <p className="text-red-600 text-sm">{errorMessage}</p>
+          <p className="text-red-600 text-center mb-4">{errorMessage}</p>
         )}
 
+        <label className="block text-sm mb-1">Email</label>
+        <input
+          type="email"
+          className="w-full px-3 py-2 border rounded mb-4"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+
+        <label className="block text-sm mb-1">Mot de passe</label>
+        <input
+          type="password"
+          className="w-full px-3 py-2 border rounded mb-6"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+
         <button
-  type="submit"
-  disabled={loading}
-  className="w-full bg-black py-2 rounded font-semibold text-white !text-white"
->
-  {loading ? "Création..." : "Créer un compte"}
-</button>
+          type="submit"
+          disabled={loading}
+          className="w-full bg-black py-2 rounded font-semibold text-white"
+        >
+          {loading ? "Connexion..." : "Se connecter"}
+        </button>
       </form>
-    </main>
+    </div>
   );
 }

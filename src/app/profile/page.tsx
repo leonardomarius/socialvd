@@ -1,94 +1,69 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
-type Post = {
-  id: string;
-  content: string;
-  game: string | null;
-  created_at: string;
-  likes: number;
-};
+import Navbar from "@/components/Navbar";
+import AuthGuard from "@/components/AuthGuard";
+import { supabaseBrowser } from "@/utils/supabaseClient";
+import { useEffect, useState } from "react";
+
+const supabase = supabaseBrowser();
 
 export default function ProfilePage() {
-  const router = useRouter();
-  const [pseudo, setPseudo] = useState<string | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
+  return (
+    <AuthGuard>
+   <ProfileContent />
+</AuthGuard>
+
+  );
+}
+
+
+
+function ProfileContent() {
+  const [userInfo, setUserInfo] = useState<any>(null);
 
   useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
     const user_id = localStorage.getItem("user_id");
-    if (!user_id) {
-      router.push("/login");
-      return;
-    }
+    if (!user_id) return;
 
-    const fetchData = async () => {
-      const { data: user, error: userError } = await supabase
-        .from("users")
-        .select("pseudo, email")
-        .eq("id", user_id)
-        .single();
+    const { data } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", user_id)
+      .single();
 
-      if (!userError && user) {
-        setPseudo(user.pseudo);
-        setEmail(user.email);
-      }
+    setUserInfo(data);
+  };
 
-      const { data: postsData } = await supabase
-        .from("posts")
-        .select("id, content, game, created_at, likes")
-        .eq("user_id", user_id)
-        .order("created_at", { ascending: false });
-
-      if (postsData) setPosts(postsData);
-    };
-
-    fetchData();
-  }, [router]);
+  if (!userInfo) return <p className="p-6">Chargement du profil...</p>;
 
   return (
     <div className="max-w-xl mx-auto pt-10 pb-16">
-      <h1 className="text-3xl font-bold mb-4">Mon profil</h1>
+      <h1 className="text-3xl font-bold mb-6">Mon Profil</h1>
 
-      <div className="border p-4 rounded-lg bg-white shadow-sm mb-6">
-        <p className="text-lg font-semibold">
-          {pseudo || "Utilisateur"}
-        </p>
-        <p className="text-sm text-gray-600">
-          {email || "Email non disponible"}
-        </p>
-      </div>
+      <div className="p-4 border rounded-lg bg-white shadow-sm">
+        <p><strong>Pseudo :</strong> {userInfo.pseudo}</p>
+        <p><strong>Email :</strong> {userInfo.email}</p>
+        <p><strong>ID :</strong> {userInfo.id}</p>
 
-      <h2 className="text-xl font-semibold mb-3">Mes posts</h2>
-      <div className="space-y-4">
-        {posts.map((post) => (
-          <div
-            key={post.id}
-            className="border p-3 rounded-lg bg-white shadow-sm"
+        <div className="mt-6">
+          <button
+            className="bg-black text-white px-4 py-2 rounded"
+            onClick={async () => {
+              await supabase.auth.signOut();
+              localStorage.clear();
+              window.location.href = "/login";
+            }}
           >
-            {post.game && (
-              <p className="text-xs text-gray-500 mb-1">
-                Jeu : {post.game}
-              </p>
-            )}
-            <p className="text-sm text-gray-500">
-              {new Date(post.created_at).toLocaleString()}
-            </p>
-            <p className="mt-1">{post.content}</p>
-            <p className="text-xs text-gray-500 mt-1">
-              👍 {post.likes} j’aime
-            </p>
-          </div>
-        ))}
-
-        {posts.length === 0 && (
-          <p className="text-gray-500 text-sm">
-            Tu n’as pas encore publié de post.
-          </p>
-        )}
+            Se déconnecter
+          </button>
+        </div>
       </div>
     </div>
   );

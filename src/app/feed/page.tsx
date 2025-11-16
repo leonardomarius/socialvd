@@ -1,8 +1,13 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
+import Navbar from "@/components/Navbar";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";   // ← CORRECTION ICI
+import { supabaseBrowser } from "@/utils/supabaseClient";
+import AuthGuard from "@/components/AuthGuard";
+const supabase = supabaseBrowser();
 
 type Post = {
   id: string;
@@ -22,60 +27,50 @@ type Comment = {
   created_at: string;
 };
 
-export default function FeedPage() {
-  const router = useRouter();
-
+function FeedContent() {
   const [content, setContent] = useState("");
   const [game, setGame] = useState("");
   const [posts, setPosts] = useState<Post[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComments, setNewComments] = useState<Record<string, string>>({});
 
-  // Vérifier si connecté + charger les données
   useEffect(() => {
-    const user_id = localStorage.getItem("user_id");
-    if (!user_id) {
-      router.push("/login");
-      return;
-    }
-
+    // l'utilisateur est déjà garanti comme connecté par AuthGuard
     fetchPosts();
     fetchComments();
-  }, [router]);
+  }, []);
 
-  // POSTS
   const fetchPosts = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("posts")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error && data) setPosts(data);
+    if (data) setPosts(data);
   };
 
-  // COMMENTS
   const fetchComments = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("comments")
       .select("*")
       .order("created_at", { ascending: true });
 
-    if (!error && data) setComments(data);
+    if (data) setComments(data);
   };
 
-  // CREATE POST
   const createPost = async () => {
     if (!content.trim()) return;
 
     const user_id = localStorage.getItem("user_id");
-    const author_pseudo = localStorage.getItem("user_pseudo") || "Anonyme";
+    const author_pseudo =
+      localStorage.getItem("user_pseudo") || "Anonyme";
 
     if (!user_id) {
       alert("Utilisateur non connecté.");
       return;
     }
 
-    const { error } = await supabase.from("posts").insert([
+    await supabase.from("posts").insert([
       {
         content,
         user_id,
@@ -85,34 +80,24 @@ export default function FeedPage() {
       },
     ]);
 
-    if (error) {
-      console.error("INSERT ERROR =", error);
-      alert("Erreur lors de la publication du post.");
-      return;
-    }
-
     setContent("");
     setGame("");
     fetchPosts();
   };
 
-  // LIKE
   const likePost = async (postId: string, currentLikes: number) => {
-    const { error } = await supabase
+    await supabase
       .from("posts")
       .update({ likes: currentLikes + 1 })
       .eq("id", postId);
 
-    if (!error) {
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId ? { ...p, likes: p.likes + 1 } : p
-        )
-      );
-    }
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId ? { ...p, likes: p.likes + 1 } : p
+      )
+    );
   };
 
-  // COMMENT INPUT
   const handleCommentChange = (postId: string, value: string) => {
     setNewComments((prev) => ({
       ...prev,
@@ -120,14 +105,14 @@ export default function FeedPage() {
     }));
   };
 
-  // SUBMIT COMMENT
   const submitComment = async (postId: string) => {
     const text = newComments[postId]?.trim();
     if (!text) return;
 
-    const author_pseudo = localStorage.getItem("user_pseudo") || "Anonyme";
+    const author_pseudo =
+      localStorage.getItem("user_pseudo") || "Anonyme";
 
-    const { error } = await supabase.from("comments").insert([
+    await supabase.from("comments").insert([
       {
         post_id: postId,
         content: text,
@@ -135,13 +120,10 @@ export default function FeedPage() {
       },
     ]);
 
-    if (!error) {
-      setNewComments((prev) => ({ ...prev, [postId]: "" }));
-      fetchComments();
-    }
+    setNewComments((prev) => ({ ...prev, [postId]: "" }));
+    fetchComments();
   };
 
-  // GROUP COMMENTS BY POST
   const commentsByPost: Record<string, Comment[]> = {};
   comments.forEach((c) => {
     if (!commentsByPost[c.post_id]) commentsByPost[c.post_id] = [];
@@ -150,9 +132,8 @@ export default function FeedPage() {
 
   return (
     <div className="max-w-xl mx-auto pt-10 pb-16">
-      <h1 className="text-3xl font-bold mb-8">Fil d’actualité</h1>
+      <h1 className="text-3xl font-bold mb-8">Fille d’actualité</h1>
 
-      {/* FORMULAIRE */}
       <div className="mb-6 border p-4 rounded-lg bg-white shadow-sm">
         <textarea
           className="w-full p-3 border rounded-md mb-3"
@@ -166,6 +147,7 @@ export default function FeedPage() {
           value={game}
           onChange={(e) => setGame(e.target.value)}
         />
+
         <button
           onClick={createPost}
           className="w-full bg-black text-white py-2 rounded-md font-semibold"
@@ -174,7 +156,6 @@ export default function FeedPage() {
         </button>
       </div>
 
-      {/* POSTS */}
       <div className="space-y-6">
         {posts.map((post) => (
           <div
@@ -187,7 +168,9 @@ export default function FeedPage() {
                   {post.author_pseudo || "Utilisateur"}
                 </p>
                 {post.game && (
-                  <p className="text-xs text-gray-500">Jeu : {post.game}</p>
+                  <p className="text-xs text-gray-500">
+                    Jeu : {post.game}
+                  </p>
                 )}
               </div>
               <p className="text-xs text-gray-500">
@@ -197,7 +180,6 @@ export default function FeedPage() {
 
             <p className="text-lg mb-3">{post.content}</p>
 
-            {/* LIKE */}
             <button
               className="text-sm text-blue-600 mb-3"
               onClick={() => likePost(post.id, post.likes)}
@@ -205,9 +187,10 @@ export default function FeedPage() {
               👍 J’aime ({post.likes})
             </button>
 
-            {/* COMMENTS */}
             <div className="mt-2 border-t pt-3">
-              <p className="text-sm font-semibold mb-2">Commentaires</p>
+              <p className="text-sm font-semibold mb-2">
+                Commentaires
+              </p>
 
               <div className="space-y-2 mb-3">
                 {(commentsByPost[post.id] || []).map((c) => (
@@ -254,5 +237,16 @@ export default function FeedPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function FeedPage() {
+  return (
+    <AuthGuard>
+   <div className="max-w-xl mx-auto pt-10 pb-16">
+      <FeedContent />
+   </div>
+</AuthGuard>
+
   );
 }
