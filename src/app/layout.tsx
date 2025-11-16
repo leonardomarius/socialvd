@@ -10,7 +10,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr">
       <body>
-        <Navbar /> {/* NAVBAR GLOBALE */}
+        <Navbar />
         {children}
       </body>
     </html>
