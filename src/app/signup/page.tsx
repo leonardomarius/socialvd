@@ -1,64 +1,50 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
 
-export default function SignupPage() {
+export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [pseudo, setPseudo] = useState("");
   const [error, setError] = useState("");
 
-  const handleSignup = async () => {
+  const handleLogin = async () => {
+    console.log("👉 BOUTON CLIQUÉ !");
     setError("");
 
-    const { data, error: signupError } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (signupError) {
-      setError(signupError.message);
+    if (error) {
+      setError("Identifiants incorrects");
       return;
     }
 
-    const userId = data.user?.id;
-    if (!userId) return;
-
-    await supabase.from("users").insert({
-      id: userId,
-      pseudo: pseudo,
-    });
-
-    router.push("/login");
+    router.push("/feed");
   };
 
   return (
     <div style={{ padding: 40 }}>
-      <h1>Créer un compte</h1>
+      <h1>Connexion</h1>
 
       <input
-        placeholder="Pseudo"
-        value={pseudo}
-        onChange={(e) => setPseudo(e.target.value)}
-      />
-
-      <input
-        placeholder="Email"
         value={email}
+        placeholder="Email"
         onChange={(e) => setEmail(e.target.value)}
       />
 
       <input
+        value={password}
         placeholder="Mot de passe"
         type="password"
-        value={password}
         onChange={(e) => setPassword(e.target.value)}
       />
 
-      <button onClick={handleSignup}>S'inscrire</button>
+      <button onClick={handleLogin}>Se connecter</button>
 
       {error && <p style={{ color: "red" }}>{error}</p>}
     </div>

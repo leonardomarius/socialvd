@@ -1,252 +1,269 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
-
-import Navbar from "@/components/Navbar";
 import { useEffect, useState } from "react";
-import { supabaseBrowser } from "@/utils/supabaseClient";
-import AuthGuard from "@/components/AuthGuard";
-const supabase = supabaseBrowser();
-
-type Post = {
-  id: string;
-  content: string;
-  user_id: string;
-  author_pseudo: string | null;
-  game: string | null;
-  likes: number;
-  created_at: string;
-};
+import { supabase } from "@/lib/supabase";
 
 type Comment = {
   id: string;
-  post_id: string;
-  author_pseudo: string;
   content: string;
+  user_id: string;
   created_at: string;
+  users: {
+    pseudo: string;
+  };
 };
 
-function FeedContent() {
+type Post = {
+  id: string;
+  user_id: string;
+  content: string | null;
+  image_url: string | null;
+  created_at: string;
+  users?: {
+    pseudo: string;
+  };
+  comments?: Comment[];
+  likeCount?: number;
+  isLiked?: boolean;
+};
+
+export default function FeedPage() {
   const [content, setContent] = useState("");
-  const [game, setGame] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
   const [posts, setPosts] = useState<Post[]>([]);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [newComments, setNewComments] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    // l'utilisateur est déjà garanti comme connecté par AuthGuard
-    fetchPosts();
-    fetchComments();
-  }, []);
-
+  // ----- Charger les posts + likes + comments + pseudo -----
   const fetchPosts = async () => {
+    const user = await supabase.auth.getUser();
+    const userId = user.data.user?.id;
+
     const { data } = await supabase
       .from("posts")
-      .select("*")
+      .select(`
+        *,
+        users:pseudo!inner (pseudo),
+        likes (user_id),
+        comments (
+          id,
+          content,
+          user_id,
+          created_at,
+          users:pseudo (pseudo)
+        )
+      `)
       .order("created_at", { ascending: false });
 
-    if (data) setPosts(data);
+    if (!data) return;
+
+    const formatted = data.map((p: any) => ({
+      ...p,
+      likeCount: p.likes.length,
+      isLiked: p.likes.some((l: any) => l.user_id === userId),
+    }));
+
+    setPosts(formatted);
   };
 
-  const fetchComments = async () => {
-    const { data } = await supabase
-      .from("comments")
-      .select("*")
-      .order("created_at", { ascending: true });
+  useEffect(() => {
+    fetchPosts();
+  }, []);
 
-    if (data) setComments(data);
+  // ----- Uploader une image -----
+  const uploadImage = async () => {
+    if (!imageFile) return null;
+
+    const fileName = `${Date.now()}-${imageFile.name}`;
+    const { error } = await supabase.storage
+      .from("posts-images")
+      .upload(fileName, imageFile);
+
+    if (error) return null;
+
+    return supabase.storage
+      .from("posts-images")
+      .getPublicUrl(fileName).data.publicUrl;
   };
 
-  const createPost = async () => {
-    if (!content.trim()) return;
+  // ----- Créer un post -----
+  const handleCreatePost = async () => {
+    const user = await supabase.auth.getUser();
+    const userId = user.data.user?.id;
+    if (!userId) return;
 
-    const user_id = localStorage.getItem("user_id");
-    const author_pseudo =
-      localStorage.getItem("user_pseudo") || "Anonyme";
+    let imageUrl = null;
+    if (imageFile) imageUrl = await uploadImage();
 
-    if (!user_id) {
-      alert("Utilisateur non connecté.");
-      return;
-    }
-
-    await supabase.from("posts").insert([
-      {
-        content,
-        user_id,
-        author_pseudo,
-        game: game || null,
-        likes: 0,
-      },
-    ]);
+    await supabase.from("posts").insert({
+      user_id: userId,
+      content,
+      image_url: imageUrl,
+    });
 
     setContent("");
-    setGame("");
+    setImageFile(null);
+
     fetchPosts();
   };
 
-  const likePost = async (postId: string, currentLikes: number) => {
-    await supabase
-      .from("posts")
-      .update({ likes: currentLikes + 1 })
-      .eq("id", postId);
+  // ----- LIKE / UNLIKE -----
+  const toggleLike = async (postId: string, isLiked: boolean) => {
+    const user = await supabase.auth.getUser();
+    const userId = user.data.user?.id;
+    if (!userId) return;
 
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === postId ? { ...p, likes: p.likes + 1 } : p
-      )
-    );
-  };
-
-  const handleCommentChange = (postId: string, value: string) => {
-    setNewComments((prev) => ({
-      ...prev,
-      [postId]: value,
-    }));
-  };
-
-  const submitComment = async (postId: string) => {
-    const text = newComments[postId]?.trim();
-    if (!text) return;
-
-    const author_pseudo =
-      localStorage.getItem("user_pseudo") || "Anonyme";
-
-    await supabase.from("comments").insert([
-      {
+    if (isLiked) {
+      await supabase.from("likes").delete().match({
+        user_id: userId,
         post_id: postId,
-        content: text,
-        author_pseudo,
-      },
-    ]);
+      });
+    } else {
+      await supabase.from("likes").insert({
+        user_id: userId,
+        post_id: postId,
+      });
+    }
 
-    setNewComments((prev) => ({ ...prev, [postId]: "" }));
-    fetchComments();
+    fetchPosts();
   };
 
-  const commentsByPost: Record<string, Comment[]> = {};
-  comments.forEach((c) => {
-    if (!commentsByPost[c.post_id]) commentsByPost[c.post_id] = [];
-    commentsByPost[c.post_id].push(c);
-  });
+  // ----- COMMENTER -----
+  const handleComment = async (postId: string) => {
+    const user = await supabase.auth.getUser();
+    const userId = user.data.user?.id;
+    if (!userId) return;
+
+    const text = commentTexts[postId];
+    if (!text || text.trim() === "") return;
+
+    await supabase.from("comments").insert({
+      post_id: postId,
+      user_id: userId,
+      content: text,
+    });
+
+    setCommentTexts((prev) => ({ ...prev, [postId]: "" }));
+
+    fetchPosts();
+  };
 
   return (
-    <div className="max-w-xl mx-auto pt-10 pb-16">
-      <h1 className="text-3xl font-bold mb-8">Fille d’actualité</h1>
+    <div style={{ padding: 30, maxWidth: 600, margin: "0 auto" }}>
+      <h1>Fil d’actualité</h1>
 
-      <div className="mb-6 border p-4 rounded-lg bg-white shadow-sm">
-        <textarea
-          className="w-full p-3 border rounded-md mb-3"
-          placeholder="Quoi de neuf ?"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-        />
-        <input
-          className="w-full p-2 border rounded-md mb-3"
-          placeholder="Jeu (optionnel)"
-          value={game}
-          onChange={(e) => setGame(e.target.value)}
-        />
+      {/* Formulaire */}
+      <textarea
+        placeholder="Écris quelque chose..."
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        style={{
+          width: "100%",
+          height: 60,
+          marginBottom: 10,
+          padding: 10,
+        }}
+      />
 
-        <button
-          onClick={createPost}
-          className="w-full bg-black text-white py-2 rounded-md font-semibold"
-        >
-          Publier
-        </button>
-      </div>
+      <input
+        type="file"
+        onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+        style={{ marginBottom: 10 }}
+      />
 
-      <div className="space-y-6">
+      <button onClick={handleCreatePost}>Publier</button>
+
+      {/* Liste des posts */}
+      <div style={{ marginTop: 30 }}>
         {posts.map((post) => (
           <div
             key={post.id}
-            className="border p-4 rounded-lg bg-white shadow-sm"
+            style={{
+              border: "1px solid #333",
+              borderRadius: 10,
+              padding: 15,
+              marginBottom: 20,
+              background: "#111",
+              color: "white",
+            }}
           >
-            <div className="flex justify-between items-center mb-2">
-              <div>
-                <p className="font-semibold">
-                  {post.author_pseudo || "Utilisateur"}
-                </p>
-                {post.game && (
-                  <p className="text-xs text-gray-500">
-                    Jeu : {post.game}
-                  </p>
-                )}
-              </div>
-              <p className="text-xs text-gray-500">
-                {new Date(post.created_at).toLocaleString()}
-              </p>
-            </div>
+            {/* 🔵 PSEUDO DE L'AUTEUR */}
+            <p style={{ fontWeight: "bold" }}>{post.users?.pseudo}</p>
 
-            <p className="text-lg mb-3">{post.content}</p>
+            {/* 📝 texte */}
+            {post.content && <p>{post.content}</p>}
 
+            {/* 🖼 image */}
+            {post.image_url && (
+              <img
+                src={post.image_url}
+                style={{
+                  width: "100%",
+                  borderRadius: 10,
+                  marginTop: 10,
+                }}
+              />
+            )}
+
+            {/* ❤️ LIKE */}
             <button
-              className="text-sm text-blue-600 mb-3"
-              onClick={() => likePost(post.id, post.likes)}
+              onClick={() => toggleLike(post.id, post.isLiked!)}
+              style={{
+                marginTop: 10,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 22,
+                color: post.isLiked ? "red" : "white",
+              }}
             >
-              👍 J’aime ({post.likes})
+              {post.isLiked ? "❤️" : "🤍"} {post.likeCount}
             </button>
 
-            <div className="mt-2 border-t pt-3">
-              <p className="text-sm font-semibold mb-2">
-                Commentaires
-              </p>
-
-              <div className="space-y-2 mb-3">
-                {(commentsByPost[post.id] || []).map((c) => (
-                  <div key={c.id} className="text-sm">
-                    <span className="font-semibold">
-                      {c.author_pseudo}
-                    </span>{" "}
-                    : {c.content}
-                  </div>
-                ))}
-
-                {(!commentsByPost[post.id] ||
-                  commentsByPost[post.id].length === 0) && (
-                  <p className="text-xs text-gray-400">
-                    Aucun commentaire pour l’instant.
-                  </p>
-                )}
-              </div>
-
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 border rounded-md p-2 text-sm"
-                  placeholder="Ajouter un commentaire…"
-                  value={newComments[post.id] || ""}
-                  onChange={(e) =>
-                    handleCommentChange(post.id, e.target.value)
-                  }
-                />
-                <button
-                  className="px-3 py-2 bg-black text-white rounded-md text-sm"
-                  onClick={() => submitComment(post.id)}
-                >
-                  Envoyer
-                </button>
-              </div>
+            {/* 💬 Liste des commentaires */}
+            <div style={{ marginTop: 10 }}>
+              {post.comments?.map((c) => (
+                <p key={c.id} style={{ marginBottom: 5 }}>
+                  <b>{c.users.pseudo}</b> : {c.content}
+                </p>
+              ))}
             </div>
+
+            {/* 💬 Ajouter un commentaire */}
+            <input
+              placeholder="Commenter..."
+              value={commentTexts[post.id] || ""}
+              onChange={(e) =>
+                setCommentTexts((prev) => ({
+                  ...prev,
+                  [post.id]: e.target.value,
+                }))
+              }
+              style={{
+                width: "100%",
+                marginTop: 10,
+                padding: 8,
+              }}
+            />
+
+            <button
+              onClick={() => handleComment(post.id)}
+              style={{
+                marginTop: 5,
+                padding: 8,
+                cursor: "pointer",
+                width: "100%",
+              }}
+            >
+              Commenter
+            </button>
+
+            {/* Date */}
+            <p style={{ fontSize: 12, color: "#888", marginTop: 10 }}>
+              {new Date(post.created_at).toLocaleString("fr-FR")}
+            </p>
           </div>
         ))}
-
-        {posts.length === 0 && (
-          <p className="text-center text-gray-500">
-            Aucun post pour l’instant. Lance le mouvement !
-          </p>
-        )}
       </div>
     </div>
-  );
-}
-
-export default function FeedPage() {
-  return (
-    <AuthGuard>
-   <div className="max-w-xl mx-auto pt-10 pb-16">
-      <FeedContent />
-   </div>
-</AuthGuard>
-
   );
 }

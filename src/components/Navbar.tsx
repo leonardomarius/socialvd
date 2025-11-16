@@ -1,23 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
 
 export default function Navbar() {
-  const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
 
-  // Vérifie si un utilisateur est connecté
   useEffect(() => {
-    const getUser = async () => {
+    const loadUser = async () => {
       const { data } = await supabase.auth.getUser();
-      setUser(data.user ?? null);
+      setUser(data.user || null);
     };
 
-    getUser();
+    loadUser();
 
     const {
       data: { subscription },
@@ -25,15 +21,12 @@ export default function Navbar() {
       setUser(session?.user ?? null);
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogout = async () => {
+  const logout = async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   return (
@@ -47,17 +40,14 @@ export default function Navbar() {
         color: "white",
       }}
     >
-      {/* Logo */}
       <Link href="/feed" style={{ fontSize: 20, fontWeight: "bold" }}>
         SOCIALVD
       </Link>
 
-      {/* Liens */}
-      <div style={{ display: "flex", gap: "20px" }}>
+      <div style={{ display: "flex", gap: 20 }}>
         <Link href="/feed">Feed</Link>
-        <Link href="/profile">Profil</Link>
+        {user && <Link href="/profile">Profil</Link>}
 
-        {/* Si pas connecté → Signup / Login */}
         {!user && (
           <>
             <Link href="/signup">Inscription</Link>
@@ -65,10 +55,9 @@ export default function Navbar() {
           </>
         )}
 
-        {/* Si connecté → Logout */}
         {user && (
           <button
-            onClick={handleLogout}
+            onClick={logout}
             style={{
               background: "crimson",
               border: "none",

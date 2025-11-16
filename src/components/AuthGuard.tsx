@@ -1,46 +1,30 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabaseBrowser } from "@/utils/supabaseClient";
+import { supabase } from "@/lib/supabase";
 
-const supabase = supabaseBrowser();
-
-type AuthGuardProps = {
-  children: ReactNode;
-};
-
-export default function AuthGuard({ children }: AuthGuardProps) {
+export default function AuthGuard({ children }: any) {
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data, error } = await supabase.auth.getSession();
+    const check = async () => {
+      const { data } = await supabase.auth.getSession();
 
-      // Pas de session → redirection vers /login
-      if (error || !data.session) {
+      if (!data.session) {
         router.replace("/login");
         return;
       }
 
-      // Optionnel : on synchronise l'id dans le localStorage
-      const user = data.session.user;
-      localStorage.setItem("user_id", user.id);
-
-      setChecking(false);
+      localStorage.setItem("user_id", data.session.user.id);
+      setLoading(false);
     };
 
-    checkSession();
-  }, [router]);
+    check();
+  }, []);
 
-  if (checking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Chargement...</p>
-      </div>
-    );
-  }
+  if (loading) return <p>Chargement...</p>;
 
-  return <>{children}</>;
+  return children;
 }

@@ -1,70 +1,95 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
+import { useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
-import Navbar from "@/components/Navbar";
-import AuthGuard from "@/components/AuthGuard";
-import { supabaseBrowser } from "@/utils/supabaseClient";
-import { useEffect, useState } from "react";
+export default function SignupPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [pseudo, setPseudo] = useState("");
+  const [error, setError] = useState("");
 
-const supabase = supabaseBrowser();
+  const handleSignup = async () => {
+    setError("");
 
-export default function ProfilePage() {
-  return (
-    <AuthGuard>
-   <ProfileContent />
-</AuthGuard>
-
-  );
-}
-
-
-
-function ProfileContent() {
-  const [userInfo, setUserInfo] = useState<any>(null);
-
-  useEffect(() => {
-    loadProfile();
-  }, []);
-
-  const loadProfile = async () => {
-    const user_id = localStorage.getItem("user_id");
-    if (!user_id) return;
-
-    const { data } = await supabase
+    // (optionnel) vérifier que le pseudo n'est pas déjà pris
+    const { data: existing, error: checkError } = await supabase
       .from("users")
-      .select("*")
-      .eq("id", user_id)
-      .single();
+      .select("id")
+      .eq("pseudo", pseudo)
+      .maybeSingle();
 
-    setUserInfo(data);
+    if (checkError) {
+      console.error("Erreur check pseudo:", checkError);
+    }
+
+    if (existing) {
+      setError("Ce pseudo est déjà pris.");
+      return;
+    }
+
+    // 1) création du compte auth
+    const { data, error: signupError } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (signupError) {
+      console.error("Erreur signUp:", signupError);
+      setError(signupError.message);
+      return;
+    }
+
+    const userId = data.user?.id;
+    if (!userId) {
+      setError("Impossible de récupérer l'utilisateur après inscription.");
+      return;
+    }
+
+    // 2) insertion du profil dans la table users
+    const { error: profileError } = await supabase.from("users").insert({
+      id: userId,
+      pseudo,
+    });
+
+    if (profileError) {
+      console.error("Erreur insert profil:", profileError);
+      setError("Erreur lors de la création du profil.");
+      return;
+    }
+
+    // 3) redirection vers le feed (ou login si tu veux)
+    router.push("/feed");
   };
 
-  if (!userInfo) return <p className="p-6">Chargement du profil...</p>;
-
   return (
-    <div className="max-w-xl mx-auto pt-10 pb-16">
-      <h1 className="text-3xl font-bold mb-6">Mon Profil</h1>
+    <div style={{ padding: 40 }}>
+      <h1>Créer un compte</h1>
 
-      <div className="p-4 border rounded-lg bg-white shadow-sm">
-        <p><strong>Pseudo :</strong> {userInfo.pseudo}</p>
-        <p><strong>Email :</strong> {userInfo.email}</p>
-        <p><strong>ID :</strong> {userInfo.id}</p>
+      <input
+        placeholder="Pseudo"
+        value={pseudo}
+        onChange={(e) => setPseudo(e.target.value)}
+      />
 
-        <div className="mt-6">
-          <button
-            className="bg-black text-white px-4 py-2 rounded"
-            onClick={async () => {
-              await supabase.auth.signOut();
-              localStorage.clear();
-              window.location.href = "/login";
-            }}
-          >
-            Se déconnecter
-          </button>
-        </div>
-      </div>
+      <input
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+
+      <input
+        placeholder="Mot de passe"
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+
+      <button onClick={handleSignup}>S'inscrire</button>
+
+      {error && <p style={{ color: "red" }}>{error}</p>}
     </div>
   );
 }

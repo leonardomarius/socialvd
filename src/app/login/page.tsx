@@ -11,6 +11,8 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   const handleLogin = async () => {
+    console.log("Bouton cliqué !"); // <── TEST IMPORTANT
+    
     setError("");
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -19,6 +21,7 @@ export default function LoginPage() {
     });
 
     if (error) {
+      console.log("Erreur Supabase :", error); // <── TEST 2
       setError("Identifiants incorrects");
       return;
     }
