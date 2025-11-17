@@ -1,52 +1,93 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [pseudo, setPseudo] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
-    console.log("👉 BOUTON CLIQUÉ !");
-    setError("");
+  async function handleSignup(e: any) {
+    e.preventDefault();
+    setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    // 1) Créer le user dans Supabase Auth
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
 
     if (error) {
-      setError("Identifiants incorrects");
+      alert("Erreur : " + error.message);
+      setLoading(false);
       return;
     }
 
+    const user = data?.user;
+    if (!user) {
+      alert("Erreur : utilisateur non créé.");
+      setLoading(false);
+      return;
+    }
+
+    // 2) Créer le PROFIL lié à cet user (table profiles)
+    await supabase.from("profiles").insert({
+      id: user.id,
+      pseudo: pseudo,
+      bio: "",
+    });
+
+    // 3) Stocker l'id et le pseudo dans localStorage
+    localStorage.setItem("user_id", user.id);
+    localStorage.setItem("pseudo", pseudo);
+
+    setLoading(false);
+
+    // 4) Redirection vers le feed
     router.push("/feed");
-  };
+  }
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>Connexion</h1>
+    <div style={{ maxWidth: "400px", margin: "0 auto", padding: "20px" }}>
+      <h1>Inscription</h1>
 
-      <input
-        value={email}
-        placeholder="Email"
-        onChange={(e) => setEmail(e.target.value)}
-      />
+      <form onSubmit={handleSignup}>
+        <input
+          type="text"
+          placeholder="Pseudo"
+          value={pseudo}
+          onChange={(e) => setPseudo(e.target.value)}
+          required
+          style={{ width: "100%", marginBottom: "10px" }}
+        />
 
-      <input
-        value={password}
-        placeholder="Mot de passe"
-        type="password"
-        onChange={(e) => setPassword(e.target.value)}
-      />
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          style={{ width: "100%", marginBottom: "10px" }}
+        />
 
-      <button onClick={handleLogin}>Se connecter</button>
+        <input
+          type="password"
+          placeholder="Mot de passe"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          style={{ width: "100%", marginBottom: "10px" }}
+        />
 
-      {error && <p style={{ color: "red" }}>{error}</p>}
+        <button type="submit" disabled={loading}>
+          {loading ? "Chargement..." : "Créer mon compte"}
+        </button>
+      </form>
     </div>
   );
 }

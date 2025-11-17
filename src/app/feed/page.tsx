@@ -1,269 +1,285 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-
-type Comment = {
-  id: string;
-  content: string;
-  user_id: string;
-  created_at: string;
-  users: {
-    pseudo: string;
-  };
-};
+import Link from "next/link"; // <-- AJOUT ICI
 
 type Post = {
   id: string;
-  user_id: string;
-  content: string | null;
-  image_url: string | null;
+  content: string;
+  game: string | null;
+  author_pseudo: string | null;
+  likes: number;
+  media_url: string | null;
+  media_type: string | null;
   created_at: string;
-  users?: {
-    pseudo: string;
-  };
-  comments?: Comment[];
-  likeCount?: number;
-  isLiked?: boolean;
+  user_id: string; // <-- ASSURE QUE CETTE INFO EXISTE (normalement oui)
+};
+
+type Comment = {
+  id: string;
+  post_id: string;
+  author_pseudo: string;
+  content: string;
+  created_at: string;
 };
 
 export default function FeedPage() {
-  const [content, setContent] = useState("");
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
+  const router = useRouter();
+
   const [posts, setPosts] = useState<Post[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [newComments, setNewComments] = useState<Record<string, string>>({});
+  const [newPost, setNewPost] = useState("");
+  const [newGame, setNewGame] = useState("");
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
 
-  // ----- Charger les posts + likes + comments + pseudo -----
-  const fetchPosts = async () => {
-    const user = await supabase.auth.getUser();
-    const userId = user.data.user?.id;
-
-    const { data } = await supabase
-      .from("posts")
-      .select(`
-        *,
-        users:pseudo!inner (pseudo),
-        likes (user_id),
-        comments (
-          id,
-          content,
-          user_id,
-          created_at,
-          users:pseudo (pseudo)
-        )
-      `)
-      .order("created_at", { ascending: false });
-
-    if (!data) return;
-
-    const formatted = data.map((p: any) => ({
-      ...p,
-      likeCount: p.likes.length,
-      isLiked: p.likes.some((l: any) => l.user_id === userId),
-    }));
-
-    setPosts(formatted);
-  };
-
+  // -----------------------------------------------------
+  // Vérifier session
+  // -----------------------------------------------------
   useEffect(() => {
-    fetchPosts();
+    const userId = localStorage.getItem("user_id");
+    if (!userId) {
+      router.push("/login");
+      return;
+    }
+    loadAllData();
   }, []);
 
-  // ----- Uploader une image -----
-  const uploadImage = async () => {
-    if (!imageFile) return null;
+  const loadAllData = async () => {
+    const { data: postsData } = await supabase
+      .from("posts")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-    const fileName = `${Date.now()}-${imageFile.name}`;
-    const { error } = await supabase.storage
-      .from("posts-images")
-      .upload(fileName, imageFile);
+    setPosts(postsData || []);
 
-    if (error) return null;
+    const { data: commentsData } = await supabase
+      .from("comments")
+      .select("*")
+      .order("created_at", { ascending: true });
 
-    return supabase.storage
-      .from("posts-images")
-      .getPublicUrl(fileName).data.publicUrl;
+    setComments(commentsData || []);
   };
 
-  // ----- Créer un post -----
-  const handleCreatePost = async () => {
-    const user = await supabase.auth.getUser();
-    const userId = user.data.user?.id;
-    if (!userId) return;
+  // -----------------------------------------------------
+  // Upload media
+  // -----------------------------------------------------
+  const uploadMedia = async (): Promise<{ url: string | null; type: string | null }> => {
+    if (!mediaFile) return { url: null, type: null };
 
-    let imageUrl = null;
-    if (imageFile) imageUrl = await uploadImage();
+    const fileExt = mediaFile.name.split(".").pop();
+    const filePath = `${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("posts-media")
+      .upload(filePath, mediaFile);
+
+    if (uploadError) return { url: null, type: null };
+
+    const url = supabase.storage
+      .from("posts-media")
+      .getPublicUrl(filePath).data.publicUrl;
+
+    let type = null;
+    if (mediaFile.type.startsWith("image/")) type = "image";
+    if (mediaFile.type.startsWith("video/")) type = "video";
+
+    return { url, type };
+  };
+
+  // -----------------------------------------------------
+  // Créer un post
+  // -----------------------------------------------------
+  const handleCreatePost = async () => {
+    const userId = localStorage.getItem("user_id");
+    const pseudo = localStorage.getItem("pseudo") || "Anonyme";
+
+    if (!userId || !newPost.trim()) return;
+
+    const { url, type } = await uploadMedia();
 
     await supabase.from("posts").insert({
       user_id: userId,
-      content,
-      image_url: imageUrl,
+      content: newPost,
+      game: newGame || null,
+      author_pseudo: pseudo,
+      media_url: url,
+      media_type: type,
     });
 
-    setContent("");
-    setImageFile(null);
+    setNewPost("");
+    setNewGame("");
+    setMediaFile(null);
 
-    fetchPosts();
+    loadAllData();
   };
 
-  // ----- LIKE / UNLIKE -----
-  const toggleLike = async (postId: string, isLiked: boolean) => {
-    const user = await supabase.auth.getUser();
-    const userId = user.data.user?.id;
-    if (!userId) return;
+  // -----------------------------------------------------
+  // Commentaire
+  // -----------------------------------------------------
+  const handleAddComment = async (postId: string) => {
+    const content = newComments[postId];
+    if (!content) return;
 
-    if (isLiked) {
-      await supabase.from("likes").delete().match({
-        user_id: userId,
-        post_id: postId,
-      });
-    } else {
-      await supabase.from("likes").insert({
-        user_id: userId,
-        post_id: postId,
-      });
-    }
-
-    fetchPosts();
-  };
-
-  // ----- COMMENTER -----
-  const handleComment = async (postId: string) => {
-    const user = await supabase.auth.getUser();
-    const userId = user.data.user?.id;
-    if (!userId) return;
-
-    const text = commentTexts[postId];
-    if (!text || text.trim() === "") return;
+    const pseudo =
+      localStorage.getItem("pseudo") ||
+      localStorage.getItem("user_pseudo") ||
+      "Anonyme";
 
     await supabase.from("comments").insert({
       post_id: postId,
-      user_id: userId,
-      content: text,
+      content,
+      author_pseudo: pseudo,
     });
 
-    setCommentTexts((prev) => ({ ...prev, [postId]: "" }));
-
-    fetchPosts();
+    setNewComments((prev) => ({ ...prev, [postId]: "" }));
+    loadAllData();
   };
 
+  // -----------------------------------------------------
+  // Like
+  // -----------------------------------------------------
+  const handleLike = async (postId: string) => {
+    await supabase.rpc("toggle_like", { p_post_id: postId });
+    loadAllData();
+  };
+
+  // -----------------------------------------------------
+  // Render
+  // -----------------------------------------------------
   return (
-    <div style={{ padding: 30, maxWidth: 600, margin: "0 auto" }}>
-      <h1>Fil d’actualité</h1>
+    <div style={{ padding: "20px", maxWidth: "700px", margin: "0 auto" }}>
+      <h1 style={{ marginBottom: "20px" }}>Fil d’actualité</h1>
 
-      {/* Formulaire */}
-      <textarea
-        placeholder="Écris quelque chose..."
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
+      {/* FORMULAIRE */}
+      <div
         style={{
-          width: "100%",
-          height: 60,
-          marginBottom: 10,
-          padding: 10,
+          background: "#111",
+          border: "1px solid #333",
+          padding: "15px",
+          borderRadius: "10px",
+          marginBottom: "20px",
         }}
-      />
+      >
+        <h3>Créer un post</h3>
 
-      <input
-        type="file"
-        onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-        style={{ marginBottom: 10 }}
-      />
+        <input
+          type="text"
+          placeholder="Jeu (facultatif)"
+          value={newGame}
+          onChange={(e) => setNewGame(e.target.value)}
+          style={{ marginBottom: "10px", width: "100%" }}
+        />
 
-      <button onClick={handleCreatePost}>Publier</button>
+        <textarea
+          value={newPost}
+          onChange={(e) => setNewPost(e.target.value)}
+          placeholder="Écris quelque chose..."
+          rows={3}
+          style={{ width: "100%", marginBottom: "10px" }}
+        />
 
-      {/* Liste des posts */}
-      <div style={{ marginTop: 30 }}>
-        {posts.map((post) => (
+        <input
+          type="file"
+          accept="image/*,video/*"
+          onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+          style={{ marginBottom: "10px" }}
+        />
+
+        <button onClick={handleCreatePost}>Publier</button>
+      </div>
+
+      {/* POSTS */}
+      {posts.map((post) => {
+        const postComments = comments.filter((c) => c.post_id === post.id);
+
+        return (
           <div
             key={post.id}
             style={{
-              border: "1px solid #333",
-              borderRadius: 10,
-              padding: 15,
-              marginBottom: 20,
               background: "#111",
-              color: "white",
+              border: "1px solid #333",
+              padding: "15px",
+              borderRadius: "10px",
+              marginBottom: "20px",
             }}
           >
-            {/* 🔵 PSEUDO DE L'AUTEUR */}
-            <p style={{ fontWeight: "bold" }}>{post.users?.pseudo}</p>
+            <p style={{ marginBottom: "5px", opacity: 0.8 }}>
+              <strong>
+                {/* 🔥 PSEUDO CLIQUABLE VERS /profile/[id] */}
+                <Link
+                  href={`/profile/${post.user_id}`}
+                  className="hover:underline"
+                >
+                  {post.author_pseudo}
+                </Link>
+              </strong>
 
-            {/* 📝 texte */}
-            {post.content && <p>{post.content}</p>}
+              {post.game && <> — <em>{post.game}</em></>}
+            </p>
 
-            {/* 🖼 image */}
-            {post.image_url && (
+            <p style={{ marginBottom: "10px" }}>{post.content}</p>
+
+            {post.media_type === "image" && (
               <img
-                src={post.image_url}
+                src={post.media_url!}
+                alt="media"
                 style={{
                   width: "100%",
-                  borderRadius: 10,
-                  marginTop: 10,
+                  borderRadius: "10px",
+                  marginTop: "10px",
                 }}
               />
             )}
 
-            {/* ❤️ LIKE */}
+            {post.media_type === "video" && (
+              <video
+                src={post.media_url!}
+                controls
+                style={{
+                  width: "100%",
+                  borderRadius: "10px",
+                  marginTop: "10px",
+                }}
+              ></video>
+            )}
+
             <button
-              onClick={() => toggleLike(post.id, post.isLiked!)}
-              style={{
-                marginTop: 10,
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 22,
-                color: post.isLiked ? "red" : "white",
-              }}
+              onClick={() => handleLike(post.id)}
+              style={{ marginTop: "10px", marginBottom: "15px" }}
             >
-              {post.isLiked ? "❤️" : "🤍"} {post.likeCount}
+              👍 {post.likes}
             </button>
 
-            {/* 💬 Liste des commentaires */}
-            <div style={{ marginTop: 10 }}>
-              {post.comments?.map((c) => (
-                <p key={c.id} style={{ marginBottom: 5 }}>
-                  <b>{c.users.pseudo}</b> : {c.content}
+            {/* COMMENTAIRES */}
+            <div>
+              <h4 style={{ marginBottom: "10px" }}>Commentaires</h4>
+
+              {postComments.map((c) => (
+                <p key={c.id} style={{ marginBottom: "5px" }}>
+                  <strong>{c.author_pseudo} :</strong> {c.content}
                 </p>
               ))}
+
+              <input
+                type="text"
+                placeholder="Commenter..."
+                value={newComments[post.id] || ""}
+                onChange={(e) =>
+                  setNewComments((prev) => ({
+                    ...prev,
+                    [post.id]: e.target.value,
+                  }))
+                }
+                style={{ marginRight: "5px" }}
+              />
+              <button onClick={() => handleAddComment(post.id)}>Envoyer</button>
             </div>
-
-            {/* 💬 Ajouter un commentaire */}
-            <input
-              placeholder="Commenter..."
-              value={commentTexts[post.id] || ""}
-              onChange={(e) =>
-                setCommentTexts((prev) => ({
-                  ...prev,
-                  [post.id]: e.target.value,
-                }))
-              }
-              style={{
-                width: "100%",
-                marginTop: 10,
-                padding: 8,
-              }}
-            />
-
-            <button
-              onClick={() => handleComment(post.id)}
-              style={{
-                marginTop: 5,
-                padding: 8,
-                cursor: "pointer",
-                width: "100%",
-              }}
-            >
-              Commenter
-            </button>
-
-            {/* Date */}
-            <p style={{ fontSize: 12, color: "#888", marginTop: 10 }}>
-              {new Date(post.created_at).toLocaleString("fr-FR")}
-            </p>
           </div>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 }

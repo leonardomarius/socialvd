@@ -1,6 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  images: {
+    domains: [
+      "oggldwirthkytzewihqz.supabase.co"
+    ],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "oggldwirthkytzewihqz.supabase.co",
+        port: "",
+        pathname: "/storage/v1/object/public/**",
+      },
+    ],
+  },
 };
 
-export default nextConfig;
+module.exports = nextConfig;

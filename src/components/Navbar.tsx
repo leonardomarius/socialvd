@@ -1,32 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 export default function Navbar() {
-  const [user, setUser] = useState<any>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [pseudo, setPseudo] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
-    const loadUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      setUser(data.user || null);
-    };
+    if (typeof window === "undefined") return;
 
-    loadUser();
+    const id = localStorage.getItem("user_id");
+    const p = localStorage.getItem("pseudo");
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    setUserId(id);
+    setPseudo(p);
   }, []);
 
-  const logout = async () => {
+  const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.href = "/login";
+
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("user_id");
+      localStorage.removeItem("pseudo");
+    }
+
+    // 🔥 Met à jour immédiatement la navbar
+    setUserId(null);
+    setPseudo(null);
+
+    // 🔥 Redirige vers la bonne page (dit-moi laquelle tu préfères !)
+    router.push("/login");
   };
 
   return (
@@ -34,41 +41,47 @@ export default function Navbar() {
       style={{
         display: "flex",
         justifyContent: "space-between",
-        padding: "15px 25px",
-        borderBottom: "1px solid #333",
-        background: "#0f0f0f",
-        color: "white",
+        alignItems: "center",
+        padding: "10px 20px",
+        borderBottom: "1px solid #ddd",
+        marginBottom: "10px",
       }}
     >
-      <Link href="/feed" style={{ fontSize: 20, fontWeight: "bold" }}>
-        SOCIALVD
-      </Link>
-
-      <div style={{ display: "flex", gap: 20 }}>
+      {/* Gauche : liens */}
+      <div style={{ display: "flex", gap: "15px" }}>
         <Link href="/feed">Feed</Link>
-        {user && <Link href="/profile">Profil</Link>}
 
-        {!user && (
-          <>
-            <Link href="/signup">Inscription</Link>
-            <Link href="/login">Connexion</Link>
-          </>
+        {userId && (
+          <Link href={`/profile/${userId}`}>
+            Profil
+          </Link>
         )}
+      </div>
 
-        {user && (
-          <button
-            onClick={logout}
-            style={{
-              background: "crimson",
-              border: "none",
-              padding: "6px 12px",
-              color: "white",
-              borderRadius: 6,
-              cursor: "pointer",
-            }}
-          >
-            Déconnexion
-          </button>
+      {/* Droite : état connexion */}
+      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        {userId ? (
+          <>
+            <span>Connecté : {pseudo}</span>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: "5px 10px",
+                background: "black",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+              }}
+            >
+              Se déconnecter
+            </button>
+          </>
+        ) : (
+          <>
+            <Link href="/login">Se connecter</Link>
+            <Link href="/signup">S’inscrire</Link>
+          </>
         )}
       </div>
     </nav>
