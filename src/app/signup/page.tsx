@@ -1,3 +1,4 @@
+// src/app/signup/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -19,9 +20,9 @@ export default function SignupPage() {
     setLoading(true);
     setErrorMsg(null);
 
-    // -------------------------------------------------
-    // 1) Création du compte Supabase Auth
-    // -------------------------------------------------
+    // -----------------------------
+    // 1) Création du compte Auth
+    // -----------------------------
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -33,7 +34,6 @@ export default function SignupPage() {
       return;
     }
 
-    // L'utilisateur vient d'être créé dans Auth
     const user = data.user;
     if (!user) {
       setErrorMsg("Impossible de créer votre compte.");
@@ -41,17 +41,15 @@ export default function SignupPage() {
       return;
     }
 
-    // -------------------------------------------------
-    // 2) Créer le profil dans ta table "profiles"
-    // -------------------------------------------------
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .insert({
-        id: user.id,
-        pseudo: pseudo || email.split("@")[0],
-        bio: "",
-        avatar_url: null,
-      });
+    // -----------------------------
+    // 2) Création du profil associé
+    // -----------------------------
+    const { error: profileError } = await supabase.from("profiles").insert({
+      id: user.id,
+      pseudo: pseudo || email.split("@")[0],
+      bio: "",
+      avatar_url: null,
+    });
 
     if (profileError) {
       setErrorMsg(profileError.message);
@@ -59,10 +57,17 @@ export default function SignupPage() {
       return;
     }
 
-    // -------------------------------------------------
-    // 3) Redirection vers le feed (la navbar va capter la session)
-    // -------------------------------------------------
+    // -----------------------------
+    // 3) Mettre à jour la session locale + notifier la Navbar
+    // -----------------------------
+    localStorage.setItem("user_id", user.id);
+    window.dispatchEvent(new Event("authChanged"));
+
     setLoading(false);
+
+    // -----------------------------
+    // 4) Redirection
+    // -----------------------------
     router.push("/feed");
   };
 
@@ -79,6 +84,7 @@ export default function SignupPage() {
     >
       <h1 style={{ marginBottom: 16 }}>Créer un compte</h1>
 
+      {/* ⬇️ Le submit gère automatiquement ENTER */}
       <form
         onSubmit={handleSignup}
         style={{ display: "flex", flexDirection: "column", gap: 14 }}

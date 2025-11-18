@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image";
 import EditProfileForm from "@/components/EditProfileForm";
@@ -23,14 +24,25 @@ type Post = {
   created_at: string;
 };
 
-export default function ProfilePage({ params }: any) {
-  const { id } = use(params) as { id: string };
+type GameAccount = {
+  id: string;
+  game: string;
+  username: string;
+  platform: string | null;
+  verified: boolean;
+  verification_code: string | null;
+};
+
+export default function ProfilePage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params.id as string;
 
   const [myId, setMyId] = useState<string | null>(null);
   const [showEdit, setShowEdit] = useState(false);
 
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [isFollowing, setIsFollowing] = useState<boolean>(false);
+  const [isFollowing, setIsFollowing] = useState(false);
 
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
@@ -38,7 +50,18 @@ export default function ProfilePage({ params }: any) {
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
 
-  // 🔐 Récupérer l'utilisateur connecté
+  const [gameAccounts, setGameAccounts] = useState<GameAccount[]>([]);
+  const [loadingGames, setLoadingGames] = useState(true);
+
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [editGame, setEditGame] = useState("apex");
+  const [editUsername, setEditUsername] = useState("");
+  const [editPlatform, setEditPlatform] = useState("psn");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // ---------------------------------------
+  // 1. Get current user
+  // ---------------------------------------
   useEffect(() => {
     const getUser = async () => {
       const { data } = await supabase.auth.getUser();
@@ -47,16 +70,18 @@ export default function ProfilePage({ params }: any) {
     getUser();
   }, []);
 
-  // Charger toutes les données du profil
+  // ---------------------------------------
+  // 2. Load profile data
+  // ---------------------------------------
   useEffect(() => {
     if (!id) return;
     loadProfile();
     loadUserPosts();
-    checkFollow();
     loadFollowCounts();
-  }, [id]);
+    loadGameAccounts();
+    checkFollow();
+  }, [id, myId]);
 
-  // Charger les infos du profil
   const loadProfile = async () => {
     const { data } = await supabase
       .from("profiles")
@@ -67,7 +92,6 @@ export default function ProfilePage({ params }: any) {
     setProfile(data || null);
   };
 
-  // Charger les posts du user
   const loadUserPosts = async () => {
     setLoadingPosts(true);
 
@@ -81,7 +105,19 @@ export default function ProfilePage({ params }: any) {
     setLoadingPosts(false);
   };
 
-  // Followers / Following Count
+  const loadGameAccounts = async () => {
+    setLoadingGames(true);
+
+    const { data } = await supabase
+      .from("game_accounts")
+      .select("*")
+      .eq("user_id", id)
+      .order("created_at", { ascending: false });
+
+    setGameAccounts((data as GameAccount[]) || []);
+    setLoadingGames(false);
+  };
+
   const loadFollowCounts = async () => {
     const [{ count: followers }, { count: following }] = await Promise.all([
       supabase
@@ -99,7 +135,6 @@ export default function ProfilePage({ params }: any) {
     setFollowingCount(following || 0);
   };
 
-  // Vérifier si je suis déjà abonné
   const checkFollow = async () => {
     if (!myId) return;
 
@@ -112,7 +147,6 @@ export default function ProfilePage({ params }: any) {
     setIsFollowing(!!data && data.length > 0);
   };
 
-  // Suivre / Se désabonner
   const handleToggleFollow = async () => {
     if (!myId) return;
 
@@ -125,14 +159,142 @@ export default function ProfilePage({ params }: any) {
     loadFollowCounts();
   };
 
+  // ---------------------------------------
+  // 3. Start a private conversation (DM) — PATCHÉ
+  // ---------------------------------------
+  const handleStartConversation = async () => {
+    if (!myId || !id) {
+      alert("Erreur : utilisateur non chargé.");
+      return;
+    }
+
+    try {
+      // 1) Créer la conversation
+      const { data: newConv, error: convErr } = await supabase
+        .from("conversations")
+        .insert({ created_at: new Date().toISOString() })
+        .select("id")
+        .single();
+
+      if (convErr || !newConv) {
+        console.error("Erreur création conversation:", convErr);
+        alert(
+          "Impossible de créer une conversation : " +
+            (convErr?.message || "erreur inconnue")
+        );
+        return;
+      }
+
+      const convId = newConv.id as string;
+
+      // 2) Ajouter les participants
+      const { error: usersErr } = await supabase
+        .from("conversations_users")
+        .insert([
+          { conversation_id: convId, user_id: myId },
+          { conversation_id: convId, user_id: id },
+        ]);
+
+      if (usersErr) {
+        console.error("Erreur ajout participants:", usersErr);
+        alert(
+          "La conversation a été créée, mais les participants n'ont pas été ajoutés."
+        );
+      }
+
+      // 3) Redirection
+      router.push(`/messages/${convId}`);
+    } catch (error: any) {
+      console.error("Erreur inattendue:", error);
+      alert("Erreur inattendue : " + (error?.message ?? String(error)));
+    }
+  };
+
+  // ---------------------------------------
+  // 4. Verification simple
+  // ---------------------------------------
+  const markAccountVerified = async (accountId: string) => {
+    if (!myId) return;
+
+    const { error } = await supabase
+      .from("game_accounts")
+      .update({ verified: true })
+      .eq("id", accountId)
+      .eq("user_id", myId);
+
+    if (error) {
+      alert("Erreur lors de la vérification : " + error.message);
+      return;
+    }
+
+    loadGameAccounts();
+  };
+
+  // ---------------------------------------
+  // 5. Edit game account
+  // ---------------------------------------
+  const startEditAccount = (acc: GameAccount) => {
+    setEditingAccountId(acc.id);
+    setEditGame(acc.game);
+    setEditUsername(acc.username);
+    setEditPlatform(acc.platform || "psn");
+  };
+
+  const cancelEditAccount = () => {
+    setEditingAccountId(null);
+    setSavingEdit(false);
+  };
+
+  const saveEditAccount = async () => {
+    if (!editingAccountId) return;
+
+    setSavingEdit(true);
+
+    const { error } = await supabase
+      .from("game_accounts")
+      .update({
+        game: editGame,
+        username: editUsername,
+        platform: editPlatform,
+      })
+      .eq("id", editingAccountId)
+      .eq("user_id", myId);
+
+    setSavingEdit(false);
+
+    if (error) {
+      alert("Erreur : " + error.message);
+      return;
+    }
+
+    setEditingAccountId(null);
+    loadGameAccounts();
+  };
+
+  const deleteAccount = async (accountId: string) => {
+    const confirmDelete = window.confirm(
+      "Supprimer ce compte de jeu ? Action définitive."
+    );
+    if (!confirmDelete) return;
+
+    await supabase
+      .from("game_accounts")
+      .delete()
+      .eq("id", accountId)
+      .eq("user_id", myId);
+
+    loadGameAccounts();
+  };
+
+  // ---------------------------------------
+  // 6. Render
+  // ---------------------------------------
   if (!profile) return <p>Profil introuvable...</p>;
 
   return (
     <>
-      {/* 🔥 FOND SPATIAL */}
       <div className="profile-background"></div>
 
-      {/* CONTENU DU PROFIL */}
       <div
         style={{
           position: "relative",
@@ -142,7 +304,7 @@ export default function ProfilePage({ params }: any) {
           margin: "0 auto",
         }}
       >
-        {/* HEADER PROFIL */}
+        {/* HEADER */}
         <div
           style={{
             display: "flex",
@@ -151,17 +313,13 @@ export default function ProfilePage({ params }: any) {
             marginBottom: 20,
           }}
         >
-          {/* Avatar */}
           {profile.avatar_url ? (
             <Image
               src={profile.avatar_url}
               alt="avatar"
               width={120}
               height={120}
-              style={{
-                borderRadius: "50%",
-                objectFit: "cover",
-              }}
+              style={{ borderRadius: "50%", objectFit: "cover" }}
             />
           ) : (
             <div
@@ -177,7 +335,6 @@ export default function ProfilePage({ params }: any) {
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: 24, marginBottom: 4 }}>{profile.pseudo}</h1>
 
-            {/* Followers / Following */}
             <p style={{ color: "#999", marginBottom: 8 }}>
               <Link
                 href={`/profile/${id}/followers`}
@@ -198,36 +355,49 @@ export default function ProfilePage({ params }: any) {
 
             <p>{profile.bio || "Aucune bio."}</p>
 
-            {/* Actions */}
             <div style={{ marginTop: 15, display: "flex", gap: 10 }}>
               {myId && myId !== id && (
-                <button
-                  onClick={handleToggleFollow}
-                  style={{
-                    padding: "8px 16px",
-                    background: isFollowing ? "red" : "green",
-                    color: "white",
-                    borderRadius: "6px",
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: 14,
-                  }}
-                >
-                  {isFollowing ? "Se désabonner" : "S'abonner"}
-                </button>
+                <>
+                  <button
+                    onClick={handleToggleFollow}
+                    style={{
+                      padding: "8px 16px",
+                      background: isFollowing ? "red" : "green",
+                      color: "white",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      border: "none",
+                    }}
+                  >
+                    {isFollowing ? "Se désabonner" : "S'abonner"}
+                  </button>
+
+                  <button
+                    onClick={handleStartConversation}
+                    style={{
+                      padding: "8px 16px",
+                      background: "#0070f3",
+                      color: "white",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      border: "none",
+                    }}
+                  >
+                    Message
+                  </button>
+                </>
               )}
 
-              {myId && myId === id && (
+              {myId === id && (
                 <button
                   onClick={() => setShowEdit(!showEdit)}
                   style={{
                     padding: "8px 16px",
                     background: "#0070f3",
                     color: "white",
-                    borderRadius: "6px",
-                    border: "none",
+                    borderRadius: 6,
                     cursor: "pointer",
-                    fontSize: 14,
+                    border: "none",
                   }}
                 >
                   {showEdit ? "Fermer" : "Modifier mon profil"}
@@ -237,8 +407,8 @@ export default function ProfilePage({ params }: any) {
           </div>
         </div>
 
-        {/* FORMULAIRE D'ÉDITION (avec fix myId) */}
-        {myId && myId === id && showEdit && (
+        {/* EDIT PROFILE */}
+        {myId === id && showEdit && (
           <EditProfileForm
             userId={myId}
             currentPseudo={profile.pseudo}
@@ -251,8 +421,272 @@ export default function ProfilePage({ params }: any) {
           />
         )}
 
-        {/* POSTS DU USER */}
-        <section style={{ marginTop: 30 }}>
+        {/* GAME ACCOUNTS */}
+        <section style={{ marginTop: 40 }}>
+          <h2 style={{ fontSize: 20, marginBottom: 12 }}>Comptes de jeu</h2>
+
+          {myId === id && (
+            <Link
+              href={`/profile/${id}/add-game-account`}
+              style={{
+                display: "inline-block",
+                marginBottom: 14,
+                padding: "8px 14px",
+                background: "#0070f3",
+                color: "white",
+                borderRadius: 6,
+                textDecoration: "none",
+              }}
+            >
+              ➕ Ajouter un compte de jeu
+            </Link>
+          )}
+
+          {loadingGames ? (
+            <p>Chargement...</p>
+          ) : gameAccounts.length === 0 ? (
+            <p>Aucun compte ajouté.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {gameAccounts.map((acc) => {
+                const isEditing = editingAccountId === acc.id;
+
+                return (
+                  <div
+                    key={acc.id}
+                    style={{
+                      padding: 14,
+                      background:
+                        "linear-gradient(135deg, rgba(30,30,30,1), rgba(10,10,10,1))",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      boxShadow: "0 0 12px rgba(0,0,0,0.5)",
+                    }}
+                  >
+                    {!isEditing && (
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            marginBottom: 6,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 14,
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              border: "1px solid #555",
+                            }}
+                          >
+                            🎮 {acc.game}
+                          </span>
+
+                          <span
+                            style={{
+                              fontSize: 12,
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              background: "#111",
+                              border: "1px solid #444",
+                            }}
+                          >
+                            {acc.platform || "Plateforme"}
+                          </span>
+                        </div>
+
+                        <p style={{ marginTop: 4, fontSize: 15 }}>
+                          <b>Pseudo : </b> {acc.username}
+                        </p>
+
+                        <p style={{ marginTop: 4, fontSize: 13 }}>
+                          {acc.verified ? (
+                            <span style={{ color: "lightgreen" }}>
+                              ✔ Compte vérifié
+                            </span>
+                          ) : (
+                            <span style={{ color: "orange" }}>
+                              ⚠ Non vérifié
+                            </span>
+                          )}
+                        </p>
+
+                        {myId === id && (
+                          <div
+                            style={{
+                              marginTop: 8,
+                              display: "flex",
+                              gap: 8,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <button
+                              onClick={() => startEditAccount(acc)}
+                              style={{
+                                padding: "6px 10px",
+                                fontSize: 12,
+                                borderRadius: 6,
+                                border: "1px solid #555",
+                                background: "#111",
+                                color: "#fff",
+                              }}
+                            >
+                              ✏ Modifier
+                            </button>
+
+                            {!acc.verified && (
+                              <button
+                                onClick={() => markAccountVerified(acc.id)}
+                                style={{
+                                  padding: "6px 10px",
+                                  fontSize: 12,
+                                  borderRadius: 6,
+                                  background: "#198754",
+                                  color: "#fff",
+                                  border: "none",
+                                }}
+                              >
+                                ✔ Vérifier
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => deleteAccount(acc.id)}
+                              style={{
+                                padding: "6px 10px",
+                                fontSize: 12,
+                                borderRadius: 6,
+                                background: "#b00020",
+                                color: "#fff",
+                                border: "none",
+                              }}
+                            >
+                              🗑 Supprimer
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {isEditing && (
+                      <div style={{ marginTop: 4 }}>
+                        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: 12 }}>Jeu</label>
+                            <select
+                              value={editGame}
+                              onChange={(e) => setEditGame(e.target.value)}
+                              style={{
+                                width: "100%",
+                                marginTop: 3,
+                                padding: 6,
+                                background: "#111",
+                                color: "#fff",
+                                borderRadius: 6,
+                                border: "1px solid #444",
+                              }}
+                            >
+                              <option value="apex">Apex Legends</option>
+                              <option value="fortnite">Fortnite</option>
+                              <option value="gta">GTA Online</option>
+                              <option value="valorant">Valorant</option>
+                              <option value="cod">Call of Duty</option>
+                            </select>
+                          </div>
+
+                          <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: 12 }}>Plateforme</label>
+                            <select
+                              value={editPlatform}
+                              onChange={(e) => setEditPlatform(e.target.value)}
+                              style={{
+                                width: "100%",
+                                marginTop: 3,
+                                padding: 6,
+                                background: "#111",
+                                color: "#fff",
+                                borderRadius: 6,
+                                border: "1px solid #444",
+                              }}
+                            >
+                              <option value="psn">PlayStation</option>
+                              <option value="xbl">Xbox</option>
+                              <option value="steam">Steam</option>
+                              <option value="epic">Epic Games</option>
+                              <option value="origin">EA Origin</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: 12 }}>Pseudo</label>
+                          <input
+                            type="text"
+                            value={editUsername}
+                            onChange={(e) => setEditUsername(e.target.value)}
+                            style={{
+                              width: "100%",
+                              marginTop: 3,
+                              padding: 6,
+                              background: "#111",
+                              color: "#fff",
+                              borderRadius: 6,
+                              border: "1px solid #444",
+                            }}
+                          />
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop: 8,
+                            display: "flex",
+                            gap: 8,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <button
+                            onClick={saveEditAccount}
+                            disabled={savingEdit}
+                            style={{
+                              padding: "6px 10px",
+                              fontSize: 12,
+                              borderRadius: 6,
+                              background: "#0070f3",
+                              color: "#fff",
+                              border: "none",
+                            }}
+                          >
+                            {savingEdit
+                              ? "Enregistrement..."
+                              : "💾 Enregistrer"}
+                          </button>
+
+                          <button
+                            onClick={cancelEditAccount}
+                            style={{
+                              padding: "6px 10px",
+                              fontSize: 12,
+                              borderRadius: 6,
+                              background: "#111",
+                              color: "#fff",
+                              border: "1px solid #555",
+                            }}
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* POSTS */}
+        <section style={{ marginTop: 40 }}>
           <h2 style={{ fontSize: 20, marginBottom: 10 }}>Publications</h2>
 
           {loadingPosts ? (

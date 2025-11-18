@@ -1,27 +1,18 @@
 import "./globals.css";
-import Navbar from "@/components/Navbar";
+import NavWrapper from "@/components/NavWrapper"; // ← ton wrapper client
 
 export const metadata = {
   title: "SocialVD",
   description: "Le réseau social gaming",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
-      <body
-        style={{
-          // ❗ Ici on enlève backgroundColor blanc/noir
-          // pour laisser globals.css gérer le fond SPATIAL
-          minHeight: "100vh",
-          margin: 0,
-        }}
-      >
-        <Navbar />
+      <body style={{ minHeight: "100vh", margin: 0 }}>
+        
+        {/* Navbar contrôlé par NavWrapper */}
+        <NavWrapper />
 
         <main
           style={{
@@ -32,6 +23,7 @@ export default function RootLayout({
         >
           {children}
         </main>
+
       </body>
     </html>
   );

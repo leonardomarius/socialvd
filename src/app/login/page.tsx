@@ -12,8 +12,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
-    console.log("LOGIN START"); // ← debug pour vérifier que le clic fonctionne
-
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -24,18 +22,23 @@ export default function LoginPage() {
       return;
     }
 
-    console.log("LOGIN DATA", data); // ← debug
-
-    // Stocker l'id utilisateur
     if (data.user) {
       localStorage.setItem("user_id", data.user.id);
+      window.dispatchEvent(new Event("authChanged"));
     }
 
     router.push("/feed");
   };
 
+  // ⬇️ Appuyer sur entrée déclenche le login
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleLogin();
+    }
+  };
+
   return (
-    <div style={{ padding: "20px" }}>
+    <div style={{ padding: "20px" }} onKeyDown={onKeyDown}>
       <h1>Connexion</h1>
 
       <input
