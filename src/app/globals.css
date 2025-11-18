@@ -1,24 +1,81 @@
-@import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #000000;
+/* ===== RESET GLOBAL ===== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
+/* ===== BACKGROUND GLOBAL (fil d’actu + pages classiques) ===== */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: white;
+  font-family: Arial, sans-serif;
+
+  /* Fond spatial flouté basé sur ton space-bg.jpg */
+  background-image: url("/space-bg.jpg");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  filter: brightness(0.85) contrast(1.08);
 }
 
-/* Inputs */
-input, textarea {
-  background: #ffffff !important;
-  color: #000000 !important;
-  border: 1px solid #ccc;
-}
-
+/* ===== STYLES UI GLOBAUX ===== */
 button {
-  background: #000000 !important;
-  color: #ffffff !important;
+  background: #1a73e8;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  cursor: pointer;
+  color: white;
+  transition: 0.2s;
+}
+
+button:hover {
+  background: #145bb5;
+}
+
+input,
+textarea {
+  background: rgba(20, 20, 20, 0.7);
+  border: 1px solid #333;
+  color: white;
+  padding: 10px;
+  border-radius: 6px;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* ============================
+   🌌 FOND SPATIAL POUR PROFIL
+   ============================ */
+.profile-background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+
+  /* Dégradé spatial sombre + halos bleus */
+  background:
+    radial-gradient(circle at 75% 25%, rgba(170, 190, 255, 0.35), transparent 70%),
+    radial-gradient(circle at 20% 80%, rgba(120, 160, 255, 0.25), transparent 65%),
+    linear-gradient(130deg, #0a0c12 0%, #121722 40%, #080a0d 100%);
+
+  filter: brightness(1.05) contrast(1.12);
+}
+
+/* Motif techno discret — VERSION FIXÉE (plus d’Imgur mort) */
+.profile-background::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  /* Nouveau motif interne très léger et propre */
+  background-image: 
+    linear-gradient(45deg, rgba(255,255,255,0.03) 0%, transparent 60%),
+    linear-gradient(-45deg, rgba(255,255,255,0.03) 0%, transparent 60%);
+
+  background-size: 400px 400px;
+  opacity: 0.08;
 }

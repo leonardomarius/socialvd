@@ -2,76 +2,94 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 export default function Navbar() {
-  const [userId, setUserId] = useState<string | null>(null);
-  const [pseudo, setPseudo] = useState<string | null>(null);
   const router = useRouter();
+  const [logged, setLogged] = useState(false);
+  const [myId, setMyId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        setLogged(true);
+        setMyId(data.user.id);
+      } else {
+        setLogged(false);
+        setMyId(null);
+      }
+    };
 
-    const id = localStorage.getItem("user_id");
-    const p = localStorage.getItem("pseudo");
-
-    setUserId(id);
-    setPseudo(p);
+    checkUser();
   }, []);
 
-  const handleLogout = async () => {
+  const logout = async () => {
     await supabase.auth.signOut();
-
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("user_id");
-      localStorage.removeItem("pseudo");
-    }
-
-    // 🔥 Met à jour immédiatement la navbar
-    setUserId(null);
-    setPseudo(null);
-
-    // 🔥 Redirige vers la bonne page (dit-moi laquelle tu préfères !)
+    setLogged(false);
     router.push("/login");
   };
 
   return (
     <nav
       style={{
+        width: "100%",
+        padding: "15px 30px",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        padding: "10px 20px",
-        borderBottom: "1px solid #ddd",
-        marginBottom: "10px",
+        position: "sticky",
+        top: 0,
+        zIndex: 1000,
+        background: "rgba(0, 0, 0, 0.45)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.15)",
       }}
     >
-      {/* Gauche : liens */}
-      <div style={{ display: "flex", gap: "15px" }}>
-        <Link href="/feed">Feed</Link>
+      {/* ---- Logo / Titre ---- */}
+      <Link href="/feed" style={{ color: "white", fontSize: 22, fontWeight: 700 }}>
+        SocialVD
+      </Link>
 
-        {userId && (
-          <Link href={`/profile/${userId}`}>
-            Profil
+      {/* ---- Liens centraux ---- */}
+      {logged && (
+        <div style={{ display: "flex", gap: 30, fontSize: 16 }}>
+          <Link href="/feed" style={{ color: "white", textDecoration: "none" }}>
+            Fil d’actualité
           </Link>
-        )}
-      </div>
+          <Link href="/explore" style={{ color: "white", textDecoration: "none" }}>
+            Découvrir
+          </Link>
+        </div>
+      )}
 
-      {/* Droite : état connexion */}
-      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-        {userId ? (
+      {/* ---- Boutons droite ---- */}
+      <div style={{ display: "flex", gap: 15 }}>
+        {logged && myId ? (
           <>
-            <span>Connecté : {pseudo}</span>
+            <Link href={`/profile/${myId}`}>
+              <button
+                style={{
+                  background: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  padding: "8px 14px",
+                  borderRadius: 6,
+                }}
+              >
+                Mon profil
+              </button>
+            </Link>
+
             <button
-              onClick={handleLogout}
+              onClick={logout}
               style={{
-                padding: "5px 10px",
-                background: "black",
+                background: "rgba(255, 0, 0, 0.8)",
+                padding: "8px 14px",
+                borderRadius: 6,
                 color: "white",
                 border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
               }}
             >
               Se déconnecter
@@ -79,8 +97,21 @@ export default function Navbar() {
           </>
         ) : (
           <>
-            <Link href="/login">Se connecter</Link>
-            <Link href="/signup">S’inscrire</Link>
+            <Link href="/login">
+              <button>Connexion</button>
+            </Link>
+            <Link href="/signup">
+              <button
+                style={{
+                  background: "#1a73e8",
+                  padding: "8px 14px",
+                  borderRadius: 6,
+                  color: "white",
+                }}
+              >
+                Inscription
+              </button>
+            </Link>
           </>
         )}
       </div>

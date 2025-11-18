@@ -6,12 +6,32 @@ export const metadata = {
   description: "Le réseau social gaming",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="fr">
-      <body>
+      <body
+        style={{
+          // ❗ Ici on enlève backgroundColor blanc/noir
+          // pour laisser globals.css gérer le fond SPATIAL
+          minHeight: "100vh",
+          margin: 0,
+        }}
+      >
         <Navbar />
-        {children}
+
+        <main
+          style={{
+            maxWidth: "800px",
+            margin: "0 auto",
+            padding: "20px",
+          }}
+        >
+          {children}
+        </main>
       </body>
     </html>
   );

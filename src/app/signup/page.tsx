@@ -10,82 +10,133 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pseudo, setPseudo] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  async function handleSignup(e: any) {
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg(null);
 
-    // 1) Créer le user dans Supabase Auth
+    // -------------------------------------------------
+    // 1) Création du compte Supabase Auth
+    // -------------------------------------------------
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
 
     if (error) {
-      alert("Erreur : " + error.message);
+      setErrorMsg(error.message);
       setLoading(false);
       return;
     }
 
-    const user = data?.user;
+    // L'utilisateur vient d'être créé dans Auth
+    const user = data.user;
     if (!user) {
-      alert("Erreur : utilisateur non créé.");
+      setErrorMsg("Impossible de créer votre compte.");
       setLoading(false);
       return;
     }
 
-    // 2) Créer le PROFIL lié à cet user (table profiles)
-    await supabase.from("profiles").insert({
-      id: user.id,
-      pseudo: pseudo,
-      bio: "",
-    });
+    // -------------------------------------------------
+    // 2) Créer le profil dans ta table "profiles"
+    // -------------------------------------------------
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .insert({
+        id: user.id,
+        pseudo: pseudo || email.split("@")[0],
+        bio: "",
+        avatar_url: null,
+      });
 
-    // 3) Stocker l'id et le pseudo dans localStorage
-    localStorage.setItem("user_id", user.id);
-    localStorage.setItem("pseudo", pseudo);
+    if (profileError) {
+      setErrorMsg(profileError.message);
+      setLoading(false);
+      return;
+    }
 
+    // -------------------------------------------------
+    // 3) Redirection vers le feed (la navbar va capter la session)
+    // -------------------------------------------------
     setLoading(false);
-
-    // 4) Redirection vers le feed
     router.push("/feed");
-  }
+  };
 
   return (
-    <div style={{ maxWidth: "400px", margin: "0 auto", padding: "20px" }}>
-      <h1>Inscription</h1>
+    <div
+      style={{
+        maxWidth: 400,
+        margin: "40px auto",
+        padding: 20,
+        border: "1px solid #222",
+        borderRadius: 8,
+        background: "#000",
+      }}
+    >
+      <h1 style={{ marginBottom: 16 }}>Créer un compte</h1>
 
-      <form onSubmit={handleSignup}>
-        <input
-          type="text"
-          placeholder="Pseudo"
-          value={pseudo}
-          onChange={(e) => setPseudo(e.target.value)}
-          required
-          style={{ width: "100%", marginBottom: "10px" }}
-        />
+      <form
+        onSubmit={handleSignup}
+        style={{ display: "flex", flexDirection: "column", gap: 14 }}
+      >
+        <div>
+          <label>Pseudo</label>
+          <input
+            type="text"
+            placeholder="Ton pseudo"
+            value={pseudo}
+            onChange={(e) => setPseudo(e.target.value)}
+            required
+            style={{ width: "100%", padding: 8, marginTop: 4 }}
+          />
+        </div>
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          style={{ width: "100%", marginBottom: "10px" }}
-        />
+        <div>
+          <label>Email</label>
+          <input
+            type="email"
+            placeholder="Adresse email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            style={{ width: "100%", padding: 8, marginTop: 4 }}
+          />
+        </div>
 
-        <input
-          type="password"
-          placeholder="Mot de passe"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ width: "100%", marginBottom: "10px" }}
-        />
+        <div>
+          <label>Mot de passe</label>
+          <input
+            type="password"
+            placeholder="Mot de passe"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            style={{ width: "100%", padding: 8, marginTop: 4 }}
+          />
+        </div>
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Chargement..." : "Créer mon compte"}
+        {errorMsg && (
+          <p style={{ color: "red", fontSize: 14, marginTop: 4 }}>{errorMsg}</p>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            marginTop: 5,
+            padding: "10px 16px",
+            background: "#0070f3",
+            color: "white",
+            borderRadius: 6,
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          {loading ? "Création du compte..." : "S'inscrire"}
         </button>
       </form>
     </div>
