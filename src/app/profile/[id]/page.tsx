@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import Image from "next/image";
 import EditProfileForm from "@/components/EditProfileForm";
 import Link from "next/link";
+import MateButton from "@/components/MateButton";
 
 type Profile = {
   id: string;
@@ -50,6 +51,8 @@ export default function ProfilePage() {
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
 
+  const [matesCount, setMatesCount] = useState(0);
+
   const [gameAccounts, setGameAccounts] = useState<GameAccount[]>([]);
   const [loadingGames, setLoadingGames] = useState(true);
 
@@ -80,6 +83,8 @@ export default function ProfilePage() {
     loadFollowCounts();
     loadGameAccounts();
     checkFollow();
+    loadMatesCount();
+
   }, [id, myId]);
 
   const loadProfile = async () => {
@@ -135,6 +140,16 @@ export default function ProfilePage() {
     setFollowingCount(following || 0);
   };
 
+const loadMatesCount = async () => {
+  const { count } = await supabase
+    .from("mates")
+    .select("*", { count: "exact", head: true })
+    .or(`user1.eq.${id},user2.eq.${id}`);
+
+  setMatesCount(count || 0);
+};
+
+
   const checkFollow = async () => {
     if (!myId) return;
 
@@ -160,7 +175,7 @@ export default function ProfilePage() {
   };
 
   // ---------------------------------------
-  // 3. Start a private conversation (DM) — PATCHÉ
+  // 3. Start a private conversation (DM)
   // ---------------------------------------
   const handleStartConversation = async () => {
     if (!myId || !id) {
@@ -169,7 +184,6 @@ export default function ProfilePage() {
     }
 
     try {
-      // 1) Créer la conversation
       const { data: newConv, error: convErr } = await supabase
         .from("conversations")
         .insert({ created_at: new Date().toISOString() })
@@ -177,36 +191,20 @@ export default function ProfilePage() {
         .single();
 
       if (convErr || !newConv) {
-        console.error("Erreur création conversation:", convErr);
-        alert(
-          "Impossible de créer une conversation : " +
-            (convErr?.message || "erreur inconnue")
-        );
+        alert("Erreur création conversation :" + convErr?.message);
         return;
       }
 
       const convId = newConv.id as string;
 
-      // 2) Ajouter les participants
-      const { error: usersErr } = await supabase
-        .from("conversations_users")
-        .insert([
-          { conversation_id: convId, user_id: myId },
-          { conversation_id: convId, user_id: id },
-        ]);
+      await supabase.from("conversations_users").insert([
+        { conversation_id: convId, user_id: myId },
+        { conversation_id: convId, user_id: id },
+      ]);
 
-      if (usersErr) {
-        console.error("Erreur ajout participants:", usersErr);
-        alert(
-          "La conversation a été créée, mais les participants n'ont pas été ajoutés."
-        );
-      }
-
-      // 3) Redirection
       router.push(`/messages/${convId}`);
     } catch (error: any) {
-      console.error("Erreur inattendue:", error);
-      alert("Erreur inattendue : " + (error?.message ?? String(error)));
+      alert("Erreur : " + error?.message);
     }
   };
 
@@ -287,8 +285,9 @@ export default function ProfilePage() {
   };
 
   // ---------------------------------------
-  // 6. Render
+  // 6. Rendering
   // ---------------------------------------
+
   if (!profile) return <p>Profil introuvable...</p>;
 
   return (
@@ -336,22 +335,31 @@ export default function ProfilePage() {
             <h1 style={{ fontSize: 24, marginBottom: 4 }}>{profile.pseudo}</h1>
 
             <p style={{ color: "#999", marginBottom: 8 }}>
-              <Link
-                href={`/profile/${id}/followers`}
-                style={{ color: "#4aa3ff", textDecoration: "none" }}
-              >
-                {followersCount} abonnés
-              </Link>
+  <Link
+    href={`/profile/${id}/followers`}
+    style={{ color: "#4aa3ff", textDecoration: "none" }}
+  >
+    {followersCount} abonnés
+  </Link>
 
-              {" · "}
+  {" · "}
 
-              <Link
-                href={`/profile/${id}/following`}
-                style={{ color: "#4aa3ff", textDecoration: "none" }}
-              >
-                {followingCount} abonnements
-              </Link>
-            </p>
+  <Link
+    href={`/profile/${id}/following`}
+    style={{ color: "#4aa3ff", textDecoration: "none" }}
+  >
+    {followingCount} abonnements
+  </Link>
+
+  {" · "}
+
+  <Link
+    href={`/profile/${id}/mates`}
+    style={{ color: "#4aa3ff", textDecoration: "none" }}
+  >
+    {matesCount} mate{matesCount > 1 ? "s" : ""}
+  </Link>
+</p>
 
             <p>{profile.bio || "Aucune bio."}</p>
 
@@ -385,6 +393,9 @@ export default function ProfilePage() {
                   >
                     Message
                   </button>
+
+                  {/* AJOUT DU BOUTON MATE */}
+                  <MateButton myId={myId} otherId={id} />
                 </>
               )}
 
@@ -657,9 +668,7 @@ export default function ProfilePage() {
                               border: "none",
                             }}
                           >
-                            {savingEdit
-                              ? "Enregistrement..."
-                              : "💾 Enregistrer"}
+                            {savingEdit ? "Enregistrement..." : "💾 Enregistrer"}
                           </button>
 
                           <button
