@@ -10,6 +10,8 @@ import MateButton from "@/components/MateButton";
 
 // 🔥 AJOUT — IMPORT
 import MateSessionButton from "@/components/MateSessionButton";
+import ProfilePerformances from "@/components/ProfilePerformances";
+import AddPerformanceForm from "@/components/AddPerformanceForm";
 
 type Profile = {
   id: string;
@@ -763,6 +765,12 @@ export default function ProfilePage() {
           )}
         </section>
 
+        {/* PERFORMANCES */}
+        <section style={{ marginTop: 40 }}>
+          <h2 style={{ fontSize: 20, marginBottom: 12 }}>Performances vérifiables</h2>
+          {myId === id && (<AddPerformanceForm userId={id} />)}
+          <ProfilePerformances userId={id} />
+        </section>
         {/* POSTS */}
         <section style={{ marginTop: 40 }}>
           <h2 style={{ fontSize: 20, marginBottom: 10 }}>
