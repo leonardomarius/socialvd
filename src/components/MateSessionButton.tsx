@@ -64,6 +64,41 @@ export default function MateSessionButton({
   }
 
   // -------------------------------------------------
+  // 🔥 2 bis) Realtime global pour détecter une NOUVELLE demande
+  // -------------------------------------------------
+  useEffect(() => {
+    if (!myId || !otherId) return;
+
+    const channel = supabase
+      .channel(`mate_session_global_${myId}_${otherId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "mate_sessions",
+        },
+        (payload) => {
+          const s = payload.new;
+
+          const isConcerned =
+            (s.user1_id === myId && s.user2_id === otherId) ||
+            (s.user1_id === otherId && s.user2_id === myId);
+
+          if (isConcerned) {
+            console.log("🔥 Nouvelle session détectée en realtime :", s);
+            fetchActiveSession();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [myId, otherId]);
+
+  // -------------------------------------------------
   // 🔥 3) Realtime ciblé (écoute UNIQUEMENT cette session)
   // -------------------------------------------------
   useEffect(() => {
