@@ -20,6 +20,21 @@ export default function SignupPage() {
     setLoading(true);
     setErrorMsg(null);
 
+    // ------------------------------------------------------
+    // 🔥 0) Vérifier si le pseudo existe déjà
+    // ------------------------------------------------------
+    const { data: pseudoExists } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("pseudo", pseudo)
+      .maybeSingle();
+
+    if (pseudoExists) {
+      setErrorMsg("Ce pseudo est déjà pris.");
+      setLoading(false);
+      return;
+    }
+
     // -----------------------------
     // 1) Création du compte Auth
     // -----------------------------
@@ -58,7 +73,7 @@ export default function SignupPage() {
     }
 
     // -----------------------------
-    // 3) Mettre à jour la session locale + notifier la Navbar
+    // 3) Mettre à jour la session locale
     // -----------------------------
     localStorage.setItem("user_id", user.id);
     window.dispatchEvent(new Event("authChanged"));
@@ -84,7 +99,6 @@ export default function SignupPage() {
     >
       <h1 style={{ marginBottom: 16 }}>Créer un compte</h1>
 
-      {/* ⬇️ Le submit gère automatiquement ENTER */}
       <form
         onSubmit={handleSignup}
         style={{ display: "flex", flexDirection: "column", gap: 14 }}

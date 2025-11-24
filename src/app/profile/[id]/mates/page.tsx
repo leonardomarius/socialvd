@@ -1,172 +1,190 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 
-type MateInfo = {
+type User = {
   id: string;
   pseudo: string | null;
   avatar_url: string | null;
-  since: string;
+};
+
+type MateRelation = {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  start_date: string;
+};
+
+type Request = {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
 };
 
 export default function MatesPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params.id as string;
 
-  const [mates, setMates] = useState<MateInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [myId, setMyId] = useState<string | null>(null);
+
+  const [mates, setMates] = useState<(MateRelation & { other: User })[]>([]);
+  const [receivedRequests, setReceivedRequests] = useState<
+    (Request & { sender: User })[]
+  >([]);
 
   useEffect(() => {
-    if (!id) return;
+    const load = async () => {
+      const { data } = await supabase.auth.getUser();
+      setMyId(data.user?.id || null);
+    };
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (!myId) return;
+
     loadMates();
-  }, [id]);
+    loadRequests();
+  }, [myId]);
 
+  // Load mates
   const loadMates = async () => {
-    setLoading(true);
-
-    // On récupère toutes les relations mates où l’utilisateur est user1 ou user2
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("mates")
       .select("*")
-      .or(`user1.eq.${id},user2.eq.${id}`);
+      .or(`user1_id.eq.${myId},user2_id.eq.${myId}`);
 
-    if (error) {
-      console.error(error);
-      setLoading(false);
-      return;
-    }
+    if (!data) return;
 
-    // On transforme les données pour avoir les infos du mate
-    const mateList: MateInfo[] = [];
+    const enriched = await Promise.all(
+      data.map(async (m) => {
+        const otherId = m.user1_id === myId ? m.user2_id : m.user1_id;
 
-    for (const rel of data!) {
-      const mateId = rel.user1 === id ? rel.user2 : rel.user1;
+        const { data: other } = await supabase
+          .from("profiles")
+          .select("id, pseudo, avatar_url")
+          .eq("id", otherId)
+          .single();
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, pseudo, avatar_url")
-        .eq("id", mateId)
-        .single();
+        return { ...m, other };
+      })
+    );
 
-      if (profile) {
-        mateList.push({
-          id: profile.id,
-          pseudo: profile.pseudo,
-          avatar_url: profile.avatar_url,
-          since: rel.start_date,
-        });
-      }
-    }
-
-    setMates(mateList);
-    setLoading(false);
+    setMates(enriched);
   };
 
-  if (loading) return <p style={{ padding: 20 }}>Chargement...</p>;
+  // Load received requests
+  const loadRequests = async () => {
+    const { data } = await supabase
+      .from("mate_requests")
+      .select("*")
+      .eq("receiver_id", myId)
+      .eq("status", "pending");
+
+    if (!data) return;
+
+    const enriched = await Promise.all(
+      data.map(async (r) => {
+        const { data: sender } = await supabase
+          .from("profiles")
+          .select("id, pseudo, avatar_url")
+          .eq("id", r.sender_id)
+          .single();
+
+        return { ...r, sender };
+      })
+    );
+
+    setReceivedRequests(enriched);
+  };
+
+  const acceptRequest = async (reqId: string, senderId: string) => {
+    await supabase.from("mate_requests").delete().eq("id", reqId);
+    await supabase.from("mates").insert({
+      user1_id: myId!,
+      user2_id: senderId,
+    });
+    loadMates();
+    loadRequests();
+  };
+
+  const refuseRequest = async (reqId: string) => {
+    await supabase.from("mate_requests").delete().eq("id", reqId);
+    loadRequests();
+  };
 
   return (
-    <div
-      style={{
-        padding: "20px",
-        maxWidth: "750px",
-        margin: "0 auto",
-      }}
-    >
-      <h1 style={{ fontSize: 24, marginBottom: 20 }}>
-        Mates ({mates.length})
-      </h1>
+    <div style={{ maxWidth: 700, margin: "0 auto", padding: 20 }}>
+      <h1 style={{ fontSize: 26, marginBottom: 20 }}>Mates</h1>
 
-      {mates.length === 0 && <p>Aucun mate pour le moment.</p>}
+      {/* Requests */}
+      {receivedRequests.length > 0 && (
+        <div style={{ marginBottom: 40 }}>
+          <h2 style={{ marginBottom: 12 }}>Demandes reçues</h2>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {mates.map((mate) => (
-          <div
-            key={mate.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              padding: 12,
-              background: "#111",
-              borderRadius: 10,
-              border: "1px solid #333",
-              gap: 15,
-            }}
-          >
-            {/* Avatar */}
-            {mate.avatar_url ? (
-              <Image
-                src={mate.avatar_url}
-                alt="avatar"
-                width={60}
-                height={60}
-                style={{
-                  borderRadius: "50%",
-                  objectFit: "cover",
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: 60,
-                  height: 60,
-                  background: "#333",
-                  borderRadius: "50%",
-                }}
-              ></div>
-            )}
+          {receivedRequests.map((req) => (
+            <div key={req.id} style={{ padding: 12, background: "#111", borderRadius: 6, marginBottom: 12 }}>
+              <p><b>{req.sender.pseudo}</b> veut devenir mate</p>
 
-            {/* Infos */}
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 18, marginBottom: 4 }}>
-                {mate.pseudo || "Utilisateur"}
-              </p>
+              <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+                <button
+                  onClick={() => acceptRequest(req.id, req.sender.id)}
+                  style={{ padding: "6px 12px", background: "green", color: "white", borderRadius: 6 }}
+                >
+                  Accepter
+                </button>
 
-              <p style={{ fontSize: 12, color: "#999" }}>
-                Mate depuis le{" "}
-                {mate.since
-  ? new Date(mate.since).toLocaleDateString("fr-FR")
-  : "Date inconnue"}
-              </p>
+                <button
+                  onClick={() => refuseRequest(req.id)}
+                  style={{ padding: "6px 12px", background: "red", color: "white", borderRadius: 6 }}
+                >
+                  Refuser
+                </button>
+              </div>
             </div>
+          ))}
+        </div>
+      )}
 
-            {/* Boutons */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {/* Mates */}
+      <h2 style={{ marginBottom: 12 }}>Tes mates</h2>
+
+      {mates.length === 0 ? (
+        <p>Aucun mate pour le moment.</p>
+      ) : (
+        mates.map((m) => (
+          <div key={m.id} style={{ padding: 14, background: "#111", borderRadius: 6, marginBottom: 12 }}>
+            <p><b>{m.other.pseudo}</b></p>
+            <p style={{ fontSize: 12, color: "#888" }}>Depuis le {new Date(m.start_date).toLocaleDateString()}</p>
+
+            <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
               <Link
-                href={`/profile/${mate.id}`}
-                style={{
-                  padding: "6px 10px",
-                  background: "#0070f3",
-                  color: "white",
-                  borderRadius: 6,
-                  textDecoration: "none",
-                  textAlign: "center",
-                }}
+                href={`/profile/${m.other.id}`}
+                style={{ padding: "6px 10px", background: "#0070f3", color: "white", borderRadius: 6, textDecoration: "none" }}
               >
                 Voir profil
               </Link>
 
-              <button
-                onClick={() => router.push(`/messages/create?user=${mate.id}`)}
+              {/* 🔥 NOUVEAU BOUTON — PAGE STATS */}
+              <Link
+                href={`/profile/${myId}/mates/${m.other.id}/stats`}
                 style={{
                   padding: "6px 10px",
-                  background: "green",
+                  background: "purple",
                   color: "white",
                   borderRadius: 6,
-                  cursor: "pointer",
-                  border: "none",
+                  textDecoration: "none"
                 }}
               >
-                Message
-              </button>
+                Stats avec ce mate
+              </Link>
             </div>
           </div>
-        ))}
-      </div>
+        ))
+      )}
     </div>
   );
 }

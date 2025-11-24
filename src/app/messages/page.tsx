@@ -26,88 +26,125 @@ export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const load = async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) {
-        router.push("/login");
-        return;
-      }
+  // 🔥 Fonction principale pour charger tout
+  const load = async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
+      router.push("/login");
+      return;
+    }
 
-      const userId = userData.user.id;
-      setMyId(userId);
+    const userId = userData.user.id;
+    setMyId(userId);
 
-      const { data: convUsers } = await supabase
-        .from("conversations_users")
-        .select("conversation_id")
-        .eq("user_id", userId);
+    const { data: convUsers } = await supabase
+      .from("conversations_users")
+      .select("conversation_id")
+      .eq("user_id", userId);
 
-      const convIds = convUsers?.map((c) => c.conversation_id) ?? [];
+    const convIds = convUsers?.map((c) => c.conversation_id) ?? [];
 
-      if (convIds.length === 0) {
-        setConversations([]);
-        setLoading(false);
-        return;
-      }
-
-      const { data: convs } = await supabase
-        .from("conversations")
-        .select("*")
-        .in("id", convIds)
-        .order("updated_at", { ascending: false });
-
-      const { data: participants } = await supabase
-        .from("conversations_users")
-        .select("*")
-        .in("conversation_id", convIds);
-
-      const otherIds = Array.from(
-        new Set(
-          (participants ?? [])
-            .filter((p) => p.user_id !== userId)
-            .map((p) => p.user_id)
-        )
-      );
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("*")
-        .in("id", otherIds);
-
-      const { data: unread } = await supabase
-        .from("messages")
-        .select("conversation_id")
-        .eq("seen", false)
-        .neq("sender_id", userId);
-
-      const unreadCount: Record<string, number> = {};
-      unread?.forEach((m) => {
-        unreadCount[m.conversation_id] =
-          (unreadCount[m.conversation_id] ?? 0) + 1;
-      });
-
-      const fullConvs: Conversation[] = (convs ?? []).map((conv) => {
-        const otherId = participants?.find(
-          (p) => p.conversation_id === conv.id && p.user_id !== userId
-        )?.user_id;
-
-        const otherUser =
-          profiles?.find((p) => p.id === otherId) ?? null;
-
-        return {
-          id: conv.id,
-          last_message: conv.last_message,
-          updated_at: conv.updated_at,
-          other_user: otherUser,
-          unread: unreadCount[conv.id] ?? 0,
-        };
-      });
-
-      setConversations(fullConvs);
+    if (convIds.length === 0) {
+      setConversations([]);
       setLoading(false);
-    };
+      return;
+    }
 
+    const { data: convs } = await supabase
+      .from("conversations")
+      .select("*")
+      .in("id", convIds)
+      .order("updated_at", { ascending: false });
+
+    const { data: participants } = await supabase
+      .from("conversations_users")
+      .select("*")
+      .in("conversation_id", convIds);
+
+    const otherIds = Array.from(
+      new Set(
+        (participants ?? [])
+          .filter((p) => p.user_id !== userId)
+          .map((p) => p.user_id)
+      )
+    );
+
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("*")
+      .in("id", otherIds);
+
+    const { data: unread } = await supabase
+      .from("messages")
+      .select("conversation_id")
+      .eq("seen", false)
+      .neq("sender_id", userId);
+
+    const unreadCount: Record<string, number> = {};
+    unread?.forEach((m) => {
+      unreadCount[m.conversation_id] =
+        (unreadCount[m.conversation_id] ?? 0) + 1;
+    });
+
+    // 🔥 On récupère le VRAI dernier message pour chaque conversation
+    const lastMessages: Record<string, string | null> = {};
+
+    for (const convId of convIds) {
+      const { data: lastMsg } = await supabase
+        .from("messages")
+        .select("content")
+        .eq("conversation_id", convId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      lastMessages[convId] = lastMsg?.content ?? null;
+    }
+
+    const fullConvs: Conversation[] = (convs ?? []).map((conv) => {
+      const otherId = participants?.find(
+        (p) => p.conversation_id === conv.id && p.user_id !== userId
+      )?.user_id;
+
+      const otherUser =
+        profiles?.find((p) => p.id === otherId) ?? null;
+
+      return {
+        id: conv.id,
+        last_message: lastMessages[conv.id],
+        updated_at: conv.updated_at,
+        other_user: otherUser,
+        unread: unreadCount[conv.id] ?? 0,
+      };
+    });
+
+    setConversations(fullConvs);
+    setLoading(false);
+  };
+
+  // 🔥 Load initial
+  useEffect(() => {
     load();
+  }, []);
+
+  // 🔥 REALTIME — si un message arrive → reload
+  useEffect(() => {
+    const channel = supabase
+      .channel("messages-list")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+        },
+        () => load()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const formatDate = (iso: string) =>
@@ -116,7 +153,8 @@ export default function MessagesPage() {
       timeStyle: "short",
     });
 
-  if (loading) return <p style={{ color: "white", padding: 20 }}>Chargement…</p>;
+  if (loading)
+    return <p style={{ color: "white", padding: 20 }}>Chargement…</p>;
 
   return (
     <div
@@ -132,14 +170,13 @@ export default function MessagesPage() {
         style={{
           width: "100%",
           maxWidth: "700px",
-          background: "rgba(0,0,0,0.80)",    // 🔥 FOND NOIR OPAQUE
+          background: "rgba(0,0,0,0.80)",
           borderRadius: "20px",
           padding: "25px",
           border: "1px solid rgba(255,255,255,0.15)",
           boxShadow: "0 0 35px rgba(0,0,0,0.6)",
         }}
       >
-        {/* TITRE */}
         <h1
           style={{
             fontSize: "32px",
@@ -157,7 +194,6 @@ export default function MessagesPage() {
           </p>
         )}
 
-        {/* LISTE DES CONVERSATIONS */}
         <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
           {conversations.map((conv) => (
             <Link
@@ -167,7 +203,7 @@ export default function MessagesPage() {
                 display: "flex",
                 alignItems: "center",
                 gap: "15px",
-                background: "rgba(20,20,20,0.9)",   // 🔥 CARTES LISIBLES
+                background: "rgba(20,20,20,0.9)",
                 padding: "14px",
                 borderRadius: "14px",
                 border: "1px solid rgba(255,255,255,0.1)",

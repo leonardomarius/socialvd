@@ -12,6 +12,7 @@ export default function HomePage() {
       <h1>Bienvenue sur SocialVD 🚀</h1>
       <p>Le réseau social gaming arrive très bientôt.</p>
 
+      {/* Bouton Connexion */}
       <a
         href="/login"
         style={{
@@ -26,6 +27,23 @@ export default function HomePage() {
         }}
       >
         Se connecter
+      </a>
+
+      {/* Bouton Inscription (désormais noir) */}
+      <a
+        href="/signup"
+        style={{
+          backgroundColor: "#000", // même couleur que "Se connecter"
+          color: "#fff",
+          padding: "12px 20px",
+          borderRadius: "6px",
+          textDecoration: "none",
+          display: "inline-block",
+          marginTop: "15px",
+          fontWeight: "bold",
+        }}
+      >
+        S'inscrire
       </a>
     </main>
   );

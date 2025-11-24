@@ -14,24 +14,50 @@ export default function Navbar() {
   // Notifications
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [popoverOpen, setPopoverOpen] = useState(false);
 
+  // Mates
+  const [mateRequestsCount, setMateRequestsCount] = useState(0);
+
+  // Messages
+  const [messagesUnreadCount, setMessagesUnreadCount] = useState(0);
+
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
-  // ✔️ Vérifie l’auth Supabase
+  // Vérifie auth — ⭐ PATCH : getSession() au lieu de getUser()
   const refreshAuthState = async () => {
-    const { data } = await supabase.auth.getUser();
+    const { data } = await supabase.auth.getSession(); // ⭐ PATCH ICI
 
-    if (data.user) {
+    if (data.session?.user) {
       setLogged(true);
-      setMyId(data.user.id);
-      localStorage.setItem("user_id", data.user.id);
+      setMyId(data.session.user.id);
+      localStorage.setItem("user_id", data.session.user.id);
     } else {
       setLogged(false);
       setMyId(null);
       localStorage.removeItem("user_id");
     }
   };
+
+  // ⭐ AJOUT : SUBSCRIBE AUX CHANGEMENTS D’AUTH
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setLogged(true);
+        setMyId(session.user.id);
+        localStorage.setItem("user_id", session.user.id);
+      } else {
+        setLogged(false);
+        setMyId(null);
+        localStorage.removeItem("user_id");
+      }
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+  // ⭐ FIN AJOUT
 
   // Fermer popover si clic extérieur
   useEffect(() => {
@@ -54,25 +80,61 @@ export default function Navbar() {
       .limit(15);
 
     setNotifications(data || []);
-    const unread = (data || []).filter((n) => n.seen === false).length;
+    const unread = (data || []).filter((n) => !n.seen).length;
     setUnreadCount(unread);
   };
 
-  // Supabase realtime notifications
+  // Charger compteurs navbar
+  const loadNavbarCounts = async (userId: string) => {
+    // Messages
+    const { data: conversations } = await supabase
+      .from("conversations_users")
+      .select("conversation_id")
+      .eq("user_id", userId);
+
+    const convIds = conversations?.map((c) => c.conversation_id) || [];
+
+    if (convIds.length === 0) {
+      setMessagesUnreadCount(0);
+    } else {
+      const { count: unreadMessages } = await supabase
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .in("conversation_id", convIds)
+        .neq("sender_id", userId)
+        .eq("seen", false);
+
+      setMessagesUnreadCount(unreadMessages || 0);
+    }
+
+    // Mates requests
+    const { count: mateRequests } = await supabase
+      .from("mates_requests")
+      .select("*", { count: "exact", head: true })
+      .eq("receiver_id", userId)
+      .eq("status", "pending");
+
+    setMateRequestsCount(mateRequests || 0);
+  };
+
+  // Realtime — version corrigée
   const setupRealtime = (userId: string) => {
     supabase
-      .channel("notifications-realtime")
+      .channel("navbar-realtime")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${userId}`,
-        },
-        async () => {
-          await loadNotifications(userId);
-        }
+        { event: "*", schema: "public", table: "messages" },
+        () => loadNavbarCounts(userId)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "mates_requests" },
+        () => loadNavbarCounts(userId)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications" },
+        () => loadNotifications(userId)
       )
       .subscribe();
   };
@@ -90,7 +152,9 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!myId) return;
+
     loadNotifications(myId);
+    loadNavbarCounts(myId);
     setupRealtime(myId);
   }, [myId]);
 
@@ -230,10 +294,11 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* 💬 Messages privés */}
+            {/* 💬 Messages */}
             <Link href="/messages">
               <button
                 style={{
+                  position: "relative",
                   background: "rgba(255,255,255,0.1)",
                   border: "1px solid rgba(255,255,255,0.2)",
                   padding: "8px 14px",
@@ -242,6 +307,24 @@ export default function Navbar() {
                 }}
               >
                 Messages
+
+                {messagesUnreadCount > 0 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: -4,
+                      right: -4,
+                      background: "red",
+                      color: "white",
+                      fontSize: 11,
+                      padding: "2px 6px",
+                      borderRadius: 999,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {messagesUnreadCount}
+                  </span>
+                )}
               </button>
             </Link>
 
@@ -275,13 +358,11 @@ export default function Navbar() {
           </>
         )}
 
-        {/* NON connecté */}
         {!logged && (
           <>
             <Link href="/login">
               <button>Connexion</button>
             </Link>
-
             <Link href="/signup">
               <button
                 style={{

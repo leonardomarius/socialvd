@@ -32,12 +32,12 @@ export default function ConversationPage() {
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  // Scroll auto vers le bas
+  /* AUTO SCROLL */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Chargement principal (dépendance STABLE)
+  /* LOAD ALL DATA */
   useEffect(() => {
     const load = async () => {
       const { data: auth } = await supabase.auth.getUser();
@@ -58,7 +58,7 @@ export default function ConversationPage() {
       await loadMessages();
       await markMessagesSeen(uid);
 
-      // Temps réel
+      /* REALTIME — ignorer mes propres messages */
       const channel = supabase
         .channel("conv-" + conversationId)
         .on(
@@ -70,21 +70,27 @@ export default function ConversationPage() {
             filter: `conversation_id=eq.${conversationId}`,
           },
           (payload) => {
-            setMessages((prev) => [...prev, payload.new as Message]);
+            const msg = payload.new as Message;
+
+            if (msg.sender_id === uid) return;
+
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
           }
         )
         .subscribe();
 
       setLoading(false);
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
+      return () => supabase.removeChannel(channel);
     };
 
     if (conversationId) load();
   }, [conversationId]);
 
+  /* LOAD PARTICIPANT */
   const loadParticipants = async (userId: string) => {
     const { data: convUsers } = await supabase
       .from("conversations_users")
@@ -103,6 +109,7 @@ export default function ConversationPage() {
     setOtherUser(data);
   };
 
+  /* LOAD MESSAGES */
   const loadMessages = async () => {
     setLoading(true);
 
@@ -112,25 +119,33 @@ export default function ConversationPage() {
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true });
 
-    setMessages(data || []);
+    const unique = (data || []).filter(
+      (msg, index, self) => index === self.findIndex((m) => m.id === msg.id)
+    );
+
+    setMessages(unique);
     setLoading(false);
   };
 
+  /* MARK SEEN */
   const markMessagesSeen = async (userId: string) => {
     await supabase
       .from("messages")
       .update({ seen: true })
       .eq("conversation_id", conversationId)
-      .neq("sender_id", userId);
+      .neq("sender_id", userId)
+      .eq("seen", false);
   };
 
+  /* SEND MESSAGE — 🔥 AJOUT LOCAL IMMÉDIAT + PATCH */
   const handleSend = async () => {
     if (!newMessage.trim() || !myId) return;
 
     const text = newMessage.trim();
     setNewMessage("");
 
-    const { data } = await supabase
+    // 1️⃣ INSERT MESSAGE
+    const { data, error } = await supabase
       .from("messages")
       .insert({
         conversation_id: conversationId,
@@ -140,15 +155,21 @@ export default function ConversationPage() {
       .select("*")
       .single();
 
+    if (error) {
+      console.error(error);
+      return;
+    }
+
     if (data) {
       setMessages((prev) => [...prev, data]);
     }
 
+    // 2️⃣ 🔥 PATCH : mettre à jour la conversation
     await supabase
       .from("conversations")
       .update({
-        last_message: text,
         updated_at: new Date().toISOString(),
+        last_message: text,
       })
       .eq("id", conversationId);
   };
@@ -159,7 +180,7 @@ export default function ConversationPage() {
       minute: "2-digit",
     });
 
-  // ---------- STYLES INLINE FORTS (pour que tu VOIES la diff) ----------
+  /* STYLE */
   const pageWrapperStyle: React.CSSProperties = {
     width: "100%",
     display: "flex",
@@ -181,55 +202,6 @@ export default function ConversationPage() {
     flexDirection: "column",
     overflow: "hidden",
     backdropFilter: "blur(10px)",
-  };
-
-  const headerStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    padding: "14px 18px",
-    borderBottom: "1px solid rgba(255,255,255,0.12)",
-    background:
-      "linear-gradient(90deg, rgba(10,10,24,0.98), rgba(20,20,40,0.98))",
-  };
-
-  const messagesContainerStyle: React.CSSProperties = {
-    flex: 1,
-    padding: "16px 18px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-    overflowY: "auto",
-  };
-
-  const inputBarStyle: React.CSSProperties = {
-    padding: "10px 16px",
-    borderTop: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(8,8,20,0.98)",
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-  };
-
-  const inputStyle: React.CSSProperties = {
-    flex: 1,
-    background: "rgba(12,12,30,0.95)",
-    border: "1px solid rgba(120,120,180,0.8)",
-    color: "white",
-    padding: "10px 14px",
-    borderRadius: "999px",
-    fontSize: "0.9rem",
-    outline: "none",
-  };
-
-  const sendButtonStyle: React.CSSProperties = {
-    background: "#2563eb",
-    borderRadius: "999px",
-    padding: "10px 18px",
-    border: "none",
-    fontWeight: 600,
-    fontSize: "0.9rem",
-    cursor: "pointer",
   };
 
   const bubbleMine: React.CSSProperties = {
@@ -264,13 +236,22 @@ export default function ConversationPage() {
     textAlign: "right",
   };
 
-  // ---------------------------------------------------------
-
   return (
     <div style={pageWrapperStyle}>
       <div style={cardStyle}>
+
         {/* HEADER */}
-        <div style={headerStyle}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            padding: "14px 18px",
+            borderBottom: "1px solid rgba(255,255,255,0.12)",
+            background:
+              "linear-gradient(90deg, rgba(10,10,24,0.98), rgba(20,20,40,0.98))",
+          }}
+        >
           <button
             type="button"
             onClick={() => router.push("/messages")}
@@ -304,9 +285,7 @@ export default function ConversationPage() {
                 }}
               />
               <div style={{ lineHeight: 1.2 }}>
-                <div
-                  style={{ fontWeight: 600, fontSize: "1rem", marginBottom: 2 }}
-                >
+                <div style={{ fontWeight: 600, fontSize: "1rem" }}>
                   {otherUser.pseudo ?? "Utilisateur"}
                 </div>
                 <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>
@@ -318,67 +297,101 @@ export default function ConversationPage() {
         </div>
 
         {/* MESSAGES */}
-        <div style={messagesContainerStyle}>
-          {loading && (
-            <p style={{ color: "rgba(220,220,255,0.7)", fontSize: "0.85rem" }}>
-              Chargement des messages…
-            </p>
-          )}
+        <div
+          style={{
+            flex: 1,
+            padding: "16px 18px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+            overflowY: "auto",
+          }}
+        >
+          {loading && <p style={{ opacity: 0.7 }}>Chargement des messages…</p>}
 
-          {messages.map((m) => {
-            const mine = m.sender_id === myId;
+          {messages
+            .filter(
+              (msg, index, self) =>
+                index === self.findIndex((m) => m.id === msg.id)
+            )
+            .map((m) => {
+              const mine = m.sender_id === myId;
 
-            return (
-              <div
-                key={m.id}
-                style={{
-                  display: "flex",
-                  justifyContent: mine ? "flex-end" : "flex-start",
-                  alignItems: "flex-end",
-                  gap: "6px",
-                }}
-              >
-                {/* Avatar sur les messages reçus */}
-                {!mine && otherUser && (
-                  <img
-                    src={
-                      otherUser.avatar_url ||
-                      "https://via.placeholder.com/32/333/FFF?text=?"
-                    }
-                    alt="Avatar"
-                    style={{
-                      width: "30px",
-                      height: "30px",
-                      borderRadius: "999px",
-                      objectFit: "cover",
-                    }}
-                  />
-                )}
+              return (
+                <div
+                  key={m.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: mine ? "flex-end" : "flex-start",
+                    gap: "6px",
+                  }}
+                >
+                  {!mine && otherUser && (
+                    <img
+                      src={
+                        otherUser.avatar_url ||
+                        "https://via.placeholder.com/32/333/FFF?text=?"
+                      }
+                      style={{
+                        width: "30px",
+                        height: "30px",
+                        borderRadius: "999px",
+                        objectFit: "cover",
+                      }}
+                    />
+                  )}
 
-                <div style={mine ? bubbleMine : bubbleOther}>
-                  <div>{m.content}</div>
-                  <div style={timeStyle}>{formatDate(m.created_at)}</div>
+                  <div style={mine ? bubbleMine : bubbleOther}>
+                    <div>{m.content}</div>
+                    <div style={timeStyle}>{formatDate(m.created_at)}</div>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
           <div ref={bottomRef} />
         </div>
 
         {/* INPUT */}
-        <div style={inputBarStyle}>
+        <div
+          style={{
+            padding: "10px 16px",
+            borderTop: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(8,8,20,0.98)",
+            display: "flex",
+            gap: "10px",
+          }}
+        >
           <input
-            style={inputStyle}
             placeholder="Écrire un message…"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            style={{
+              flex: 1,
+              background: "rgba(12,12,30,0.95)",
+              border: "1px solid rgba(120,120,180,0.8)",
+              color: "white",
+              padding: "10px 14px",
+              borderRadius: "999px",
+              fontSize: "0.9rem",
+            }}
           />
-          <button type="button" onClick={handleSend} style={sendButtonStyle}>
+          <button
+            onClick={handleSend}
+            style={{
+              background: "#2563eb",
+              borderRadius: "999px",
+              padding: "10px 18px",
+              border: "none",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
             Envoyer
           </button>
         </div>
+
       </div>
     </div>
   );

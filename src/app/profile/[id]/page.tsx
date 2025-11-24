@@ -8,6 +8,9 @@ import EditProfileForm from "@/components/EditProfileForm";
 import Link from "next/link";
 import MateButton from "@/components/MateButton";
 
+// 🔥 AJOUT — IMPORT
+import MateSessionButton from "@/components/MateSessionButton";
+
 type Profile = {
   id: string;
   pseudo: string | null;
@@ -62,9 +65,7 @@ export default function ProfilePage() {
   const [editPlatform, setEditPlatform] = useState("psn");
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // ---------------------------------------
-  // 1. Get current user
-  // ---------------------------------------
+  // Load current user
   useEffect(() => {
     const getUser = async () => {
       const { data } = await supabase.auth.getUser();
@@ -73,9 +74,7 @@ export default function ProfilePage() {
     getUser();
   }, []);
 
-  // ---------------------------------------
-  // 2. Load profile data
-  // ---------------------------------------
+  // Load all profile-related data
   useEffect(() => {
     if (!id) return;
     loadProfile();
@@ -84,9 +83,9 @@ export default function ProfilePage() {
     loadGameAccounts();
     checkFollow();
     loadMatesCount();
-
   }, [id, myId]);
 
+  // Profile
   const loadProfile = async () => {
     const { data } = await supabase
       .from("profiles")
@@ -97,6 +96,7 @@ export default function ProfilePage() {
     setProfile(data || null);
   };
 
+  // Posts
   const loadUserPosts = async () => {
     setLoadingPosts(true);
 
@@ -110,6 +110,7 @@ export default function ProfilePage() {
     setLoadingPosts(false);
   };
 
+  // Game accounts
   const loadGameAccounts = async () => {
     setLoadingGames(true);
 
@@ -123,6 +124,7 @@ export default function ProfilePage() {
     setLoadingGames(false);
   };
 
+  // Follows count
   const loadFollowCounts = async () => {
     const [{ count: followers }, { count: following }] = await Promise.all([
       supabase
@@ -140,15 +142,15 @@ export default function ProfilePage() {
     setFollowingCount(following || 0);
   };
 
-const loadMatesCount = async () => {
-  const { count } = await supabase
-    .from("mates")
-    .select("*", { count: "exact", head: true })
-    .or(`user1.eq.${id},user2.eq.${id}`);
+  // Load Mate count
+  const loadMatesCount = async () => {
+    const { count } = await supabase
+      .from("mates")
+      .select("*", { count: "exact", head: true })
+      .or(`user1_id.eq.${id},user2_id.eq.${id}`);
 
-  setMatesCount(count || 0);
-};
-
+    setMatesCount(count || 0);
+  };
 
   const checkFollow = async () => {
     if (!myId) return;
@@ -162,6 +164,7 @@ const loadMatesCount = async () => {
     setIsFollowing(!!data && data.length > 0);
   };
 
+  // Follow toggle
   const handleToggleFollow = async () => {
     if (!myId) return;
 
@@ -174,9 +177,7 @@ const loadMatesCount = async () => {
     loadFollowCounts();
   };
 
-  // ---------------------------------------
-  // 3. Start a private conversation (DM)
-  // ---------------------------------------
+  // DM creation
   const handleStartConversation = async () => {
     if (!myId || !id) {
       alert("Erreur : utilisateur non chargé.");
@@ -208,9 +209,7 @@ const loadMatesCount = async () => {
     }
   };
 
-  // ---------------------------------------
-  // 4. Verification simple
-  // ---------------------------------------
+  // ⭐ FIX : missing function re-added
   const markAccountVerified = async (accountId: string) => {
     if (!myId) return;
 
@@ -228,9 +227,7 @@ const loadMatesCount = async () => {
     loadGameAccounts();
   };
 
-  // ---------------------------------------
-  // 5. Edit game account
-  // ---------------------------------------
+  // Game account editing
   const startEditAccount = (acc: GameAccount) => {
     setEditingAccountId(acc.id);
     setEditGame(acc.game);
@@ -284,9 +281,42 @@ const loadMatesCount = async () => {
     loadGameAccounts();
   };
 
-  // ---------------------------------------
-  // 6. Rendering
-  // ---------------------------------------
+  // 🔥 AJOUT — WRAPPER SESSION (detect mate & show button)
+  function MatesSessionWrapper({
+    myId,
+    otherId,
+  }: {
+    myId: string | null;
+    otherId: string;
+  }) {
+    const [isMate, setIsMate] = useState(false);
+
+    useEffect(() => {
+      if (!myId || !otherId) return;
+
+      const checkMate = async () => {
+        const { data } = await supabase
+          .from("mates")
+          .select("*")
+          .or(
+            `and(user1_id.eq.${myId},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${myId})`
+          )
+          .single();
+
+        setIsMate(!!data);
+      };
+
+      checkMate();
+    }, [myId, otherId]);
+
+    if (!isMate) return null;
+
+    return (
+      <div style={{ marginTop: 10 }}>
+        <MateSessionButton myId={myId!} otherId={otherId} />
+      </div>
+    );
+  }
 
   if (!profile) return <p>Profil introuvable...</p>;
 
@@ -332,34 +362,36 @@ const loadMatesCount = async () => {
           )}
 
           <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: 24, marginBottom: 4 }}>{profile.pseudo}</h1>
+            <h1 style={{ fontSize: 24, marginBottom: 4 }}>
+              {profile.pseudo}
+            </h1>
 
             <p style={{ color: "#999", marginBottom: 8 }}>
-  <Link
-    href={`/profile/${id}/followers`}
-    style={{ color: "#4aa3ff", textDecoration: "none" }}
-  >
-    {followersCount} abonnés
-  </Link>
+              <Link
+                href={`/profile/${id}/followers`}
+                style={{ color: "#4aa3ff", textDecoration: "none" }}
+              >
+                {followersCount} abonnés
+              </Link>
 
-  {" · "}
+              {" · "}
 
-  <Link
-    href={`/profile/${id}/following`}
-    style={{ color: "#4aa3ff", textDecoration: "none" }}
-  >
-    {followingCount} abonnements
-  </Link>
+              <Link
+                href={`/profile/${id}/following`}
+                style={{ color: "#4aa3ff", textDecoration: "none" }}
+              >
+                {followingCount} abonnements
+              </Link>
 
-  {" · "}
+              {" · "}
 
-  <Link
-    href={`/profile/${id}/mates`}
-    style={{ color: "#4aa3ff", textDecoration: "none" }}
-  >
-    {matesCount} mate{matesCount > 1 ? "s" : ""}
-  </Link>
-</p>
+              <Link
+                href={`/profile/${id}/mates`}
+                style={{ color: "#4aa3ff", textDecoration: "none" }}
+              >
+                {matesCount} mate{matesCount > 1 ? "s" : ""}
+              </Link>
+            </p>
 
             <p>{profile.bio || "Aucune bio."}</p>
 
@@ -394,8 +426,11 @@ const loadMatesCount = async () => {
                     Message
                   </button>
 
-                  {/* AJOUT DU BOUTON MATE */}
+                  {/* BOUTON MATE */}
                   <MateButton myId={myId} otherId={id} />
+
+                  {/* 🔥 AJOUT — BOUTON SESSION */}
+                  <MatesSessionWrapper myId={myId} otherId={id} />
                 </>
               )}
 
@@ -458,7 +493,13 @@ const loadMatesCount = async () => {
           ) : gameAccounts.length === 0 ? (
             <p>Aucun compte ajouté.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
               {gameAccounts.map((acc) => {
                 const isEditing = editingAccountId === acc.id;
 
@@ -580,14 +621,23 @@ const loadMatesCount = async () => {
                       </>
                     )}
 
+
                     {isEditing && (
                       <div style={{ marginTop: 4 }}>
-                        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            marginBottom: 8,
+                          }}
+                        >
                           <div style={{ flex: 1 }}>
                             <label style={{ fontSize: 12 }}>Jeu</label>
                             <select
                               value={editGame}
-                              onChange={(e) => setEditGame(e.target.value)}
+                              onChange={(e) =>
+                                setEditGame(e.target.value)
+                              }
                               style={{
                                 width: "100%",
                                 marginTop: 3,
@@ -598,44 +648,61 @@ const loadMatesCount = async () => {
                                 border: "1px solid #444",
                               }}
                             >
-                              <option value="apex">Apex Legends</option>
-                              <option value="fortnite">Fortnite</option>
-                              <option value="gta">GTA Online</option>
-                              <option value="valorant">Valorant</option>
-                              <option value="cod">Call of Duty</option>
+                              <option value="apex">
+                                Apex Legends
+                              </option>
+                              <option value="fortnite">
+                                Fortnite
+                              </option>
+                              <option value="gta">
+                                GTA Online
+                              </option>
+                              <option value="valorant">
+                                Valorant
+                              </option>
+                              <option value="cod">
+                                Call of Duty
+                              </option>
                             </select>
                           </div>
 
                           <div style={{ flex: 1 }}>
-                            <label style={{ fontSize: 12 }}>Plateforme</label>
+                            <label style={{ fontSize: 12 }}>
+                              Plateforme
+                            </label>
                             <select
-                              value={editPlatform}
-                              onChange={(e) => setEditPlatform(e.target.value)}
-                              style={{
-                                width: "100%",
-                                marginTop: 3,
-                                padding: 6,
-                                background: "#111",
-                                color: "#fff",
-                                borderRadius: 6,
-                                border: "1px solid #444",
-                              }}
-                            >
-                              <option value="psn">PlayStation</option>
-                              <option value="xbl">Xbox</option>
-                              <option value="steam">Steam</option>
-                              <option value="epic">Epic Games</option>
-                              <option value="origin">EA Origin</option>
-                            </select>
+  value={editPlatform}
+  onChange={(e) => setEditPlatform(e.target.value)}
+  style={{
+    width: "100%",
+    marginTop: 3,
+    padding: 6,
+    background: "#111",
+    color: "#fff",
+    borderRadius: 6,
+    border: "1px solid #444",
+  }}
+>
+  <option value="psn">PlayStation</option>
+  <option value="xbl">Xbox</option>
+  <option value="steam">Steam</option>
+  <option value="epic">Epic Games</option>
+  <option value="origin">EA Origin</option>
+</select>
+
                           </div>
                         </div>
 
                         <div>
-                          <label style={{ fontSize: 12 }}>Pseudo</label>
+                          <label style={{ fontSize: 12 }}>
+                            Pseudo
+                          </label>
                           <input
                             type="text"
                             value={editUsername}
-                            onChange={(e) => setEditUsername(e.target.value)}
+                            onChange={(e) =>
+                              setEditUsername(e.target.value)
+                            }
                             style={{
                               width: "100%",
                               marginTop: 3,
@@ -668,7 +735,9 @@ const loadMatesCount = async () => {
                               border: "none",
                             }}
                           >
-                            {savingEdit ? "Enregistrement..." : "💾 Enregistrer"}
+                            {savingEdit
+                              ? "Enregistrement..."
+                              : "💾 Enregistrer"}
                           </button>
 
                           <button
@@ -696,14 +765,22 @@ const loadMatesCount = async () => {
 
         {/* POSTS */}
         <section style={{ marginTop: 40 }}>
-          <h2 style={{ fontSize: 20, marginBottom: 10 }}>Publications</h2>
+          <h2 style={{ fontSize: 20, marginBottom: 10 }}>
+            Publications
+          </h2>
 
           {loadingPosts ? (
             <p>Chargement...</p>
           ) : userPosts.length === 0 ? (
             <p>Pas encore de post.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
               {userPosts.map((post) => (
                 <article
                   key={post.id}
@@ -725,7 +802,9 @@ const loadMatesCount = async () => {
                   >
                     <span>{post.game || "Jeu non précisé"}</span>
                     <span>
-                      {new Date(post.created_at).toLocaleString("fr-FR", {
+                      {new Date(
+                        post.created_at
+                      ).toLocaleString("fr-FR", {
                         dateStyle: "short",
                         timeStyle: "short",
                       })}
