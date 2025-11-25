@@ -330,8 +330,8 @@ export default function ProfilePage() {
         style={{
           position: "relative",
           zIndex: 10,
-          padding: "20px",
-          maxWidth: "750px",
+          padding: "24px 20px 40px",
+          maxWidth: "780px",
           margin: "0 auto",
         }}
       >
@@ -341,7 +341,14 @@ export default function ProfilePage() {
             display: "flex",
             gap: 20,
             alignItems: "center",
-            marginBottom: 20,
+            marginBottom: 28,
+            padding: 20,
+            borderRadius: 16,
+            background:
+              "linear-gradient(135deg, rgba(12,12,18,0.95), rgba(8,8,14,0.98))",
+            border: "1px solid rgba(110,110,155,0.20)",
+            boxShadow:
+              "0 0 26px rgba(70,90,255,0.20), inset 0 0 14px rgba(10,10,22,0.65)",
           }}
         >
           {profile.avatar_url ? (
@@ -350,28 +357,52 @@ export default function ProfilePage() {
               alt="avatar"
               width={120}
               height={120}
-              style={{ borderRadius: "50%", objectFit: "cover" }}
+              style={{
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "2px solid rgba(110,110,155,0.7)",
+                boxShadow: "0 0 22px rgba(90,110,255,0.65)",
+              }}
             />
           ) : (
             <div
               style={{
                 width: 120,
                 height: 120,
-                background: "#333",
                 borderRadius: "50%",
+                background:
+                  "radial-gradient(circle at 30% 0%, rgba(90,110,255,0.35), transparent 55%), #111",
+                border: "2px solid rgba(110,110,155,0.5)",
+                boxShadow: "0 0 22px rgba(90,110,255,0.4)",
               }}
             ></div>
           )}
 
           <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: 24, marginBottom: 4 }}>
+            <h1
+              style={{
+                fontSize: 24,
+                marginBottom: 4,
+                letterSpacing: "0.5px",
+                color: "rgba(255,255,255,0.96)",
+              }}
+            >
               {profile.pseudo}
             </h1>
 
-            <p style={{ color: "#999", marginBottom: 8 }}>
+            <p
+              style={{
+                color: "rgba(220,220,235,0.8)",
+                marginBottom: 8,
+                fontSize: 13,
+              }}
+            >
               <Link
                 href={`/profile/${id}/followers`}
-                style={{ color: "#4aa3ff", textDecoration: "none" }}
+                style={{
+                  color: "#4aa3ff",
+                  textDecoration: "none",
+                }}
               >
                 {followersCount} abonnés
               </Link>
@@ -380,7 +411,10 @@ export default function ProfilePage() {
 
               <Link
                 href={`/profile/${id}/following`}
-                style={{ color: "#4aa3ff", textDecoration: "none" }}
+                style={{
+                  color: "#4aa3ff",
+                  textDecoration: "none",
+                }}
               >
                 {followingCount} abonnements
               </Link>
@@ -389,26 +423,47 @@ export default function ProfilePage() {
 
               <Link
                 href={`/profile/${id}/mates`}
-                style={{ color: "#4aa3ff", textDecoration: "none" }}
+                style={{
+                  color: "#4aa3ff",
+                  textDecoration: "none",
+                }}
               >
                 {matesCount} mate{matesCount > 1 ? "s" : ""}
               </Link>
             </p>
 
-            <p>{profile.bio || "Aucune bio."}</p>
+            <p
+              style={{
+                marginTop: 4,
+                fontSize: 14,
+                color: "rgba(235,235,245,0.82)",
+              }}
+            >
+              {profile.bio || "Aucune bio."}
+            </p>
 
-            <div style={{ marginTop: 15, display: "flex", gap: 10 }}>
+            <div
+              style={{
+                marginTop: 18,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
               {myId && myId !== id && (
                 <>
                   <button
                     onClick={handleToggleFollow}
                     style={{
-                      padding: "8px 16px",
-                      background: isFollowing ? "red" : "green",
+                      padding: "8px 18px",
+                      background: isFollowing
+                        ? "rgba(176,0,32,0.9)"
+                        : "rgba(70,100,255,0.9)",
                       color: "white",
-                      borderRadius: 6,
+                      borderRadius: 999,
                       cursor: "pointer",
-                      border: "none",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      fontSize: 13,
                     }}
                   >
                     {isFollowing ? "Se désabonner" : "S'abonner"}
@@ -417,12 +472,13 @@ export default function ProfilePage() {
                   <button
                     onClick={handleStartConversation}
                     style={{
-                      padding: "8px 16px",
-                      background: "#0070f3",
+                      padding: "8px 18px",
+                      background: "rgba(0,112,243,0.9)",
                       color: "white",
-                      borderRadius: 6,
+                      borderRadius: 999,
                       cursor: "pointer",
-                      border: "none",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      fontSize: 13,
                     }}
                   >
                     Message
@@ -440,12 +496,13 @@ export default function ProfilePage() {
                 <button
                   onClick={() => setShowEdit(!showEdit)}
                   style={{
-                    padding: "8px 16px",
-                    background: "#0070f3",
+                    padding: "8px 18px",
+                    background: "rgba(0,112,243,0.9)",
                     color: "white",
-                    borderRadius: 6,
+                    borderRadius: 999,
                     cursor: "pointer",
-                    border: "none",
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    fontSize: 13,
                   }}
                 >
                   {showEdit ? "Fermer" : "Modifier mon profil"}
@@ -471,7 +528,15 @@ export default function ProfilePage() {
 
         {/* GAME ACCOUNTS */}
         <section style={{ marginTop: 40 }}>
-          <h2 style={{ fontSize: 20, marginBottom: 12 }}>Comptes de jeu</h2>
+          <h2
+            style={{
+              fontSize: 20,
+              marginBottom: 12,
+              letterSpacing: "0.4px",
+            }}
+          >
+            Comptes de jeu
+          </h2>
 
           {myId === id && (
             <Link
@@ -480,10 +545,12 @@ export default function ProfilePage() {
                 display: "inline-block",
                 marginBottom: 14,
                 padding: "8px 14px",
-                background: "#0070f3",
+                background: "rgba(0,112,243,0.9)",
                 color: "white",
-                borderRadius: 6,
+                borderRadius: 999,
                 textDecoration: "none",
+                border: "1px solid rgba(255,255,255,0.18)",
+                fontSize: 13,
               }}
             >
               ➕ Ajouter un compte de jeu
@@ -509,12 +576,25 @@ export default function ProfilePage() {
                   <div
                     key={acc.id}
                     style={{
-                      padding: 14,
+                      padding: 16,
                       background:
-                        "linear-gradient(135deg, rgba(30,30,30,1), rgba(10,10,10,1))",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      boxShadow: "0 0 12px rgba(0,0,0,0.5)",
+                        "linear-gradient(135deg, rgba(14,14,22,0.96), rgba(6,6,12,0.98))",
+                      borderRadius: 14,
+                      border: "1px solid rgba(110,110,155,0.2)",
+                      boxShadow:
+                        "0 0 20px rgba(70,90,255,0.16), inset 0 0 10px rgba(10,10,22,0.5)",
+                      transition: "all 0.22s cubic-bezier(.25,.8,.25,1)",
+                      position: "relative",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                      e.currentTarget.style.boxShadow =
+                        "0 0 24px rgba(90,110,255,0.2), inset 0 0 12px rgba(10,10,22,0.6)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0px)";
+                      e.currentTarget.style.boxShadow =
+                        "0 0 20px rgba(70,90,255,0.16), inset 0 0 10px rgba(10,10,22,0.5)";
                     }}
                   >
                     {!isEditing && (
@@ -524,14 +604,18 @@ export default function ProfilePage() {
                             display: "flex",
                             justifyContent: "space-between",
                             marginBottom: 6,
+                            alignItems: "center",
                           }}
                         >
                           <span
                             style={{
                               fontSize: 14,
-                              padding: "2px 8px",
+                              padding: "3px 10px",
                               borderRadius: 999,
-                              border: "1px solid #555",
+                              border:
+                                "1px solid rgba(150,150,200,0.5)",
+                              background:
+                                "rgba(30,30,60,0.85)",
                             }}
                           >
                             🎮 {acc.game}
@@ -540,17 +624,18 @@ export default function ProfilePage() {
                           <span
                             style={{
                               fontSize: 12,
-                              padding: "2px 8px",
+                              padding: "3px 10px",
                               borderRadius: 999,
-                              background: "#111",
-                              border: "1px solid #444",
+                              background: "rgba(10,10,25,0.9)",
+                              border:
+                                "1px solid rgba(120,120,180,0.6)",
                             }}
                           >
                             {acc.platform || "Plateforme"}
                           </span>
                         </div>
 
-                        <p style={{ marginTop: 4, fontSize: 15 }}>
+                        <p style={{ marginTop: 6, fontSize: 15 }}>
                           <b>Pseudo : </b> {acc.username}
                         </p>
 
@@ -569,7 +654,7 @@ export default function ProfilePage() {
                         {myId === id && (
                           <div
                             style={{
-                              marginTop: 8,
+                              marginTop: 10,
                               display: "flex",
                               gap: 8,
                               flexWrap: "wrap",
@@ -581,9 +666,11 @@ export default function ProfilePage() {
                                 padding: "6px 10px",
                                 fontSize: 12,
                                 borderRadius: 6,
-                                border: "1px solid #555",
-                                background: "#111",
+                                border:
+                                  "1px solid rgba(150,150,200,0.6)",
+                                background: "rgba(10,10,20,0.9)",
                                 color: "#fff",
+                                cursor: "pointer",
                               }}
                             >
                               ✏ Modifier
@@ -599,6 +686,7 @@ export default function ProfilePage() {
                                   background: "#198754",
                                   color: "#fff",
                                   border: "none",
+                                  cursor: "pointer",
                                 }}
                               >
                                 ✔ Vérifier
@@ -614,6 +702,7 @@ export default function ProfilePage() {
                                 background: "#b00020",
                                 color: "#fff",
                                 border: "none",
+                                cursor: "pointer",
                               }}
                             >
                               🗑 Supprimer
@@ -622,7 +711,6 @@ export default function ProfilePage() {
                         )}
                       </>
                     )}
-
 
                     {isEditing && (
                       <div style={{ marginTop: 4 }}>
@@ -673,25 +761,26 @@ export default function ProfilePage() {
                               Plateforme
                             </label>
                             <select
-  value={editPlatform}
-  onChange={(e) => setEditPlatform(e.target.value)}
-  style={{
-    width: "100%",
-    marginTop: 3,
-    padding: 6,
-    background: "#111",
-    color: "#fff",
-    borderRadius: 6,
-    border: "1px solid #444",
-  }}
->
-  <option value="psn">PlayStation</option>
-  <option value="xbl">Xbox</option>
-  <option value="steam">Steam</option>
-  <option value="epic">Epic Games</option>
-  <option value="origin">EA Origin</option>
-</select>
-
+                              value={editPlatform}
+                              onChange={(e) =>
+                                setEditPlatform(e.target.value)
+                              }
+                              style={{
+                                width: "100%",
+                                marginTop: 3,
+                                padding: 6,
+                                background: "#111",
+                                color: "#fff",
+                                borderRadius: 6,
+                                border: "1px solid #444",
+                              }}
+                            >
+                              <option value="psn">PlayStation</option>
+                              <option value="xbl">Xbox</option>
+                              <option value="steam">Steam</option>
+                              <option value="epic">Epic Games</option>
+                              <option value="origin">EA Origin</option>
+                            </select>
                           </div>
                         </div>
 
@@ -735,6 +824,7 @@ export default function ProfilePage() {
                               background: "#0070f3",
                               color: "#fff",
                               border: "none",
+                              cursor: "pointer",
                             }}
                           >
                             {savingEdit
@@ -751,6 +841,7 @@ export default function ProfilePage() {
                               background: "#111",
                               color: "#fff",
                               border: "1px solid #555",
+                              cursor: "pointer",
                             }}
                           >
                             Annuler
@@ -767,13 +858,27 @@ export default function ProfilePage() {
 
         {/* PERFORMANCES */}
         <section style={{ marginTop: 40 }}>
-          <h2 style={{ fontSize: 20, marginBottom: 12 }}>Performances vérifiables</h2>
-          {myId === id && (<AddPerformanceForm userId={id} />)}
+          <h2
+            style={{
+              fontSize: 20,
+              marginBottom: 12,
+              letterSpacing: "0.4px",
+            }}
+          >
+            Performances vérifiables
+          </h2>
           <ProfilePerformances userId={id} myId={myId} />
         </section>
+
         {/* POSTS */}
         <section style={{ marginTop: 40 }}>
-          <h2 style={{ fontSize: 20, marginBottom: 10 }}>
+          <h2
+            style={{
+              fontSize: 20,
+              marginBottom: 10,
+              letterSpacing: "0.4px",
+            }}
+          >
             Publications
           </h2>
 
@@ -786,40 +891,60 @@ export default function ProfilePage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: 12,
+                gap: 14,
               }}
             >
               {userPosts.map((post) => (
                 <article
                   key={post.id}
                   style={{
-                    padding: 12,
-                    borderRadius: 8,
-                    border: "1px solid #333",
-                    background: "#111",
+                    padding: 16,
+                    borderRadius: 14,
+                    border: "1px solid rgba(110,110,155,0.20)",
+                    background:
+                      "linear-gradient(135deg, rgba(14,14,22,0.96), rgba(6,6,12,0.98))",
+                    boxShadow:
+                      "0 0 20px rgba(70,90,255,0.16), inset 0 0 8px rgba(10,10,22,0.45)",
+                    transition: "all 0.22s cubic-bezier(.25,.8,.25,1)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow =
+                      "0 0 24px rgba(90,110,255,0.2), inset 0 0 10px rgba(10,10,22,0.6)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0px)";
+                    e.currentTarget.style.boxShadow =
+                      "0 0 20px rgba(70,90,255,0.16), inset 0 0 8px rgba(10,10,22,0.45)";
                   }}
                 >
                   <div
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      marginBottom: 4,
+                      marginBottom: 6,
                       fontSize: 12,
-                      color: "#aaa",
+                      color: "rgba(220,220,235,0.72)",
                     }}
                   >
                     <span>{post.game || "Jeu non précisé"}</span>
                     <span>
-                      {new Date(
-                        post.created_at
-                      ).toLocaleString("fr-FR", {
+                      {new Date(post.created_at).toLocaleString("fr-FR", {
                         dateStyle: "short",
                         timeStyle: "short",
                       })}
                     </span>
                   </div>
 
-                  <p style={{ marginBottom: 6 }}>{post.content}</p>
+                  <p
+                    style={{
+                      marginBottom: 6,
+                      fontSize: 14,
+                      color: "rgba(240,240,250,0.92)",
+                    }}
+                  >
+                    {post.content}
+                  </p>
 
                   {post.media_type === "image" && (
                     <img
@@ -827,7 +952,7 @@ export default function ProfilePage() {
                       alt="post media"
                       style={{
                         width: "100%",
-                        borderRadius: 10,
+                        borderRadius: 12,
                         marginTop: 10,
                         marginBottom: 10,
                       }}
@@ -840,14 +965,19 @@ export default function ProfilePage() {
                       controls
                       style={{
                         width: "100%",
-                        borderRadius: 10,
+                        borderRadius: 12,
                         marginTop: 10,
                         marginBottom: 10,
                       }}
                     ></video>
                   )}
 
-                  <p style={{ fontSize: 12, color: "#777" }}>
+                  <p
+                    style={{
+                      fontSize: 12,
+                      color: "rgba(200,200,215,0.75)",
+                    }}
+                  >
                     👍 {post.likes ?? 0} like(s)
                   </p>
                 </article>

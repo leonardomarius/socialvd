@@ -27,6 +27,9 @@ export default function ProfilePerformances({
   const [editValue, setEditValue] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // -----------------------------------------
+  // Load the first 4 performances
+  // -----------------------------------------
   useEffect(() => {
     fetchPerf();
   }, [userId]);
@@ -36,13 +39,19 @@ export default function ProfilePerformances({
       .from("game_performances")
       .select("*")
       .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(4);
 
-    if (data) setPerformances(data as Performance[]);
+    setPerformances((data || []) as Performance[]);
     setLoading(false);
   }
 
+  // -----------------------------------------
+  // Delete performance (only if own profile)
+  // -----------------------------------------
   async function deletePerformance(id: string) {
+    if (!myId || myId !== userId) return;
+
     const confirmDelete = window.confirm("Supprimer cette performance ?");
     if (!confirmDelete) return;
 
@@ -55,6 +64,9 @@ export default function ProfilePerformances({
     fetchPerf();
   }
 
+  // -----------------------------------------
+  // Edit
+  // -----------------------------------------
   function startEdit(p: Performance) {
     setEditingId(p.id);
     setEditGameName(p.game_name);
@@ -68,52 +80,49 @@ export default function ProfilePerformances({
   }
 
   async function saveEdit() {
-    if (!editingId || !myId) return;
+    if (!editingId || !myId || myId !== userId) return;
+
     setSavingEdit(true);
 
-    const { error } = await supabase
+    await supabase
       .from("game_performances")
       .update({
         game_name: editGameName,
         performance_title: editTitle,
-        performance_value: editValue || null,
+        performance_value: editValue,
       })
       .eq("id", editingId)
       .eq("user_id", myId);
 
     setSavingEdit(false);
-
-    if (error) {
-      alert("Erreur lors de la modification : " + error.message);
-      return;
-    }
-
     setEditingId(null);
     fetchPerf();
   }
 
-  // 🧩 FIX : Animation CSS injectée côté client uniquement
+  // -----------------------------------------
+  // Animation fade
+  // -----------------------------------------
   useEffect(() => {
     if (typeof document !== "undefined") {
-      const styleTag = document.createElement("style");
-      styleTag.innerHTML = `
-        @keyframes fadeIn {
+      const st = document.createElement("style");
+      st.innerHTML = `
+        @keyframes fadeInPerf {
           from { opacity: 0; transform: translateY(6px); }
           to { opacity: 1; transform: translateY(0); }
         }
       `;
-      document.head.appendChild(styleTag);
-
+      document.head.appendChild(st);
       return () => {
         try {
-          document.head.removeChild(styleTag);
+          document.head.removeChild(st);
         } catch {}
       };
     }
   }, []);
 
   if (loading) return <p>Chargement...</p>;
-  if (performances.length === 0) return <p>Aucune performance ajoutée pour le moment.</p>;
+  if (performances.length === 0)
+    return <p>Aucune performance ajoutée pour le moment.</p>;
 
   return (
     <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 18 }}>
@@ -124,99 +133,31 @@ export default function ProfilePerformances({
           <div
             key={p.id}
             style={{
-              padding: "22px",
-              borderRadius: "16px",
+              padding: "20px",
+              borderRadius: "14px",
               background:
-                "linear-gradient(135deg, rgba(12,12,18,0.92), rgba(8,8,12,0.97))",
-              border: "1px solid rgba(110,110,155,0.12)",
-              boxShadow:
-                "0 0 22px rgba(70,90,255,0.10), inset 0 0 12px rgba(20,20,35,0.35)",
-              transition: "all 0.25s cubic-bezier(.25,.8,.25,1)",
-              position: "relative",
-              animation: "fadeIn 0.35s ease",
-              overflow: "hidden",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "translateY(-3px)";
-              e.currentTarget.style.boxShadow =
-                "0 0 26px rgba(90,110,255,0.18), inset 0 0 16px rgba(20,20,35,0.45)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "translateY(0px)";
-              e.currentTarget.style.boxShadow =
-                "0 0 22px rgba(70,90,255,0.10), inset 0 0 12px rgba(20,20,35,0.35)";
+                "linear-gradient(135deg, rgba(12,12,20,0.90), rgba(8,8,12,0.97))",
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "0 0 18px rgba(0,0,0,0.45)",
+              transition: "all 0.25s",
+              animation: "fadeInPerf 0.35s ease",
             }}
           >
-            {/* Boutons d'action */}
-            {myId === userId && !isEditing && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: 12,
-                  right: 12,
-                  display: "flex",
-                  gap: 8,
-                }}
-              >
-                <button
-                  onClick={() => startEdit(p)}
-                  style={{
-                    background: "rgba(255,255,255,0.05)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    padding: "4px 10px",
-                    borderRadius: 8,
-                    color: "white",
-                    cursor: "pointer",
-                    fontSize: 13,
-                    backdropFilter: "blur(3px)",
-                  }}
-                >
-                  ✏
-                </button>
-
-                <button
-                  onClick={() => deletePerformance(p.id)}
-                  style={{
-                    background: "rgba(176,0,32,0.85)",
-                    border: "1px solid rgba(255,255,255,0.18)",
-                    padding: "4px 10px",
-                    borderRadius: 8,
-                    color: "white",
-                    cursor: "pointer",
-                    fontSize: 13,
-                    backdropFilter: "blur(3px)",
-                  }}
-                >
-                  🗑
-                </button>
-              </div>
-            )}
-
-            {/* MODE LECTURE */}
+            {/* --- MODE LECTURE --- */}
             {!isEditing && (
               <>
                 <strong
                   style={{
                     fontSize: 18,
-                    marginBottom: 8,
+                    marginBottom: 6,
                     display: "block",
-                    letterSpacing: "0.5px",
-                    color: "rgba(255,255,255,0.92)",
+                    color: "rgba(255,255,255,0.95)",
                   }}
                 >
                   {p.game_name}
                 </strong>
 
-                <div
-                  style={{
-                    height: "1px",
-                    width: "100%",
-                    background: "rgba(255,255,255,0.05)",
-                    margin: "12px 0",
-                  }}
-                />
-
-                <p style={{ fontSize: 15, marginBottom: 6, color: "rgba(255,255,255,0.85)" }}>
+                <p style={{ fontSize: 15, color: "rgba(255,255,255,0.85)" }}>
                   {p.performance_title}
                 </p>
 
@@ -225,10 +166,22 @@ export default function ProfilePerformances({
                     {p.performance_value}
                   </p>
                 )}
+
+                {/* Action buttons */}
+                {myId === userId && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    <button onClick={() => startEdit(p)} style={btnEdit}>
+                      ✏
+                    </button>
+                    <button onClick={() => deletePerformance(p.id)} style={btnDelete}>
+                      🗑
+                    </button>
+                  </div>
+                )}
               </>
             )}
 
-            {/* MODE ÉDITION */}
+            {/* --- MODE ÉDITION --- */}
             {isEditing && (
               <div style={{ marginTop: 8 }}>
                 <label style={{ fontSize: 12 }}>Jeu</label>
@@ -236,7 +189,7 @@ export default function ProfilePerformances({
                   type="text"
                   value={editGameName}
                   onChange={(e) => setEditGameName(e.target.value)}
-                  style={inputStyle}
+                  style={inputField}
                 />
 
                 <label style={{ fontSize: 12 }}>Performance</label>
@@ -244,7 +197,7 @@ export default function ProfilePerformances({
                   type="text"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  style={inputStyle}
+                  style={inputField}
                 />
 
                 <label style={{ fontSize: 12 }}>Détail (optionnel)</label>
@@ -252,38 +205,15 @@ export default function ProfilePerformances({
                   type="text"
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
-                  style={inputStyle}
+                  style={inputField}
                 />
 
-                <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-                  <button
-                    onClick={saveEdit}
-                    disabled={savingEdit}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 8,
-                      border: "none",
-                      background: "rgba(70,100,255,0.85)",
-                      color: "white",
-                      cursor: "pointer",
-                      fontSize: 14,
-                    }}
-                  >
-                    {savingEdit ? "Enregistrement..." : "💾 Enregistrer"}
+                <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+                  <button onClick={saveEdit} disabled={savingEdit} style={btnSave}>
+                    {savingEdit ? "…" : "✔ Enregistrer"}
                   </button>
 
-                  <button
-                    onClick={cancelEdit}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 8,
-                      border: "1px solid rgba(255,255,255,0.18)",
-                      background: "rgba(0,0,0,0.4)",
-                      color: "white",
-                      cursor: "pointer",
-                      fontSize: 14,
-                    }}
-                  >
+                  <button onClick={cancelEdit} style={btnCancel}>
                     Annuler
                   </button>
                 </div>
@@ -296,13 +226,53 @@ export default function ProfilePerformances({
   );
 }
 
-const inputStyle: React.CSSProperties = {
+/* -----------------------------------------
+   STYLES
+------------------------------------------ */
+
+const inputField: React.CSSProperties = {
   width: "100%",
   marginTop: 4,
-  padding: 10,
+  padding: "10px",
   borderRadius: 10,
-  border: "1px solid rgba(110,110,155,0.20)",
-  background: "rgba(10,10,18,0.6)",
+  background: "rgba(35,40,60,0.55)",
+  border: "1px solid rgba(255,255,255,0.12)",
   color: "white",
   marginBottom: 12,
+};
+
+const btnEdit: React.CSSProperties = {
+  padding: "6px 10px",
+  background: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(255,255,255,0.15)",
+  borderRadius: 8,
+  cursor: "pointer",
+  color: "white",
+};
+
+const btnDelete: React.CSSProperties = {
+  padding: "6px 10px",
+  background: "rgba(160,0,30,0.85)",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.15)",
+  cursor: "pointer",
+  color: "white",
+};
+
+const btnSave: React.CSSProperties = {
+  padding: "8px 14px",
+  background: "rgba(70,100,255,0.85)",
+  borderRadius: 8,
+  border: "none",
+  cursor: "pointer",
+  color: "white",
+};
+
+const btnCancel: React.CSSProperties = {
+  padding: "8px 14px",
+  background: "rgba(90,90,90,0.25)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 8,
+  cursor: "pointer",
+  color: "white",
 };

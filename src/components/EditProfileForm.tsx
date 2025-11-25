@@ -4,14 +4,28 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image";
 
+/* ---------------------------------------------
+   Types
+--------------------------------------------- */
 type EditProfileFormProps = {
   userId: string;
   currentPseudo: string | null;
   currentBio: string | null;
   currentAvatar: string | null;
-  onUpdated: () => void; // callback pour recharger la page
+  onUpdated: () => void;
 };
 
+type Performance = {
+  id: string;
+  user_id: string;
+  game_name: string;
+  performance_title: string;
+  performance_value: string | null;
+};
+
+/* ---------------------------------------------
+   Component
+--------------------------------------------- */
 export default function EditProfileForm({
   userId,
   currentPseudo,
@@ -19,15 +33,47 @@ export default function EditProfileForm({
   currentAvatar,
   onUpdated,
 }: EditProfileFormProps) {
-
   const [pseudo, setPseudo] = useState(currentPseudo || "");
   const [bio, setBio] = useState(currentBio || "");
   const [avatarUrl, setAvatarUrl] = useState(currentAvatar || null);
   const [uploading, setUploading] = useState(false);
 
-  // ---------------------------------------------
-  // 🔥 Upload avatar dans Supabase Storage
-  // ---------------------------------------------
+  // performances
+  const [performances, setPerformances] = useState<Performance[]>([]);
+  const [loadingPerf, setLoadingPerf] = useState(true);
+
+  const [gameName, setGameName] = useState("");
+  const [title, setTitle] = useState("");
+  const [value, setValue] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editGameName, setEditGameName] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editValue, setEditValue] = useState("");
+
+  /* ---------------------------------------------
+     Load performances
+  --------------------------------------------- */
+  async function loadPerformances() {
+    setLoadingPerf(true);
+    const { data } = await supabase
+      .from("game_performances")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    setPerformances((data || []) as Performance[]);
+    setLoadingPerf(false);
+  }
+
+  useEffect(() => {
+    loadPerformances();
+  }, []);
+
+  /* ---------------------------------------------
+     Upload avatar
+  --------------------------------------------- */
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       const file = e.target.files?.[0];
@@ -39,20 +85,17 @@ export default function EditProfileForm({
       const fileName = `${userId}.${fileExt}`;
       const filePath = `avatars/${fileName}`;
 
-      // Upload dans le bucket "avatars"
       const { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
-      // Récupérer l'URL publique
       const { data } = supabase.storage
         .from("avatars")
         .getPublicUrl(filePath);
 
       setAvatarUrl(data.publicUrl);
-
     } catch (error) {
       console.error("Erreur upload avatar:", error);
     } finally {
@@ -60,9 +103,9 @@ export default function EditProfileForm({
     }
   };
 
-  // ---------------------------------------------
-  // 🔥 Sauvegarde pseudo + bio + avatar_url
-  // ---------------------------------------------
+  /* ---------------------------------------------
+     Save profile
+  --------------------------------------------- */
   const handleSave = async () => {
     const { error } = await supabase
       .from("profiles")
@@ -75,24 +118,102 @@ export default function EditProfileForm({
 
     if (!error) {
       alert("Profil mis à jour !");
-      onUpdated(); // on recharge le parent (page profil)
-    } else {
-      console.error(error);
+      onUpdated();
     }
   };
 
+  /* ---------------------------------------------
+     Add performance (LIMIT 4)
+  --------------------------------------------- */
+  const handleAddPerformance = async (e: any) => {
+    e.preventDefault();
+    setAdding(true);
+
+    // 🚫 LIMITATION À 4 PERFORMANCES
+    if (performances.length >= 4) {
+      alert("Vous ne pouvez poster que 4 performances.");
+      setAdding(false);
+      return;
+    }
+
+    const { error } = await supabase.from("game_performances").insert({
+      user_id: userId,
+      game_name: gameName,
+      performance_title: title,
+      performance_value: value,
+    });
+
+    setAdding(false);
+
+    if (!error) {
+      setGameName("");
+      setTitle("");
+      setValue("");
+      loadPerformances();
+    }
+  };
+
+  /* ---------------------------------------------
+     Delete performance
+  --------------------------------------------- */
+  const deletePerformance = async (id: string) => {
+    const ok = confirm("Supprimer cette performance ?");
+    if (!ok) return;
+
+    await supabase
+      .from("game_performances")
+      .delete()
+      .eq("id", id);
+
+    loadPerformances();
+  };
+
+  /* ---------------------------------------------
+     Edit performance
+  --------------------------------------------- */
+  const startEdit = (p: Performance) => {
+    setEditingId(p.id);
+    setEditGameName(p.game_name);
+    setEditTitle(p.performance_title);
+    setEditValue(p.performance_value || "");
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+
+    const { error } = await supabase
+      .from("game_performances")
+      .update({
+        game_name: editGameName,
+        performance_title: editTitle,
+        performance_value: editValue,
+      })
+      .eq("id", editingId);
+
+    if (!error) {
+      setEditingId(null);
+      loadPerformances();
+    }
+  };
+
+  /* ---------------------------------------------
+     UI
+  --------------------------------------------- */
   return (
     <div
       style={{
         marginTop: "20px",
-        padding: "20px",
-        border: "1px solid #ccc",
-        borderRadius: 8,
+        padding: "24px",
+        borderRadius: "16px",
+        background:
+          "linear-gradient(135deg, rgba(12,12,22,0.85), rgba(8,8,14,0.95))",
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 0 22px rgba(0,0,0,0.4)",
       }}
     >
-      <h2>Modifier mon profil</h2>
+      <h2 style={{ marginBottom: 16 }}>Modifier mon profil</h2>
 
-      {/* Avatar Preview */}
+      {/* Avatar */}
       {avatarUrl ? (
         <Image
           src={avatarUrl}
@@ -116,50 +237,216 @@ export default function EditProfileForm({
       <input type="file" onChange={handleAvatarUpload} />
       {uploading && <p>Upload en cours...</p>}
 
-      <div style={{ marginTop: 15 }}>
-        <label>Pseudo :</label>
+      {/* Pseudo */}
+      <div style={{ marginTop: 20 }}>
+        <label>Pseudo</label>
         <input
           type="text"
           value={pseudo}
           onChange={(e) => setPseudo(e.target.value)}
-          style={{
-            display: "block",
-            width: "100%",
-            marginTop: 5,
-            padding: 8,
-          }}
+          style={inputField}
         />
       </div>
 
-      <div style={{ marginTop: 15 }}>
-        <label>Bio :</label>
+      {/* Bio */}
+      <div style={{ marginTop: 20 }}>
+        <label>Bio</label>
         <textarea
           value={bio}
           onChange={(e) => setBio(e.target.value)}
-          rows={3}
-          style={{
-            display: "block",
-            width: "100%",
-            marginTop: 5,
-            padding: 8,
-          }}
+          style={{ ...inputField, height: 80 }}
         />
       </div>
 
-      <button
-        onClick={handleSave}
-        style={{
-          marginTop: 20,
-          padding: "10px 20px",
-          background: "blue",
-          color: "white",
-          borderRadius: 6,
-          border: "none",
-          cursor: "pointer",
-        }}
-      >
+      <button onClick={handleSave} style={saveBtn}>
         Enregistrer
       </button>
+
+      {/* ---------------------------------------------
+          Performances Section
+      --------------------------------------------- */}
+      <h2 style={{ marginTop: 40 }}>Performances vérifiables</h2>
+
+      {/* Add performance */}
+      <form onSubmit={handleAddPerformance} style={addBox}>
+        <label>Jeu</label>
+        <input
+          type="text"
+          value={gameName}
+          onChange={(e) => setGameName(e.target.value)}
+          style={inputField}
+          required
+        />
+
+        <label>Performance</label>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          style={inputField}
+          required
+        />
+
+        <label>Détail (optionnel)</label>
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          style={inputField}
+        />
+
+        <button type="submit" style={saveBtn} disabled={adding}>
+          {adding ? "Ajout..." : "Ajouter"}
+        </button>
+      </form>
+
+      {/* List of performances */}
+      <div style={{ marginTop: 30, display: "flex", flexDirection: "column", gap: 12 }}>
+        {loadingPerf ? (
+          <p>Chargement…</p>
+        ) : performances.length === 0 ? (
+          <p>Aucune performance enregistrée.</p>
+        ) : (
+          performances.map((p) => {
+            const isEditing = editingId === p.id;
+
+            return (
+              <div key={p.id} style={perfCard}>
+                {!isEditing && (
+                  <>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <strong style={{ color: "white", fontSize: 16 }}>
+                        {p.game_name}
+                      </strong>
+
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button style={btnIcon} onClick={() => startEdit(p)}>
+                          ✏
+                        </button>
+                        <button style={btnDelete} onClick={() => deletePerformance(p.id)}>
+                          🗑
+                        </button>
+                      </div>
+                    </div>
+
+                    <p style={{ color: "#ccc" }}>{p.performance_title}</p>
+                    {p.performance_value && (
+                      <p style={{ color: "#888", fontSize: 13 }}>{p.performance_value}</p>
+                    )}
+                  </>
+                )}
+
+                {isEditing && (
+                  <div>
+                    <label>Jeu</label>
+                    <input
+                      value={editGameName}
+                      onChange={(e) => setEditGameName(e.target.value)}
+                      style={inputField}
+                    />
+
+                    <label>Performance</label>
+                    <input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      style={inputField}
+                    />
+
+                    <label>Détail</label>
+                    <input
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      style={inputField}
+                    />
+
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <button onClick={saveEdit} style={saveBtn}>
+                        Enregistrer
+                      </button>
+                      <button onClick={() => setEditingId(null)} style={cancelBtn}>
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
+
+/* ---------------------------------------------
+   Styles
+--------------------------------------------- */
+
+const inputField: React.CSSProperties = {
+  width: "100%",
+  marginTop: 6,
+  padding: "10px 12px",
+  borderRadius: 10,
+  background: "hsla(240, 1%, 29%, 0.40)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  color: "white",
+};
+
+const saveBtn: React.CSSProperties = {
+  marginTop: 16,
+  padding: "10px 18px",
+  background: "rgba(80,120,255,0.85)",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontSize: 15,
+};
+
+const cancelBtn: React.CSSProperties = {
+  padding: "10px 18px",
+  background: "rgba(90,90,90,0.25)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  color: "white",
+  borderRadius: 10,
+  cursor: "pointer",
+};
+
+const addBox: React.CSSProperties = {
+  padding: 20,
+  marginTop: 10,
+  background: "rgba(0,0,0,0.35)",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.08)",
+  boxShadow: "0 0 16px rgba(0,0,0,0.3)",
+};
+
+const perfCard: React.CSSProperties = {
+  padding: 16,
+  borderRadius: 12,
+  background: "linear-gradient(135deg, rgba(10,10,18,0.9), rgba(6,6,10,0.92))",
+  border: "1px solid rgba(255,255,255,0.07)",
+  boxShadow: "0 0 14px rgba(0,0,0,0.4)",
+};
+
+const btnIcon: React.CSSProperties = {
+  padding: "4px 10px",
+  background: "rgba(255,255,255,0.06)",
+  borderRadius: 6,
+  border: "1px solid rgba(255,255,255,0.15)",
+  cursor: "pointer",
+  color: "white",
+};
+
+const btnDelete: React.CSSProperties = {
+  padding: "4px 10px",
+  background: "rgba(160,0,30,0.85)",
+  borderRadius: 6,
+  border: "1px solid rgba(255,255,255,0.15)",
+  cursor: "pointer",
+  color: "white",
+};
