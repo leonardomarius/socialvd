@@ -769,7 +769,7 @@ export default function ProfilePage() {
         <section style={{ marginTop: 40 }}>
           <h2 style={{ fontSize: 20, marginBottom: 12 }}>Performances vérifiables</h2>
           {myId === id && (<AddPerformanceForm userId={id} />)}
-          <ProfilePerformances userId={id} />
+          <ProfilePerformances userId={id} myId={myId} />
         </section>
         {/* POSTS */}
         <section style={{ marginTop: 40 }}>
