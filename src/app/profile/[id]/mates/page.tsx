@@ -22,6 +22,7 @@ type Request = {
   id: string;
   sender_id: string;
   receiver_id: string;
+  status: string;
 };
 
 export default function MatesPage() {
@@ -50,8 +51,10 @@ export default function MatesPage() {
     loadRequests();
   }, [myId]);
 
-  // Load mates
+  // Load mates depuis la table `mates`
   const loadMates = async () => {
+    if (!myId) return;
+
     const { data } = await supabase
       .from("mates")
       .select("*")
@@ -76,8 +79,10 @@ export default function MatesPage() {
     setMates(enriched);
   };
 
-  // Load received requests
+  // Load demandes reçues (pending uniquement)
   const loadRequests = async () => {
+    if (!myId) return;
+
     const { data } = await supabase
       .from("mate_requests")
       .select("*")
@@ -101,45 +106,109 @@ export default function MatesPage() {
     setReceivedRequests(enriched);
   };
 
+  // Accepter une demande
   const acceptRequest = async (reqId: string, senderId: string) => {
-    await supabase.from("mate_requests").delete().eq("id", reqId);
+    if (!myId) return;
+
+    await supabase
+      .from("mate_requests")
+      .update({ status: "accepted" })
+      .eq("id", reqId)
+      .eq("receiver_id", myId);
+
     await supabase.from("mates").insert({
-      user1_id: myId!,
-      user2_id: senderId,
+      user1_id: senderId,
+      user2_id: myId,
     });
-    loadMates();
-    loadRequests();
+
+    await loadMates();
+    await loadRequests();
   };
 
+  // Refuser une demande
   const refuseRequest = async (reqId: string) => {
-    await supabase.from("mate_requests").delete().eq("id", reqId);
-    loadRequests();
+    if (!myId) return;
+
+    await supabase
+      .from("mate_requests")
+      .update({ status: "cancelled" })
+      .eq("id", reqId)
+      .eq("receiver_id", myId);
+
+    await loadRequests();
+  };
+
+  // 🔥 RETIRER UN MATE
+  const removeMate = async (mateId: string, otherId: string) => {
+    if (!myId) return;
+
+    const confirmDelete = window.confirm(
+      `Retirer ${otherId} de tes mates ?`
+    );
+    if (!confirmDelete) return;
+
+    await supabase
+      .from("mates")
+      .delete()
+      .eq("id", mateId)
+      .or(
+        `and(user1_id.eq.${myId},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${myId})`
+      );
+
+    await loadMates();
   };
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto", padding: 20 }}>
       <h1 style={{ fontSize: 26, marginBottom: 20 }}>Mates</h1>
 
-      {/* Requests */}
+      {/* Demandes reçues */}
       {receivedRequests.length > 0 && (
         <div style={{ marginBottom: 40 }}>
           <h2 style={{ marginBottom: 12 }}>Demandes reçues</h2>
 
           {receivedRequests.map((req) => (
-            <div key={req.id} style={{ padding: 12, background: "#111", borderRadius: 6, marginBottom: 12 }}>
-              <p><b>{req.sender.pseudo}</b> veut devenir mate</p>
+            <div
+              key={req.id}
+              style={{
+                padding: 12,
+                background: "#111",
+                borderRadius: 6,
+                marginBottom: 12,
+              }}
+            >
+              <p>
+                <b>{req.sender.pseudo}</b> veut devenir mate
+              </p>
 
-              <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
                 <button
                   onClick={() => acceptRequest(req.id, req.sender.id)}
-                  style={{ padding: "6px 12px", background: "green", color: "white", borderRadius: 6 }}
+                  style={{
+                    padding: "6px 12px",
+                    background: "green",
+                    color: "white",
+                    borderRadius: 6,
+                  }}
                 >
                   Accepter
                 </button>
 
                 <button
                   onClick={() => refuseRequest(req.id)}
-                  style={{ padding: "6px 12px", background: "red", color: "white", borderRadius: 6 }}
+                  style={{
+                    padding: "6px 12px",
+                    background: "red",
+                    color: "white",
+                    borderRadius: 6,
+                  }}
                 >
                   Refuser
                 </button>
@@ -149,26 +218,50 @@ export default function MatesPage() {
         </div>
       )}
 
-      {/* Mates */}
+      {/* Liste des mates */}
       <h2 style={{ marginBottom: 12 }}>Tes mates</h2>
 
       {mates.length === 0 ? (
         <p>Aucun mate pour le moment.</p>
       ) : (
         mates.map((m) => (
-          <div key={m.id} style={{ padding: 14, background: "#111", borderRadius: 6, marginBottom: 12 }}>
-            <p><b>{m.other.pseudo}</b></p>
-            <p style={{ fontSize: 12, color: "#888" }}>Depuis le {new Date(m.start_date).toLocaleDateString()}</p>
+          <div
+            key={m.id}
+            style={{
+              padding: 14,
+              background: "#111",
+              borderRadius: 6,
+              marginBottom: 12,
+            }}
+          >
+            <p>
+              <b>{m.other.pseudo}</b>
+            </p>
+            <p style={{ fontSize: 12, color: "#888" }}>
+              Depuis le {new Date(m.start_date).toLocaleDateString()}
+            </p>
 
-            <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+            <div
+              style={{
+                marginTop: 10,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
               <Link
                 href={`/profile/${m.other.id}`}
-                style={{ padding: "6px 10px", background: "#0070f3", color: "white", borderRadius: 6, textDecoration: "none" }}
+                style={{
+                  padding: "6px 10px",
+                  background: "#0070f3",
+                  color: "white",
+                  borderRadius: 6,
+                  textDecoration: "none",
+                }}
               >
                 Voir profil
               </Link>
 
-              {/* 🔥 NOUVEAU BOUTON — PAGE STATS */}
               <Link
                 href={`/profile/${myId}/mates/${m.other.id}/stats`}
                 style={{
@@ -176,11 +269,25 @@ export default function MatesPage() {
                   background: "purple",
                   color: "white",
                   borderRadius: 6,
-                  textDecoration: "none"
+                  textDecoration: "none",
                 }}
               >
                 Stats avec ce mate
               </Link>
+
+              {/* 🔥 NOUVEAU : bouton retirer */}
+              <button
+                onClick={() => removeMate(m.id, m.other.id)}
+                style={{
+                  padding: "6px 10px",
+                  background: "#b00020",
+                  color: "white",
+                  borderRadius: 6,
+                  border: "none",
+                }}
+              >
+                Retirer ❌
+              </button>
             </div>
           </div>
         ))
