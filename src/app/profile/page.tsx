@@ -112,7 +112,7 @@ export default function ProfilePage({ params }: any) {
     loadFollowCounts();
   };
 
-  if (!profile) return <p>Chargement...</p>;
+  if (!profile) return <p>Loading...</p>;
 
   return (
     <div
@@ -123,14 +123,12 @@ export default function ProfilePage({ params }: any) {
         color: "white",
       }}
     >
-
-      {/* ----------- CAPSULE HEADER ----------- */}
+      {/* ----------- HEADER CAPSULE ----------- */}
       <div
         style={{
           borderRadius: "18px",
           padding: "25px",
-          background:
-            "rgba(20, 20, 30, 0.45)",
+          background: "rgba(20, 20, 30, 0.45)",
           border: "1px solid rgba(255,255,255,0.1)",
           boxShadow: "0 0 35px rgba(0, 180, 255, 0.12)",
           backdropFilter: "blur(8px)",
@@ -140,7 +138,6 @@ export default function ProfilePage({ params }: any) {
           marginBottom: 30,
         }}
       >
-
         {/* Avatar */}
         {profile.avatar_url ? (
           <Image
@@ -166,7 +163,7 @@ export default function ProfilePage({ params }: any) {
           />
         )}
 
-        {/* Infos */}
+        {/* Info */}
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: 28, marginBottom: 5 }}>
             {profile.pseudo}
@@ -174,15 +171,17 @@ export default function ProfilePage({ params }: any) {
 
           <div style={{ opacity: 0.8, marginBottom: 8 }}>
             <Link href={`/profile/${id}/followers`} style={{ color: "#5bc0ff" }}>
-              {followersCount} abonnés
+              {followersCount} followers
             </Link>
             {" · "}
             <Link href={`/profile/${id}/following`} style={{ color: "#5bc0ff" }}>
-              {followingCount} abonnements
+              {followingCount} following
             </Link>
           </div>
 
-          <p style={{ opacity: 0.9 }}>{profile.bio || "Aucune bio."}</p>
+          <p style={{ opacity: 0.9 }}>
+            {profile.bio || "No bio."}
+          </p>
 
           <div style={{ marginTop: 15, display: "flex", gap: 10 }}>
             {myId && myId !== id && (
@@ -197,7 +196,7 @@ export default function ProfilePage({ params }: any) {
                   cursor: "pointer",
                 }}
               >
-                {isFollowing ? "Se désabonner" : "S'abonner"}
+                {isFollowing ? "Unfollow" : "Follow"}
               </button>
             )}
 
@@ -213,28 +212,29 @@ export default function ProfilePage({ params }: any) {
                   cursor: "pointer",
                 }}
               >
-                {showEdit ? "Fermer" : "Modifier"}
+                {showEdit ? "Close" : "Edit"}
               </button>
             )}
           </div>
         </div>
       </div>
 
+      {/* EDIT FORM */}
       {myId && myId === id && showEdit && (
-  <EditProfileForm
-    userId={myId}
-    currentPseudo={profile.pseudo}
-    currentBio={profile.bio}
-    currentAvatar={profile.avatar_url}
-    onUpdated={() => {
-      loadProfile();
-      setShowEdit(false);
-    }}
-  />
-)}
+        <EditProfileForm
+          userId={myId}
+          currentPseudo={profile.pseudo}
+          currentBio={profile.bio}
+          currentAvatar={profile.avatar_url}
+          onUpdated={() => {
+            loadProfile();
+            setShowEdit(false);
+          }}
+        />
+      )}
 
       {/* ---------- POSTS ---------- */}
-      <h2 style={{ marginBottom: 12, fontSize: 22 }}>Publications</h2>
+      <h2 style={{ marginBottom: 12, fontSize: 22 }}>Posts</h2>
 
       <div
         style={{
@@ -244,7 +244,7 @@ export default function ProfilePage({ params }: any) {
         }}
       >
         {posts.length === 0 && (
-          <p style={{ opacity: 0.8 }}>Aucune publication.</p>
+          <p style={{ opacity: 0.8 }}>No posts.</p>
         )}
 
         {posts.map((post) => (
@@ -262,7 +262,6 @@ export default function ProfilePage({ params }: any) {
           </div>
         ))}
       </div>
-
     </div>
   );
 }

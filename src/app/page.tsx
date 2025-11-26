@@ -1,4 +1,24 @@
+"use client";
+
+import { useState } from "react";
+
 export default function HomePage() {
+  // states for hover effects
+  const [hoverLogin, setHoverLogin] = useState(false);
+  const [hoverSignup, setHoverSignup] = useState(false);
+
+  const baseStyle = {
+    backgroundColor: "rgba(0,0,0,0.85)",
+    color: "#fff",
+    padding: "14px 28px",
+    borderRadius: "10px",
+    textDecoration: "none",
+    fontWeight: "bold",
+    letterSpacing: "0.5px",
+    border: "1px solid rgba(255,255,255,0.1)",
+    transition: "0.25s ease",
+  };
+
   return (
     <main
       style={{
@@ -9,42 +29,48 @@ export default function HomePage() {
         fontFamily: "Arial, sans-serif",
       }}
     >
-      <h1>Bienvenue sur SocialVD 🚀</h1>
-      <p>Le réseau social gaming arrive très bientôt.</p>
+      <h1>Welcome to SocialVD</h1>
+      <p>Realize how much gaming is made for you.</p>
 
-      {/* Bouton Connexion */}
-      <a
-        href="/login"
+      {/* Buttons side by side */}
+      <div
         style={{
-          backgroundColor: "#000",
-          color: "#fff",
-          padding: "12px 20px",
-          borderRadius: "6px",
-          textDecoration: "none",
-          display: "inline-block",
-          marginTop: "20px",
-          fontWeight: "bold",
+          display: "flex",
+          justifyContent: "center",
+          gap: "30px",
+          marginTop: "30px",
         }}
       >
-        Se connecter
-      </a>
+        {/* LOGIN */}
+        <a
+          href="/login"
+          style={{
+            ...baseStyle,
+            boxShadow: hoverLogin
+              ? "0 0 18px rgba(0, 255, 255, 0.35)"
+              : "none",
+          }}
+          onMouseEnter={() => setHoverLogin(true)}
+          onMouseLeave={() => setHoverLogin(false)}
+        >
+          Log in
+        </a>
 
-      {/* Bouton Inscription (désormais noir) */}
-      <a
-        href="/signup"
-        style={{
-          backgroundColor: "#000", // même couleur que "Se connecter"
-          color: "#fff",
-          padding: "12px 20px",
-          borderRadius: "6px",
-          textDecoration: "none",
-          display: "inline-block",
-          marginTop: "15px",
-          fontWeight: "bold",
-        }}
-      >
-        S'inscrire
-      </a>
+        {/* SIGNUP */}
+        <a
+          href="/signup"
+          style={{
+            ...baseStyle,
+            boxShadow: hoverSignup
+              ? "0 0 18px rgba(0, 255, 255, 0.35)"
+              : "none",
+          }}
+          onMouseEnter={() => setHoverSignup(true)}
+          onMouseLeave={() => setHoverSignup(false)}
+        >
+          Sign up
+        </a>
+      </div>
     </main>
   );
 }

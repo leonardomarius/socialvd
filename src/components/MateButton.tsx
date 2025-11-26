@@ -65,6 +65,22 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
       receiver_id: otherId,
       status: "pending",
     });
+
+    // 👉 Étape 1 : récupérer pseudo
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("pseudo")
+      .eq("id", myId)
+      .single();
+
+    // 🔔 NOTIF : demande de mate envoyée
+    await supabase.from("notifications").insert({
+      user_id: otherId,
+      from_user_id: myId,
+      type: "mate_request",
+      message: `${me?.pseudo ?? "Quelqu'un"} veut devenir ton mate 🤝`,
+    });
+
     loadStatus();
   };
 
@@ -86,6 +102,21 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
     await supabase.from("mates").insert({
       user1_id: myId,
       user2_id: otherId,
+    });
+
+    // 👉 Étape 1 : récupérer pseudo
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("pseudo")
+      .eq("id", myId)
+      .single();
+
+    // 🔔 NOTIF : demande de mate acceptée
+    await supabase.from("notifications").insert({
+      user_id: otherId,
+      from_user_id: myId,
+      type: "mate_accept",
+      message: `${me?.pseudo ?? "Quelqu'un"} a accepté ta demande de mate 🎉`,
     });
 
     loadStatus();

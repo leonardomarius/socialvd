@@ -26,7 +26,7 @@ export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 🔥 Fonction principale pour charger tout
+  // 🔥 Main loading function
   const load = async () => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
@@ -86,7 +86,7 @@ export default function MessagesPage() {
         (unreadCount[m.conversation_id] ?? 0) + 1;
     });
 
-    // 🔥 On récupère le VRAI dernier message pour chaque conversation
+    // 🔥 Get the ACTUAL last message
     const lastMessages: Record<string, string | null> = {};
 
     for (const convId of convIds) {
@@ -122,12 +122,12 @@ export default function MessagesPage() {
     setLoading(false);
   };
 
-  // 🔥 Load initial
+  // 🔥 Initial load
   useEffect(() => {
     load();
   }, []);
 
-  // 🔥 REALTIME — si un message arrive → reload
+  // 🔥 REALTIME watch messages → reload
   useEffect(() => {
     const channel = supabase
       .channel("messages-list")
@@ -148,13 +148,13 @@ export default function MessagesPage() {
   }, []);
 
   const formatDate = (iso: string) =>
-    new Date(iso).toLocaleString("fr-FR", {
+    new Date(iso).toLocaleString("en-US", {
       dateStyle: "short",
       timeStyle: "short",
     });
 
   if (loading)
-    return <p style={{ color: "white", padding: 20 }}>Chargement…</p>;
+    return <p style={{ color: "white", padding: 20 }}>Loading…</p>;
 
   return (
     <div
@@ -190,7 +190,7 @@ export default function MessagesPage() {
 
         {conversations.length === 0 && (
           <p style={{ color: "#bbb", textAlign: "center", marginTop: 30 }}>
-            Aucune conversation.
+            No conversations yet.
           </p>
         )}
 
@@ -237,7 +237,7 @@ export default function MessagesPage() {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {conv.other_user?.pseudo ?? "Utilisateur"}
+                    {conv.other_user?.pseudo ?? "User"}
                   </p>
 
                   <span style={{ fontSize: "11px", color: "#aaa" }}>
@@ -246,7 +246,7 @@ export default function MessagesPage() {
                 </div>
 
                 <p style={{ fontSize: "13px", color: "#ddd" }}>
-                  {conv.last_message ?? "Nouvelle conversation"}
+                  {conv.last_message ?? "New conversation"}
                 </p>
               </div>
 

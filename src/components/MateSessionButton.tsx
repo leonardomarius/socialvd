@@ -25,9 +25,6 @@ export default function MateSessionButton({
   const [session, setSession] = useState<MateSession | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // -------------------------------------------------
-  // 🔥 1) Timer live (maj du composant toutes les 1 sec)
-  // -------------------------------------------------
   const [, forceUpdate] = useState(0);
 
   useEffect(() => {
@@ -40,9 +37,6 @@ export default function MateSessionButton({
     return () => clearInterval(interval);
   }, [session]);
 
-  // -------------------------------------------------
-  // 🔥 2) Charger la session active/pending
-  // -------------------------------------------------
   useEffect(() => {
     if (!myId || !otherId) return;
     fetchActiveSession();
@@ -64,7 +58,7 @@ export default function MateSessionButton({
   }
 
   // -------------------------------------------------
-  // 🔥 2 bis) Realtime global pour détecter une NOUVELLE demande
+  // 🔥 Realtime pour NOUVELLE session
   // -------------------------------------------------
   useEffect(() => {
     if (!myId || !otherId) return;
@@ -85,10 +79,7 @@ export default function MateSessionButton({
             (s.user1_id === myId && s.user2_id === otherId) ||
             (s.user1_id === otherId && s.user2_id === myId);
 
-          if (isConcerned) {
-            console.log("🔥 Nouvelle session détectée en realtime :", s);
-            fetchActiveSession();
-          }
+          if (isConcerned) fetchActiveSession();
         }
       )
       .subscribe();
@@ -99,7 +90,7 @@ export default function MateSessionButton({
   }, [myId, otherId]);
 
   // -------------------------------------------------
-  // 🔥 3) Realtime ciblé (écoute UNIQUEMENT cette session)
+  // 🔥 Realtime ciblé
   // -------------------------------------------------
   useEffect(() => {
     if (!session?.id) return;
@@ -114,15 +105,9 @@ export default function MateSessionButton({
           table: "mate_sessions",
           filter: `id=eq.${session.id}`,
         },
-        () => {
-          fetchActiveSession();
-        }
+        () => fetchActiveSession()
       )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log("🔄 Realtime branché sur la session", session.id);
-        }
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -130,11 +115,41 @@ export default function MateSessionButton({
   }, [session?.id]);
 
   // -------------------------------------------------
-  // 🔥 4) Demander une session
+  // 🔥 NOTIFS : fonction utilitaire
+  // -------------------------------------------------
+  async function sendNotification(targetId: string, fromId: string, type: string, message: string) {
+    const { data: fromProfile } = await supabase
+      .from("profiles")
+      .select("pseudo")
+      .eq("id", fromId)
+      .single();
+
+    const finalMessage = `${fromProfile?.pseudo ?? "Un joueur"} ${message}`;
+
+    await supabase.from("notifications").insert({
+      user_id: targetId,
+      from_user_id: fromId,
+      type,
+      message: finalMessage,
+    });
+  }
+
+  // -------------------------------------------------
+  // 🔥 Demander une session
   // -------------------------------------------------
   async function requestSession() {
     setLoading(true);
 
+    // 🧹 supprimer anciennes notifs "session_request"
+    await supabase
+  .from("notifications")
+  .delete()
+  .eq("user_id", otherId)      // celui qui reçoit la notif
+  .eq("from_user_id", myId)    // celui qui annule la demande
+  .eq("type", "session_request");
+
+
+    // créer nouvelle session
     await supabase.from("mate_sessions").insert({
       user1_id: myId,
       user2_id: otherId,
@@ -142,17 +157,29 @@ export default function MateSessionButton({
       status: "pending",
     });
 
+    // 🔔 créer nouvelle notif propre
+    await sendNotification(otherId!, myId!, "session_request", "veut lancer une session de jeu avec toi 🎮");
+
     setLoading(false);
     fetchActiveSession();
   }
 
   // -------------------------------------------------
-  // 🔥 5) Annuler une demande
+  // 🔥 Annuler session
   // -------------------------------------------------
   async function cancelSession() {
     if (!session) return;
     setLoading(true);
 
+    // 🧹 supprimer notif “session_request”
+    await supabase
+      .from("notifications")
+      .delete()
+      .eq("from_user_id", session.start_request_by)
+      .eq("user_id", otherId)
+      .eq("type", "session_request");
+
+    // supprimer session
     await supabase.from("mate_sessions").delete().eq("id", session.id);
 
     setLoading(false);
@@ -160,7 +187,7 @@ export default function MateSessionButton({
   }
 
   // -------------------------------------------------
-  // 🔥 6) Accepter la session
+  // 🔥 Accepter session
   // -------------------------------------------------
   async function acceptSession() {
     if (!session) return;
@@ -175,12 +202,15 @@ export default function MateSessionButton({
       })
       .eq("id", session.id);
 
+    // 🔔 notif acceptation
+    await sendNotification(otherId!, myId!, "session_accept", "a accepté ta session de jeu 🎮🔥");
+
     setLoading(false);
     fetchActiveSession();
   }
 
   // -------------------------------------------------
-  // 🔥 7) Terminer la session
+  // 🔥 Stop session
   // -------------------------------------------------
   async function stopSession() {
     if (!session) return;
@@ -207,7 +237,7 @@ export default function MateSessionButton({
   }
 
   // -------------------------------------------------
-  // 🔥 8) UI dynamique
+  // 🔥 UI
   // -------------------------------------------------
 
   if (!session) {
@@ -248,8 +278,7 @@ export default function MateSessionButton({
       session.started_at
         ? Math.floor(
             (new Date().getTime() -
-              new Date(session.started_at).getTime()) /
-              1000
+              new Date(session.started_at).getTime()) / 1000
           )
         : 0;
 

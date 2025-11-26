@@ -204,8 +204,8 @@ export default function FeedPage() {
     }
   };
 
-  // -----------------------------------------------------
-  // Créer un post
+   // -----------------------------------------------------
+  // Create a post
   // -----------------------------------------------------
   const handleCreatePost = async () => {
     if (!myId || !newPost.trim()) return;
@@ -223,7 +223,7 @@ export default function FeedPage() {
 
     if (error) {
       console.error(error);
-      showNotification("Erreur lors de la création du post", "error");
+      showNotification("Error creating post", "error");
       return;
     }
 
@@ -231,12 +231,13 @@ export default function FeedPage() {
     setNewGame("");
     setMediaFile(null);
 
-    showNotification("Post publié !");
+    showNotification("Post published!");
     loadAllData();
   };
 
+
 // -----------------------------------------------------
-// Ajouter un commentaire + Notification
+// Add a comment + Notification
 // -----------------------------------------------------
 const handleAddComment = async (postId: string) => {
   const content = newComments[postId];
@@ -250,26 +251,26 @@ const handleAddComment = async (postId: string) => {
 
   if (error) {
     console.error(error);
-    showNotification("Erreur lors de l'ajout du commentaire", "error");
+    showNotification("Error adding comment", "error");
     return;
   }
 
-  // 🔍 Récupérer l'auteur du post
+  // 🔍 Get post author
   const post = posts.find((p) => p.id === postId);
 
-  // 🛑 Ne pas envoyer de notif à soi-même
+  // 🛑 Do not notify yourself
   if (post && post.user_id !== myId) {
     await supabase.from("notifications").insert({
       user_id: post.user_id,
       from_user_id: myId,
       type: "comment",
       post_id: postId,
-      message: `${pseudo} a commenté votre post`,
+      message: `${pseudo} commented on your post`,
     });
   }
 
   setNewComments((prev) => ({ ...prev, [postId]: "" }));
-  showNotification("Commentaire ajouté");
+  showNotification("Comment added");
   loadAllData();
 };
 
@@ -282,141 +283,141 @@ const handleLike = async (postId: string) => {
 
   if (error) {
     console.error(error);
-    showNotification("Erreur lors du like", "error");
+    showNotification("Error while liking", "error");
     return;
   }
 
-  // 🔍 Trouver le post liké
+  // 🔍 Find liked post
   const post = posts.find((p) => p.id === postId);
 
-  // 🛑 Ne pas envoyer de notif à soi-même
+  // 🛑 Do not notify yourself
   if (post && post.user_id !== myId) {
     await supabase.from("notifications").insert({
-      user_id: post.user_id,     // destinataire
-      from_user_id: myId,        // toi
+      user_id: post.user_id,     // recipient
+      from_user_id: myId,        // you
       type: "like",
       post_id: postId,
-      message: `${pseudo} a aimé votre post`,
+      message: `${pseudo} liked your post`,
     });
   }
 
   loadAllData();
 };
 
-  // -----------------------------------------------------
-  // Like via RPC
-  // -----------------------------------------------------
 
-  // -----------------------------------------------------
-  // Supprimer commentaire
-  // -----------------------------------------------------
-  const handleDeleteComment = async (commentId: string) => {
-    const { error } = await supabase
-      .from("comments")
-      .delete()
-      .eq("id", commentId);
+// -----------------------------------------------------
+// Delete comment
+// -----------------------------------------------------
+const handleDeleteComment = async (commentId: string) => {
+  const { error } = await supabase
+    .from("comments")
+    .delete()
+    .eq("id", commentId);
 
-    if (error) {
-      console.error(error);
-      showNotification("Erreur lors de la suppression du commentaire", "error");
-      return;
-    }
+  if (error) {
+    console.error(error);
+    showNotification("Error deleting comment", "error");
+    return;
+  }
 
-    setComments((prev) => prev.filter((c) => c.id !== commentId));
-    showNotification("Commentaire supprimé");
-  };
+  setComments((prev) => prev.filter((c) => c.id !== commentId));
+  showNotification("Comment deleted");
+};
 
-  // -----------------------------------------------------
-  // Demander confirmation suppression post
-  // -----------------------------------------------------
-  const requestDeletePost = (postId: string) => {
-    setConfirmDeletePostId(postId);
-    setOpenMenuPostId(null);
-  };
 
-  // -----------------------------------------------------
-  // Confirmer suppression post
-  // -----------------------------------------------------
-  const handleConfirmDeletePost = async () => {
-    if (!confirmDeletePostId || !myId) return;
+// -----------------------------------------------------
+// Ask delete confirmation for post
+// -----------------------------------------------------
+const requestDeletePost = (postId: string) => {
+  setConfirmDeletePostId(postId);
+  setOpenMenuPostId(null);
+};
 
-    const post = posts.find((p) => p.id === confirmDeletePostId);
-    const mediaUrl = post?.media_url || null;
 
-    if (mediaUrl) {
-      await deleteMediaFile(mediaUrl);
-    }
+// -----------------------------------------------------
+// Confirm delete post
+// -----------------------------------------------------
+const handleConfirmDeletePost = async () => {
+  if (!confirmDeletePostId || !myId) return;
 
-    const { error } = await supabase
-      .from("posts")
-      .delete()
-      .eq("id", confirmDeletePostId)
-      .eq("user_id", myId);
+  const post = posts.find((p) => p.id === confirmDeletePostId);
+  const mediaUrl = post?.media_url || null;
 
-    if (error) {
-      console.error("Erreur suppression post :", error);
-      showNotification("Erreur lors de la suppression du post", "error");
-      return;
-    }
+  if (mediaUrl) {
+    await deleteMediaFile(mediaUrl);
+  }
 
-    setPosts((prev) => prev.filter((p) => p.id !== confirmDeletePostId));
-    setConfirmDeletePostId(null);
-    showNotification("Post supprimé");
-  };
+  const { error } = await supabase
+    .from("posts")
+    .delete()
+    .eq("id", confirmDeletePostId)
+    .eq("user_id", myId);
 
-  const handleCancelDeletePost = () => {
-    setConfirmDeletePostId(null);
-  };
+  if (error) {
+    console.error("Error deleting post:", error);
+    showNotification("Error deleting post", "error");
+    return;
+  }
 
-  // -----------------------------------------------------
-  // Édition de post
-  // -----------------------------------------------------
-  const handleStartEditPost = (post: Post) => {
-    setEditingPostId(post.id);
-    setEditContent(post.content);
-    setEditGame(post.game || "");
-    setOpenMenuPostId(null);
-  };
+  setPosts((prev) => prev.filter((p) => p.id !== confirmDeletePostId));
+  setConfirmDeletePostId(null);
+  showNotification("Post deleted");
+};
 
-  const handleCancelEditPost = () => {
-    setEditingPostId(null);
-    setEditContent("");
-    setEditGame("");
-  };
+const handleCancelDeletePost = () => {
+  setConfirmDeletePostId(null);
+};
 
-  const handleSaveEditPost = async () => {
-    if (!editingPostId || !myId || !editContent.trim()) return;
 
-    const { error } = await supabase
-      .from("posts")
-      .update({
-        content: editContent,
-        game: editGame || null,
-      })
-      .eq("id", editingPostId)
-      .eq("user_id", myId);
+// -----------------------------------------------------
+// Edit post
+// -----------------------------------------------------
+const handleStartEditPost = (post: Post) => {
+  setEditingPostId(post.id);
+  setEditContent(post.content);
+  setEditGame(post.game || "");
+  setOpenMenuPostId(null);
+};
 
-    if (error) {
-      console.error("Erreur édition post :", error);
-      showNotification("Erreur lors de la modification du post", "error");
-      return;
-    }
+const handleCancelEditPost = () => {
+  setEditingPostId(null);
+  setEditContent("");
+  setEditGame("");
+};
 
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === editingPostId
-          ? { ...p, content: editContent, game: editGame || null }
-          : p
-      )
-    );
+const handleSaveEditPost = async () => {
+  if (!editingPostId || !myId || !editContent.trim()) return;
 
-    setEditingPostId(null);
-    setEditContent("");
-    setEditGame("");
-    showNotification("Post modifié");
-  };
+  const { error } = await supabase
+    .from("posts")
+    .update({
+      content: editContent,
+      game: editGame || null,
+    })
+    .eq("id", editingPostId)
+    .eq("user_id", myId);
 
-  // -----------------------------------------------------
+  if (error) {
+    console.error("Error editing post:", error);
+    showNotification("Error editing post", "error");
+    return;
+  }
+
+  setPosts((prev) =>
+    prev.map((p) =>
+      p.id === editingPostId
+        ? { ...p, content: editContent, game: editGame || null }
+        : p
+    )
+  );
+
+  setEditingPostId(null);
+  setEditContent("");
+  setEditGame("");
+  showNotification("Post updated");
+};
+
+   // -----------------------------------------------------
   // RENDER
   // -----------------------------------------------------
   return (
@@ -433,15 +434,15 @@ const handleLike = async (postId: string) => {
           </div>
         )}
 
-        <h1 className="feed-title">Fil d’actualité</h1>
+        <h1 className="feed-title">News Feed</h1>
 
         {/* Formulaire post */}
         <div className="card card-create">
-          <h3 className="card-title">Créer un post</h3>
+          <h3 className="card-title">Create a post</h3>
 
           <input
             type="text"
-            placeholder="Jeu (facultatif)"
+            placeholder="Game (optional)"
             value={newGame}
             onChange={(e) => setNewGame(e.target.value)}
             className="input"
@@ -450,13 +451,13 @@ const handleLike = async (postId: string) => {
           <textarea
             value={newPost}
             onChange={(e) => setNewPost(e.target.value)}
-            placeholder="Écris quelque chose..."
+            placeholder="Write something..."
             rows={3}
             className="textarea"
           />
 
           <label className="file-label">
-            <span>Ajouter une image / vidéo</span>
+            <span>Add an image / video</span>
             <input
               type="file"
               accept="image/*,video/*"
@@ -465,7 +466,7 @@ const handleLike = async (postId: string) => {
           </label>
 
           <button className="btn primary-btn" onClick={handleCreatePost}>
-            Publier
+            Publish
           </button>
         </div>
 
@@ -523,14 +524,14 @@ const handleLike = async (postId: string) => {
                           onClick={() => handleStartEditPost(post)}
                         >
                           <PencilSquareIcon className="icon-16" />
-                          <span>Modifier</span>
+                          <span>Edit</span>
                         </button>
                         <button
                           className="options-menu-item danger"
                           onClick={() => requestDeletePost(post.id)}
                         >
                           <TrashIcon className="icon-16" />
-                          <span>Supprimer</span>
+                          <span>Delete</span>
                         </button>
                       </div>
                     )}
@@ -545,7 +546,7 @@ const handleLike = async (postId: string) => {
                 <div className="post-edit-block">
                   <input
                     type="text"
-                    placeholder="Jeu (facultatif)"
+                    placeholder="Game (optional)"
                     value={editGame}
                     onChange={(e) => setEditGame(e.target.value)}
                     className="input"
@@ -561,13 +562,13 @@ const handleLike = async (postId: string) => {
                       className="btn primary-btn"
                       onClick={handleSaveEditPost}
                     >
-                      Enregistrer
+                      Save
                     </button>
                     <button
                       className="btn ghost-btn"
                       onClick={handleCancelEditPost}
                     >
-                      Annuler
+                      Cancel
                     </button>
                   </div>
                 </div>
@@ -599,7 +600,7 @@ const handleLike = async (postId: string) => {
                 <div className="icon-text-inline">
                   <ChatBubbleLeftIcon className="icon-18 subtle" />
                   <span className="comment-count">
-                    {postComments.length} commentaires
+                    {postComments.length} comments
                   </span>
                 </div>
               </div>
@@ -631,7 +632,7 @@ const handleLike = async (postId: string) => {
                 <div className="comment-input-row">
                   <input
                     type="text"
-                    placeholder="Commenter..."
+                    placeholder="Comment..."
                     value={newComments[post.id] || ""}
                     onChange={(e) =>
                       setNewComments((prev) => ({
@@ -645,7 +646,7 @@ const handleLike = async (postId: string) => {
                     className="btn ghost-btn"
                     onClick={() => handleAddComment(post.id)}
                   >
-                    Envoyer
+                    Send
                   </button>
                 </div>
               </div>
@@ -654,32 +655,32 @@ const handleLike = async (postId: string) => {
         })}
       </div>
 
-      {/* MODAL SUPPRESSION POST */}
-      {confirmDeletePostId && (
-        <div className="modal-backdrop">
-          <div className="modal-card">
-            <h3>Supprimer ce post ?</h3>
-            <p className="modal-text">
-              Cette action est définitive. Le média associé sera également
-              supprimé.
-            </p>
-            <div className="modal-actions">
-              <button
-                className="btn ghost-btn"
-                onClick={handleCancelDeletePost}
-              >
-                Annuler
-              </button>
-              <button
-                className="btn danger-btn"
-                onClick={handleConfirmDeletePost}
-              >
-                Supprimer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+     {/* DELETE POST MODAL */}
+{confirmDeletePostId && (
+  <div className="modal-backdrop">
+    <div className="modal-card">
+      <h3>Delete this post?</h3>
+      <p className="modal-text">
+        This action is permanent. The attached media will also be removed.
+      </p>
+      <div className="modal-actions">
+        <button
+          className="btn ghost-btn"
+          onClick={handleCancelDeletePost}
+        >
+          Cancel
+        </button>
+        <button
+          className="btn danger-btn"
+          onClick={handleConfirmDeletePost}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
       {/* STYLES */}
       <style jsx>{`

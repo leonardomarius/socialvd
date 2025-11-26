@@ -24,14 +24,34 @@ export default function Navbar() {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
-  // Vérifie auth — ⭐ PATCH : getSession() au lieu de getUser()
+  // -------------------------------------------------------------
+  // MARK AS SEEN
+  // -------------------------------------------------------------
+  const markNotificationsAsSeen = async () => {
+    if (!myId) return;
+
+    await supabase
+      .from("notifications")
+      .update({ seen: true })
+      .eq("user_id", myId)
+      .eq("seen", false);
+
+    loadNotifications(myId);
+    setUnreadCount(0);
+  };
+
+  // -------------------------------------------------------------
+  // AUTH STATE
+  // -------------------------------------------------------------
   const refreshAuthState = async () => {
-    const { data } = await supabase.auth.getSession(); // ⭐ PATCH ICI
+    const { data } = await supabase.auth.getSession();
 
     if (data.session?.user) {
       setLogged(true);
       setMyId(data.session.user.id);
       localStorage.setItem("user_id", data.session.user.id);
+
+      setupRealtime(data.session.user.id);
     } else {
       setLogged(false);
       setMyId(null);
@@ -39,13 +59,15 @@ export default function Navbar() {
     }
   };
 
-  // ⭐ AJOUT : SUBSCRIBE AUX CHANGEMENTS D’AUTH
+  // OnAuthStateChange
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setLogged(true);
         setMyId(session.user.id);
         localStorage.setItem("user_id", session.user.id);
+
+        setupRealtime(session.user.id);
       } else {
         setLogged(false);
         setMyId(null);
@@ -57,9 +79,10 @@ export default function Navbar() {
       listener.subscription.unsubscribe();
     };
   }, []);
-  // ⭐ FIN AJOUT
 
-  // Fermer popover si clic extérieur
+  // -------------------------------------------------------------
+  // CLOSE POPOVER OUTSIDE CLICK
+  // -------------------------------------------------------------
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
@@ -70,7 +93,9 @@ export default function Navbar() {
     return () => window.removeEventListener("mousedown", handleOutside);
   }, []);
 
-  // Charger notifications
+  // -------------------------------------------------------------
+  // LOAD NOTIFICATIONS
+  // -------------------------------------------------------------
   const loadNotifications = async (userId: string) => {
     const { data } = await supabase
       .from("notifications")
@@ -84,7 +109,9 @@ export default function Navbar() {
     setUnreadCount(unread);
   };
 
-  // Charger compteurs navbar
+  // -------------------------------------------------------------
+  // NAVBAR COUNTS
+  // -------------------------------------------------------------
   const loadNavbarCounts = async (userId: string) => {
     // Messages
     const { data: conversations } = await supabase
@@ -107,9 +134,9 @@ export default function Navbar() {
       setMessagesUnreadCount(unreadMessages || 0);
     }
 
-    // Mates requests
+    // Mate requests
     const { count: mateRequests } = await supabase
-      .from("mates_requests")
+      .from("mate_requests")
       .select("*", { count: "exact", head: true })
       .eq("receiver_id", userId)
       .eq("status", "pending");
@@ -117,28 +144,53 @@ export default function Navbar() {
     setMateRequestsCount(mateRequests || 0);
   };
 
-  // Realtime — version corrigée
+  // -------------------------------------------------------------
+  // REALTIME — notifications + messages + mate_requests
+  // -------------------------------------------------------------
   const setupRealtime = (userId: string) => {
+    console.log("📡 Realtime activé pour :", userId);
+
     supabase
-      .channel("navbar-realtime")
+      .channel(`navbar-realtime-${userId}`)
+
+      // Messages
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "messages" },
         () => loadNavbarCounts(userId)
       )
+
+      // Mate requests
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "mates_requests" },
+        { event: "*", schema: "public", table: "mate_requests" },
         () => loadNavbarCounts(userId)
       )
+
+      // Notifications : INSERT + UPDATE + DELETE (sans filtre pour éviter les bugs sur DELETE)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "notifications" },
-        () => loadNotifications(userId)
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+        },
+        (payload) => {
+          console.log("🔔 changement notifications realtime :", payload);
+          loadNotifications(userId);
+        }
       )
-      .subscribe();
+
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("🔄 Realtime SUBSCRIBED pour", userId);
+        }
+      });
   };
 
+  // -------------------------------------------------------------
+  // INITIAL AUTH LOAD
+  // -------------------------------------------------------------
   useEffect(() => {
     (async () => {
       await refreshAuthState();
@@ -150,15 +202,19 @@ export default function Navbar() {
     return () => window.removeEventListener("authChanged", handler);
   }, []);
 
+  // -------------------------------------------------------------
+  // LOAD COUNTERS & NOTIFS WHEN myId AVAILABLE
+  // -------------------------------------------------------------
   useEffect(() => {
     if (!myId) return;
 
     loadNotifications(myId);
     loadNavbarCounts(myId);
-    setupRealtime(myId);
   }, [myId]);
 
-  // Déconnexion
+  // -------------------------------------------------------------
+  // LOGOUT
+  // -------------------------------------------------------------
   const logout = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem("user_id");
@@ -169,6 +225,9 @@ export default function Navbar() {
 
   if (logged === null) return null;
 
+  // -------------------------------------------------------------
+  // RENDER
+  // -------------------------------------------------------------
   return (
     <nav
       style={{
@@ -209,7 +268,14 @@ export default function Navbar() {
             {/* 🔔 Notifications */}
             <div style={{ position: "relative" }} ref={popoverRef}>
               <button
-                onClick={() => setPopoverOpen(!popoverOpen)}
+                onClick={() => {
+                  const newState = !popoverOpen;
+                  setPopoverOpen(newState);
+
+                  if (!popoverOpen) {
+                    markNotificationsAsSeen();
+                  }
+                }}
                 style={{
                   background: "rgba(255,255,255,0.08)",
                   border: "1px solid rgba(255,255,255,0.15)",
@@ -238,7 +304,6 @@ export default function Navbar() {
                 )}
               </button>
 
-              {/* Popover */}
               {popoverOpen && (
                 <div
                   style={{
@@ -271,7 +336,9 @@ export default function Navbar() {
                         padding: "10px 14px",
                         fontSize: 14,
                         borderBottom: "1px solid rgba(255,255,255,0.07)",
-                        background: notif.seen ? "transparent" : "rgba(255,255,255,0.05)",
+                        background: notif.seen
+                          ? "transparent"
+                          : "rgba(255,255,255,0.05)",
                       }}
                     >
                       {notif.message}

@@ -20,14 +20,14 @@ export default function NotificationsPage() {
   const [myId, setMyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Charger l'utilisateur
+  // Load user
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
     if (!userId) return;
     setMyId(userId);
   }, []);
 
-  // Charger notifications
+  // Load notifications
   useEffect(() => {
     if (!myId) return;
 
@@ -43,7 +43,7 @@ export default function NotificationsPage() {
       setNotifications(data || []);
       setLoading(false);
 
-      // Marquer comme "vu"
+      // Mark as seen
       await supabase
         .from("notifications")
         .update({ seen: true })
@@ -59,12 +59,12 @@ export default function NotificationsPage() {
       <h1 className="notif-title">Notifications</h1>
 
       {loading && (
-        <div className="notif-loading">Chargement...</div>
+        <div className="notif-loading">Loading...</div>
       )}
 
       {!loading && notifications.length === 0 && (
         <div className="notif-empty">
-          🎉 Aucune notification pour le moment.
+          🎉 No notifications yet.
         </div>
       )}
 
@@ -75,12 +75,12 @@ export default function NotificationsPage() {
 
             {notif.post_id && (
               <Link href={`/post/${notif.post_id}`} className="notif-link">
-                Voir le post →
+                View post →
               </Link>
             )}
 
             <div className="notif-date">
-              {new Date(notif.created_at).toLocaleString()}
+              {new Date(notif.created_at).toLocaleString("en-US")}
             </div>
           </div>
         ))}
