@@ -66,19 +66,19 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
       status: "pending",
     });
 
-    // 👉 Étape 1 : récupérer pseudo
+    // 👉 Step 1: fetch username
     const { data: me } = await supabase
       .from("profiles")
       .select("pseudo")
       .eq("id", myId)
       .single();
 
-    // 🔔 NOTIF : demande de mate envoyée
+    // 🔔 Notification: mate request sent
     await supabase.from("notifications").insert({
       user_id: otherId,
       from_user_id: myId,
       type: "mate_request",
-      message: `${me?.pseudo ?? "Quelqu'un"} veut devenir ton mate 🤝`,
+      message: `${me?.pseudo ?? "Someone"} wants to become your mate 🤝`,
     });
 
     loadStatus();
@@ -104,19 +104,19 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
       user2_id: otherId,
     });
 
-    // 👉 Étape 1 : récupérer pseudo
+    // 👉 Step 1: get username
     const { data: me } = await supabase
       .from("profiles")
       .select("pseudo")
       .eq("id", myId)
       .single();
 
-    // 🔔 NOTIF : demande de mate acceptée
+    // 🔔 Notification: mate request accepted
     await supabase.from("notifications").insert({
       user_id: otherId,
       from_user_id: myId,
       type: "mate_accept",
-      message: `${me?.pseudo ?? "Quelqu'un"} a accepté ta demande de mate 🎉`,
+      message: `${me?.pseudo ?? "Someone"} accepted your mate request 🎉`,
     });
 
     loadStatus();
@@ -133,7 +133,7 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
           border: "none",
         }}
       >
-        🔥 Vous êtes mates
+        🔥 You are mates
       </button>
     );
   }
@@ -150,7 +150,7 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
           border: "none",
         }}
       >
-        Demande envoyée (annuler)
+        Request sent (cancel)
       </button>
     );
   }
@@ -167,7 +167,7 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
           border: "none",
         }}
       >
-        Accepter la demande 🤝
+        Accept request 🤝
       </button>
     );
   }
@@ -183,7 +183,7 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
         border: "none",
       }}
     >
-      Devenir mates 🤝
+      Become mates 🤝
     </button>
   );
 }

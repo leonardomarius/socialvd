@@ -5,15 +5,15 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 export default function NavWrapper() {
-  const pathname = usePathname(); // ⭐ Détecte les changements d’URL
+  const pathname = usePathname(); // ⭐ Detects URL changes
   const [showNavbar, setShowNavbar] = useState(false);
 
   useEffect(() => {
-    // Pages où la navbar NE DOIT PAS apparaître
+    // Pages where the navbar MUST NOT appear
     const publicPages = ["/", "/login", "/signup"];
 
     setShowNavbar(!publicPages.includes(pathname));
-  }, [pathname]); // ⭐ Mise à jour dès que l’URL change
+  }, [pathname]); // ⭐ Updates as soon as the URL changes
 
   if (!showNavbar) return null;
 

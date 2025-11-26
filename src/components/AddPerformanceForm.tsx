@@ -44,11 +44,11 @@ export default function AddPerformanceForm({ userId, onAdded }: {
       background: "rgba(0, 0, 0, 0.4)",
       border: "1px solid rgba(255,255,255,0.1)"
     }}>
-      <h3 style={{ marginBottom: "12px" }}>Ajouter une performance</h3>
+      <h3 style={{ marginBottom: "12px" }}>Add a performance</h3>
 
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: "10px" }}>
-          <label>Jeu</label>
+          <label>Game</label>
           <input
             type="text"
             value={gameName}
@@ -67,7 +67,7 @@ export default function AddPerformanceForm({ userId, onAdded }: {
           <label>Performance</label>
           <input
             type="text"
-            placeholder="ex : Terminé 4 fois à 100%"
+            placeholder="e.g. Finished 4 times at 100%"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
@@ -81,10 +81,10 @@ export default function AddPerformanceForm({ userId, onAdded }: {
         </div>
 
         <div style={{ marginBottom: "10px" }}>
-          <label>Détail (optionnel)</label>
+          <label>Details (optional)</label>
           <input
             type="text"
-            placeholder="ex : 100%, Platine PSN, etc."
+            placeholder="e.g. 100%, PSN Platinum, etc."
             value={value}
             onChange={(e) => setValue(e.target.value)}
             style={{
@@ -109,12 +109,12 @@ export default function AddPerformanceForm({ userId, onAdded }: {
             width: "100%"
           }}
         >
-          {loading ? "Ajout..." : "Ajouter"}
+          {loading ? "Adding..." : "Add"}
         </button>
 
         {success && (
           <p style={{ marginTop: "10px", color: "lightgreen" }}>
-            Performance ajoutée !
+            Performance added!
           </p>
         )}
       </form>

@@ -34,7 +34,7 @@ export default function FollowButton({ profileId }: { profileId: string }) {
 
   if (loading) return null;
 
-  if (userId === profileId) return null; // On ne peut pas se suivre soi-même
+  if (userId === profileId) return null; // Can't follow yourself
 
   return (
     <button
@@ -45,7 +45,7 @@ export default function FollowButton({ profileId }: { profileId: string }) {
           : "bg-blue-600 text-white hover:bg-blue-700"
       }`}
     >
-      {following ? "Abonné" : "S'abonner"}
+      {following ? "Following" : "Follow"}
     </button>
   );
 }

@@ -148,7 +148,7 @@ export default function Navbar() {
   // REALTIME — notifications + messages + mate_requests
   // -------------------------------------------------------------
   const setupRealtime = (userId: string) => {
-    console.log("📡 Realtime activé pour :", userId);
+    console.log("📡 Realtime activated for:", userId);
 
     supabase
       .channel(`navbar-realtime-${userId}`)
@@ -167,7 +167,7 @@ export default function Navbar() {
         () => loadNavbarCounts(userId)
       )
 
-      // Notifications : INSERT + UPDATE + DELETE (sans filtre pour éviter les bugs sur DELETE)
+      // Notifications
       .on(
         "postgres_changes",
         {
@@ -176,14 +176,14 @@ export default function Navbar() {
           table: "notifications",
         },
         (payload) => {
-          console.log("🔔 changement notifications realtime :", payload);
+          console.log("🔔 realtime notifications change:", payload);
           loadNotifications(userId);
         }
       )
 
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          console.log("🔄 Realtime SUBSCRIBED pour", userId);
+          console.log("🔄 Realtime SUBSCRIBED for", userId);
         }
       });
   };
@@ -249,19 +249,19 @@ export default function Navbar() {
         SocialVD
       </Link>
 
-      {/* Liens milieu */}
+      {/* Middle links */}
       {logged && (
         <div style={{ display: "flex", gap: 30 }}>
           <Link href="/feed" style={{ color: "white" }}>
-            Fil d’actualité
+            News Feed
           </Link>
           <Link href="/explore" style={{ color: "white" }}>
-            Découvrir
+            Explore
           </Link>
         </div>
       )}
 
-      {/* Droite */}
+      {/* Right side */}
       <div style={{ display: "flex", gap: 15, alignItems: "center" }}>
         {logged && myId && (
           <>
@@ -325,7 +325,7 @@ export default function Navbar() {
 
                   {notifications.length === 0 && (
                     <div style={{ padding: 14, color: "#ccc", fontSize: 14 }}>
-                      Aucune notification
+                      No notifications
                     </div>
                   )}
 
@@ -355,7 +355,7 @@ export default function Navbar() {
                       color: "#9bb7ff",
                     }}
                   >
-                    Voir tout
+                    View all
                   </Link>
                 </div>
               )}
@@ -395,7 +395,7 @@ export default function Navbar() {
               </button>
             </Link>
 
-            {/* Profil */}
+            {/* Profile */}
             <Link href={`/profile/${myId}`}>
               <button
                 style={{
@@ -406,11 +406,11 @@ export default function Navbar() {
                   color: "white",
                 }}
               >
-                Mon profil
+                My profile
               </button>
             </Link>
 
-            {/* Déconnexion */}
+            {/* Logout */}
             <button
               onClick={logout}
               style={{
@@ -420,7 +420,7 @@ export default function Navbar() {
                 color: "white",
               }}
             >
-              Se déconnecter
+              Log out
             </button>
           </>
         )}
@@ -428,7 +428,7 @@ export default function Navbar() {
         {!logged && (
           <>
             <Link href="/login">
-              <button>Connexion</button>
+              <button>Login</button>
             </Link>
             <Link href="/signup">
               <button
@@ -439,7 +439,7 @@ export default function Navbar() {
                   color: "white",
                 }}
               >
-                Inscription
+                Sign up
               </button>
             </Link>
           </>

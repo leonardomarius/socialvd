@@ -35,13 +35,13 @@ export default function ExplorePage() {
     setLoading(false);
   };
 
-  if (loading) return <p>Chargement...</p>;
+  if (loading) return <p>Loading...</p>;
 
   return (
     <div>
-      <h1 style={{ fontSize: 24, marginBottom: 20 }}>Découvrir</h1>
+      <h1 style={{ fontSize: 24, marginBottom: 20 }}>Explore</h1>
 
-      {posts.length === 0 && <p>Aucun post pour le moment.</p>}
+      {posts.length === 0 && <p>No posts yet.</p>}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {posts.map((post) => (
@@ -62,7 +62,7 @@ export default function ExplorePage() {
                 textDecoration: "none",
               }}
             >
-              {post.author_pseudo || "Utilisateur"}
+              {post.author_pseudo || "User"}
             </Link>
 
             <p style={{ marginTop: 8 }}>{post.content}</p>
@@ -74,7 +74,7 @@ export default function ExplorePage() {
                 marginTop: 10,
               }}
             >
-              {new Date(post.created_at).toLocaleString("fr-FR")}
+              {new Date(post.created_at).toLocaleString("en-US")}
             </p>
           </article>
         ))}

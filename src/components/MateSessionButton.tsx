@@ -124,7 +124,7 @@ export default function MateSessionButton({
       .eq("id", fromId)
       .single();
 
-    const finalMessage = `${fromProfile?.pseudo ?? "Un joueur"} ${message}`;
+    const finalMessage = `${fromProfile?.pseudo ?? "A player"} ${message}`;
 
     await supabase.from("notifications").insert({
       user_id: targetId,
@@ -142,12 +142,11 @@ export default function MateSessionButton({
 
     // 🧹 supprimer anciennes notifs "session_request"
     await supabase
-  .from("notifications")
-  .delete()
-  .eq("user_id", otherId)      // celui qui reçoit la notif
-  .eq("from_user_id", myId)    // celui qui annule la demande
-  .eq("type", "session_request");
-
+      .from("notifications")
+      .delete()
+      .eq("user_id", otherId)      // celui qui reçoit la notif
+      .eq("from_user_id", myId)    // celui qui annule la demande
+      .eq("type", "session_request");
 
     // créer nouvelle session
     await supabase.from("mate_sessions").insert({
@@ -158,7 +157,7 @@ export default function MateSessionButton({
     });
 
     // 🔔 créer nouvelle notif propre
-    await sendNotification(otherId!, myId!, "session_request", "veut lancer une session de jeu avec toi 🎮");
+    await sendNotification(otherId!, myId!, "session_request", "wants to start a gaming session with you 🎮");
 
     setLoading(false);
     fetchActiveSession();
@@ -203,7 +202,7 @@ export default function MateSessionButton({
       .eq("id", session.id);
 
     // 🔔 notif acceptation
-    await sendNotification(otherId!, myId!, "session_accept", "a accepté ta session de jeu 🎮🔥");
+    await sendNotification(otherId!, myId!, "session_accept", "accepted your gaming session 🎮🔥");
 
     setLoading(false);
     fetchActiveSession();
@@ -243,7 +242,7 @@ export default function MateSessionButton({
   if (!session) {
     return (
       <button onClick={requestSession} disabled={loading} className="mate-btn">
-        Lancer une session de jeu 🎮
+        Start a gaming session 🎮
       </button>
     );
   }
@@ -252,7 +251,7 @@ export default function MateSessionButton({
     if (session.start_request_by === myId) {
       return (
         <div style={{ display: "flex", gap: 10 }}>
-          <div className="mate-btn">Demande envoyée… ⏳</div>
+          <div className="mate-btn">Request sent… ⏳</div>
 
           <button
             onClick={cancelSession}
@@ -260,7 +259,7 @@ export default function MateSessionButton({
             className="mate-btn"
             style={{ background: "#b00020" }}
           >
-            Annuler
+            Cancel
           </button>
         </div>
       );
@@ -268,7 +267,7 @@ export default function MateSessionButton({
 
     return (
       <button onClick={acceptSession} disabled={loading} className="mate-btn">
-        Accepter la session 🎮
+        Accept session 🎮
       </button>
     );
   }
@@ -288,7 +287,7 @@ export default function MateSessionButton({
     return (
       <div>
         <div className="mate-btn">
-          Session en cours : {minutes}m {seconds}s ⏱️
+          Session in progress: {minutes}m {seconds}s ⏱️
         </div>
 
         <button
@@ -297,7 +296,7 @@ export default function MateSessionButton({
           className="mate-btn"
           style={{ marginTop: 10 }}
         >
-          Arrêter la session
+          Stop session
         </button>
       </div>
     );

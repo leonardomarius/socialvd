@@ -182,7 +182,7 @@ export default function ProfilePage() {
   // DM creation
   const handleStartConversation = async () => {
     if (!myId || !id) {
-      alert("Erreur : utilisateur non chargé.");
+      alert("Error: user not loaded.");
       return;
     }
 
@@ -194,7 +194,7 @@ export default function ProfilePage() {
         .single();
 
       if (convErr || !newConv) {
-        alert("Erreur création conversation :" + convErr?.message);
+        alert("Error creating conversation: " + convErr?.message);
         return;
       }
 
@@ -207,7 +207,7 @@ export default function ProfilePage() {
 
       router.push(`/messages/${convId}`);
     } catch (error: any) {
-      alert("Erreur : " + error?.message);
+      alert("Error: " + error?.message);
     }
   };
 
@@ -222,7 +222,7 @@ export default function ProfilePage() {
       .eq("user_id", myId);
 
     if (error) {
-      alert("Erreur lors de la vérification : " + error.message);
+      alert("Error during verification: " + error.message);
       return;
     }
 
@@ -260,7 +260,7 @@ export default function ProfilePage() {
     setSavingEdit(false);
 
     if (error) {
-      alert("Erreur : " + error.message);
+      alert("Error: " + error.message);
       return;
     }
 
@@ -270,7 +270,7 @@ export default function ProfilePage() {
 
   const deleteAccount = async (accountId: string) => {
     const confirmDelete = window.confirm(
-      "Supprimer ce compte de jeu ? Action définitive."
+      "Delete this game account? This action is permanent."
     );
     if (!confirmDelete) return;
 
@@ -320,7 +320,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!profile) return <p>Profil introuvable...</p>;
+  if (!profile) return <p>Profile not found...</p>;
 
   return (
     <>
@@ -404,7 +404,7 @@ export default function ProfilePage() {
                   textDecoration: "none",
                 }}
               >
-                {followersCount} abonnés
+                {followersCount} follower{followersCount > 1 ? "s" : ""}
               </Link>
 
               {" · "}
@@ -416,7 +416,7 @@ export default function ProfilePage() {
                   textDecoration: "none",
                 }}
               >
-                {followingCount} abonnements
+                {followingCount} following
               </Link>
 
               {" · "}
@@ -439,7 +439,7 @@ export default function ProfilePage() {
                 color: "rgba(235,235,245,0.82)",
               }}
             >
-              {profile.bio || "Aucune bio."}
+              {profile.bio || "No bio."}
             </p>
 
             <div
@@ -466,7 +466,7 @@ export default function ProfilePage() {
                       fontSize: 13,
                     }}
                   >
-                    {isFollowing ? "Se désabonner" : "S'abonner"}
+                    {isFollowing ? "Unfollow" : "Follow"}
                   </button>
 
                   <button
@@ -505,7 +505,7 @@ export default function ProfilePage() {
                     fontSize: 13,
                   }}
                 >
-                  {showEdit ? "Fermer" : "Modifier mon profil"}
+                  {showEdit ? "Close" : "Edit my profile"}
                 </button>
               )}
             </div>
@@ -535,7 +535,7 @@ export default function ProfilePage() {
               letterSpacing: "0.4px",
             }}
           >
-            Comptes de jeu
+            Game accounts
           </h2>
 
           {myId === id && (
@@ -553,14 +553,14 @@ export default function ProfilePage() {
                 fontSize: 13,
               }}
             >
-              ➕ Ajouter un compte de jeu
+              ➕ Add a game account
             </Link>
           )}
 
           {loadingGames ? (
-            <p>Chargement...</p>
+            <p>Loading...</p>
           ) : gameAccounts.length === 0 ? (
-            <p>Aucun compte ajouté.</p>
+            <p>No account added.</p>
           ) : (
             <div
               style={{
@@ -631,22 +631,22 @@ export default function ProfilePage() {
                                 "1px solid rgba(120,120,180,0.6)",
                             }}
                           >
-                            {acc.platform || "Plateforme"}
+                            {acc.platform || "Platform"}
                           </span>
                         </div>
 
                         <p style={{ marginTop: 6, fontSize: 15 }}>
-                          <b>Pseudo : </b> {acc.username}
+                          <b>Username: </b> {acc.username}
                         </p>
 
                         <p style={{ marginTop: 4, fontSize: 13 }}>
                           {acc.verified ? (
                             <span style={{ color: "lightgreen" }}>
-                              ✔ Compte vérifié
+                              ✔ Verified account
                             </span>
                           ) : (
                             <span style={{ color: "orange" }}>
-                              ⚠ Non vérifié
+                              ⚠ Not verified
                             </span>
                           )}
                         </p>
@@ -673,7 +673,7 @@ export default function ProfilePage() {
                                 cursor: "pointer",
                               }}
                             >
-                              ✏ Modifier
+                              ✏ Edit
                             </button>
 
                             {!acc.verified && (
@@ -689,11 +689,11 @@ export default function ProfilePage() {
                                   cursor: "pointer",
                                 }}
                               >
-                                ✔ Vérifier
+                                ✔ Verify
                               </button>
                             )}
 
-                            <button
+                                                       <button
                               onClick={() => deleteAccount(acc.id)}
                               style={{
                                 padding: "6px 10px",
@@ -705,7 +705,7 @@ export default function ProfilePage() {
                                 cursor: "pointer",
                               }}
                             >
-                              🗑 Supprimer
+                              🗑 Delete
                             </button>
                           </div>
                         )}
@@ -722,7 +722,7 @@ export default function ProfilePage() {
                           }}
                         >
                           <div style={{ flex: 1 }}>
-                            <label style={{ fontSize: 12 }}>Jeu</label>
+                            <label style={{ fontSize: 12 }}>Game</label>
                             <select
                               value={editGame}
                               onChange={(e) =>
@@ -758,7 +758,7 @@ export default function ProfilePage() {
 
                           <div style={{ flex: 1 }}>
                             <label style={{ fontSize: 12 }}>
-                              Plateforme
+                              Platform
                             </label>
                             <select
                               value={editPlatform}
@@ -786,7 +786,7 @@ export default function ProfilePage() {
 
                         <div>
                           <label style={{ fontSize: 12 }}>
-                            Pseudo
+                            Username
                           </label>
                           <input
                             type="text"
@@ -828,8 +828,8 @@ export default function ProfilePage() {
                             }}
                           >
                             {savingEdit
-                              ? "Enregistrement..."
-                              : "💾 Enregistrer"}
+                              ? "Saving..."
+                              : "💾 Save"}
                           </button>
 
                           <button
@@ -844,7 +844,7 @@ export default function ProfilePage() {
                               cursor: "pointer",
                             }}
                           >
-                            Annuler
+                            Cancel
                           </button>
                         </div>
                       </div>
@@ -856,7 +856,7 @@ export default function ProfilePage() {
           )}
         </section>
 
-        {/* PERFORMANCES */}
+               {/* PERFORMANCES */}
         <section style={{ marginTop: 40 }}>
           <h2
             style={{
@@ -865,7 +865,7 @@ export default function ProfilePage() {
               letterSpacing: "0.4px",
             }}
           >
-            Performances vérifiables
+            Verifiable performances
           </h2>
           <ProfilePerformances userId={id} myId={myId} />
         </section>
@@ -879,13 +879,13 @@ export default function ProfilePage() {
               letterSpacing: "0.4px",
             }}
           >
-            Publications
+            Posts
           </h2>
 
           {loadingPosts ? (
-            <p>Chargement...</p>
+            <p>Loading...</p>
           ) : userPosts.length === 0 ? (
-            <p>Pas encore de post.</p>
+            <p>No posts yet.</p>
           ) : (
             <div
               style={{
@@ -927,9 +927,9 @@ export default function ProfilePage() {
                       color: "rgba(220,220,235,0.72)",
                     }}
                   >
-                    <span>{post.game || "Jeu non précisé"}</span>
+                    <span>{post.game || "Unspecified game"}</span>
                     <span>
-                      {new Date(post.created_at).toLocaleString("fr-FR", {
+                      {new Date(post.created_at).toLocaleString("en-US", {
                         dateStyle: "short",
                         timeStyle: "short",
                       })}

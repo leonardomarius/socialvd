@@ -97,7 +97,7 @@ export default function EditProfileForm({
 
       setAvatarUrl(data.publicUrl);
     } catch (error) {
-      console.error("Erreur upload avatar:", error);
+      console.error("Avatar upload error:", error);
     } finally {
       setUploading(false);
     }
@@ -117,7 +117,7 @@ export default function EditProfileForm({
       .eq("id", userId);
 
     if (!error) {
-      alert("Profil mis à jour !");
+      alert("Profile updated!");
       onUpdated();
     }
   };
@@ -131,7 +131,7 @@ export default function EditProfileForm({
 
     // 🚫 LIMITATION À 4 PERFORMANCES
     if (performances.length >= 4) {
-      alert("Vous ne pouvez poster que 4 performances.");
+      alert("You can only add up to 4 performances.");
       setAdding(false);
       return;
     }
@@ -157,7 +157,7 @@ export default function EditProfileForm({
      Delete performance
   --------------------------------------------- */
   const deletePerformance = async (id: string) => {
-    const ok = confirm("Supprimer cette performance ?");
+    const ok = confirm("Delete this performance?");
     if (!ok) return;
 
     await supabase
@@ -211,7 +211,7 @@ export default function EditProfileForm({
         boxShadow: "0 0 22px rgba(0,0,0,0.4)",
       }}
     >
-      <h2 style={{ marginBottom: 16 }}>Modifier mon profil</h2>
+      <h2 style={{ marginBottom: 16 }}>Edit my profile</h2>
 
       {/* Avatar */}
       {avatarUrl ? (
@@ -235,11 +235,11 @@ export default function EditProfileForm({
       )}
 
       <input type="file" onChange={handleAvatarUpload} />
-      {uploading && <p>Upload en cours...</p>}
+      {uploading && <p>Uploading...</p>}
 
       {/* Pseudo */}
       <div style={{ marginTop: 20 }}>
-        <label>Pseudo</label>
+        <label>Username</label>
         <input
           type="text"
           value={pseudo}
@@ -259,17 +259,17 @@ export default function EditProfileForm({
       </div>
 
       <button onClick={handleSave} style={saveBtn}>
-        Enregistrer
+        Save
       </button>
 
       {/* ---------------------------------------------
           Performances Section
       --------------------------------------------- */}
-      <h2 style={{ marginTop: 40 }}>Performances vérifiables</h2>
+      <h2 style={{ marginTop: 40 }}>Verified performances</h2>
 
       {/* Add performance */}
       <form onSubmit={handleAddPerformance} style={addBox}>
-        <label>Jeu</label>
+        <label>Game</label>
         <input
           type="text"
           value={gameName}
@@ -286,7 +286,7 @@ export default function EditProfileForm({
           required
         />
 
-        <label>Détail (optionnel)</label>
+        <label>Details (optional)</label>
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -294,16 +294,16 @@ export default function EditProfileForm({
         />
 
         <button type="submit" style={saveBtn} disabled={adding}>
-          {adding ? "Ajout..." : "Ajouter"}
+          {adding ? "Adding..." : "Add"}
         </button>
       </form>
 
       {/* List of performances */}
       <div style={{ marginTop: 30, display: "flex", flexDirection: "column", gap: 12 }}>
         {loadingPerf ? (
-          <p>Chargement…</p>
+          <p>Loading…</p>
         ) : performances.length === 0 ? (
-          <p>Aucune performance enregistrée.</p>
+          <p>No performance recorded.</p>
         ) : (
           performances.map((p) => {
             const isEditing = editingId === p.id;
@@ -342,7 +342,7 @@ export default function EditProfileForm({
 
                 {isEditing && (
                   <div>
-                    <label>Jeu</label>
+                    <label>Game</label>
                     <input
                       value={editGameName}
                       onChange={(e) => setEditGameName(e.target.value)}
@@ -356,7 +356,7 @@ export default function EditProfileForm({
                       style={inputField}
                     />
 
-                    <label>Détail</label>
+                    <label>Details</label>
                     <input
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
@@ -365,10 +365,10 @@ export default function EditProfileForm({
 
                     <div style={{ display: "flex", gap: 10 }}>
                       <button onClick={saveEdit} style={saveBtn}>
-                        Enregistrer
+                        Save
                       </button>
                       <button onClick={() => setEditingId(null)} style={cancelBtn}>
-                        Annuler
+                        Cancel
                       </button>
                     </div>
                   </div>
