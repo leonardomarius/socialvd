@@ -64,7 +64,8 @@ export default function FeedPage() {
   const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);
 
   // Modal de confirmation de suppression de post
-  const [confirmDeletePostId, setConfirmDeletePostId] = useState<string | null>(null);
+  const [confirmDeletePostId, setConfirmDeletePostId] =
+    useState<string | null>(null);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -116,7 +117,7 @@ export default function FeedPage() {
     };
 
     loadSession();
-  }, []);
+  }, [router]);
 
   // -----------------------------------------------------
   // Charger posts + commentaires
@@ -155,7 +156,10 @@ export default function FeedPage() {
   // -----------------------------------------------------
   // Upload media
   // -----------------------------------------------------
-  const uploadMedia = async (): Promise<{ url: string | null; type: string | null }> => {
+  const uploadMedia = async (): Promise<{
+    url: string | null;
+    type: string | null;
+  }> => {
     if (!mediaFile) return { url: null, type: null };
 
     const ext = mediaFile.name.split(".").pop();
@@ -204,7 +208,7 @@ export default function FeedPage() {
     }
   };
 
-   // -----------------------------------------------------
+  // -----------------------------------------------------
   // Create a post
   // -----------------------------------------------------
   const handleCreatePost = async () => {
@@ -235,189 +239,183 @@ export default function FeedPage() {
     loadAllData();
   };
 
+  // -----------------------------------------------------
+  // Add a comment + Notification
+  // -----------------------------------------------------
+  const handleAddComment = async (postId: string) => {
+    const content = newComments[postId];
+    if (!content) return;
 
-// -----------------------------------------------------
-// Add a comment + Notification
-// -----------------------------------------------------
-const handleAddComment = async (postId: string) => {
-  const content = newComments[postId];
-  if (!content) return;
-
-  const { error } = await supabase.from("comments").insert({
-    post_id: postId,
-    content,
-    author_pseudo: pseudo,
-  });
-
-  if (error) {
-    console.error(error);
-    showNotification("Error adding comment", "error");
-    return;
-  }
-
-  // 🔍 Get post author
-  const post = posts.find((p) => p.id === postId);
-
-  // 🛑 Do not notify yourself
-  if (post && post.user_id !== myId) {
-    await supabase.from("notifications").insert({
-      user_id: post.user_id,
-      from_user_id: myId,
-      type: "comment",
+    const { error } = await supabase.from("comments").insert({
       post_id: postId,
-      message: `${pseudo} commented on your post`,
+      content,
+      author_pseudo: pseudo,
     });
-  }
 
-  setNewComments((prev) => ({ ...prev, [postId]: "" }));
-  showNotification("Comment added");
-  loadAllData();
-};
+    if (error) {
+      console.error(error);
+      showNotification("Error adding comment", "error");
+      return;
+    }
 
+    // 🔍 Get post author
+    const post = posts.find((p) => p.id === postId);
 
-// -----------------------------------------------------
-// Like via RPC + Notification
-// -----------------------------------------------------
-const handleLike = async (postId: string) => {
-  const { error } = await supabase.rpc("toggle_like", { p_post_id: postId });
+    // 🛑 Do not notify yourself
+    if (post && post.user_id !== myId) {
+      await supabase.from("notifications").insert({
+        user_id: post.user_id,
+        from_user_id: myId,
+        type: "comment",
+        post_id: postId,
+        message: `${pseudo} commented on your post`,
+      });
+    }
 
-  if (error) {
-    console.error(error);
-    showNotification("Error while liking", "error");
-    return;
-  }
+    setNewComments((prev) => ({ ...prev, [postId]: "" }));
+    showNotification("Comment added");
+    loadAllData();
+  };
 
-  // 🔍 Find liked post
-  const post = posts.find((p) => p.id === postId);
+  // -----------------------------------------------------
+  // Like via RPC + Notification
+  // -----------------------------------------------------
+  const handleLike = async (postId: string) => {
+    const { error } = await supabase.rpc("toggle_like", { p_post_id: postId });
 
-  // 🛑 Do not notify yourself
-  if (post && post.user_id !== myId) {
-    await supabase.from("notifications").insert({
-      user_id: post.user_id,     // recipient
-      from_user_id: myId,        // you
-      type: "like",
-      post_id: postId,
-      message: `${pseudo} liked your post`,
-    });
-  }
+    if (error) {
+      console.error(error);
+      showNotification("Error while liking", "error");
+      return;
+    }
 
-  loadAllData();
-};
+    // 🔍 Find liked post
+    const post = posts.find((p) => p.id === postId);
 
+    // 🛑 Do not notify yourself
+    if (post && post.user_id !== myId) {
+      await supabase.from("notifications").insert({
+        user_id: post.user_id, // recipient
+        from_user_id: myId, // you
+        type: "like",
+        post_id: postId,
+        message: `${pseudo} liked your post`,
+      });
+    }
 
-// -----------------------------------------------------
-// Delete comment
-// -----------------------------------------------------
-const handleDeleteComment = async (commentId: string) => {
-  const { error } = await supabase
-    .from("comments")
-    .delete()
-    .eq("id", commentId);
+    loadAllData();
+  };
 
-  if (error) {
-    console.error(error);
-    showNotification("Error deleting comment", "error");
-    return;
-  }
+  // -----------------------------------------------------
+  // Delete comment
+  // -----------------------------------------------------
+  const handleDeleteComment = async (commentId: string) => {
+    const { error } = await supabase
+      .from("comments")
+      .delete()
+      .eq("id", commentId);
 
-  setComments((prev) => prev.filter((c) => c.id !== commentId));
-  showNotification("Comment deleted");
-};
+    if (error) {
+      console.error(error);
+      showNotification("Error deleting comment", "error");
+      return;
+    }
 
+    setComments((prev) => prev.filter((c) => c.id !== commentId));
+    showNotification("Comment deleted");
+  };
 
-// -----------------------------------------------------
-// Ask delete confirmation for post
-// -----------------------------------------------------
-const requestDeletePost = (postId: string) => {
-  setConfirmDeletePostId(postId);
-  setOpenMenuPostId(null);
-};
+  // -----------------------------------------------------
+  // Ask delete confirmation for post
+  // -----------------------------------------------------
+  const requestDeletePost = (postId: string) => {
+    setConfirmDeletePostId(postId);
+    setOpenMenuPostId(null);
+  };
 
+  // -----------------------------------------------------
+  // Confirm delete post
+  // -----------------------------------------------------
+  const handleConfirmDeletePost = async () => {
+    if (!confirmDeletePostId || !myId) return;
 
-// -----------------------------------------------------
-// Confirm delete post
-// -----------------------------------------------------
-const handleConfirmDeletePost = async () => {
-  if (!confirmDeletePostId || !myId) return;
+    const post = posts.find((p) => p.id === confirmDeletePostId);
+    const mediaUrl = post?.media_url || null;
 
-  const post = posts.find((p) => p.id === confirmDeletePostId);
-  const mediaUrl = post?.media_url || null;
+    if (mediaUrl) {
+      await deleteMediaFile(mediaUrl);
+    }
 
-  if (mediaUrl) {
-    await deleteMediaFile(mediaUrl);
-  }
+    const { error } = await supabase
+      .from("posts")
+      .delete()
+      .eq("id", confirmDeletePostId)
+      .eq("user_id", myId);
 
-  const { error } = await supabase
-    .from("posts")
-    .delete()
-    .eq("id", confirmDeletePostId)
-    .eq("user_id", myId);
+    if (error) {
+      console.error("Error deleting post:", error);
+      showNotification("Error deleting post", "error");
+      return;
+    }
 
-  if (error) {
-    console.error("Error deleting post:", error);
-    showNotification("Error deleting post", "error");
-    return;
-  }
+    setPosts((prev) => prev.filter((p) => p.id !== confirmDeletePostId));
+    setConfirmDeletePostId(null);
+    showNotification("Post deleted");
+  };
 
-  setPosts((prev) => prev.filter((p) => p.id !== confirmDeletePostId));
-  setConfirmDeletePostId(null);
-  showNotification("Post deleted");
-};
+  const handleCancelDeletePost = () => {
+    setConfirmDeletePostId(null);
+  };
 
-const handleCancelDeletePost = () => {
-  setConfirmDeletePostId(null);
-};
+  // -----------------------------------------------------
+  // Edit post
+  // -----------------------------------------------------
+  const handleStartEditPost = (post: Post) => {
+    setEditingPostId(post.id);
+    setEditContent(post.content);
+    setEditGame(post.game || "");
+    setOpenMenuPostId(null);
+  };
 
+  const handleCancelEditPost = () => {
+    setEditingPostId(null);
+    setEditContent("");
+    setEditGame("");
+  };
 
-// -----------------------------------------------------
-// Edit post
-// -----------------------------------------------------
-const handleStartEditPost = (post: Post) => {
-  setEditingPostId(post.id);
-  setEditContent(post.content);
-  setEditGame(post.game || "");
-  setOpenMenuPostId(null);
-};
+  const handleSaveEditPost = async () => {
+    if (!editingPostId || !myId || !editContent.trim()) return;
 
-const handleCancelEditPost = () => {
-  setEditingPostId(null);
-  setEditContent("");
-  setEditGame("");
-};
+    const { error } = await supabase
+      .from("posts")
+      .update({
+        content: editContent,
+        game: editGame || null,
+      })
+      .eq("id", editingPostId)
+      .eq("user_id", myId);
 
-const handleSaveEditPost = async () => {
-  if (!editingPostId || !myId || !editContent.trim()) return;
+    if (error) {
+      console.error("Error editing post:", error);
+      showNotification("Error editing post", "error");
+      return;
+    }
 
-  const { error } = await supabase
-    .from("posts")
-    .update({
-      content: editContent,
-      game: editGame || null,
-    })
-    .eq("id", editingPostId)
-    .eq("user_id", myId);
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === editingPostId
+          ? { ...p, content: editContent, game: editGame || null }
+          : p
+      )
+    );
 
-  if (error) {
-    console.error("Error editing post:", error);
-    showNotification("Error editing post", "error");
-    return;
-  }
+    setEditingPostId(null);
+    setEditContent("");
+    setEditGame("");
+    showNotification("Post updated");
+  };
 
-  setPosts((prev) =>
-    prev.map((p) =>
-      p.id === editingPostId
-        ? { ...p, content: editContent, game: editGame || null }
-        : p
-    )
-  );
-
-  setEditingPostId(null);
-  setEditContent("");
-  setEditGame("");
-  showNotification("Post updated");
-};
-
-   // -----------------------------------------------------
+  // -----------------------------------------------------
   // RENDER
   // -----------------------------------------------------
   return (
@@ -494,7 +492,7 @@ const handleSaveEditPost = async () => {
                   <div>
                     <Link
                       href={`/profile/${post.user_id}`}
-                      className="post-author"
+                      className="post-author username-display"
                     >
                       {post.author_pseudo}
                     </Link>
@@ -615,7 +613,11 @@ const handleSaveEditPost = async () => {
                   return (
                     <div key={c.id} className="comment-row">
                       <p className="comment-text">
-                        <strong>{c.author_pseudo} :</strong> {c.content}
+                        <span className="comment-author username-small">
+                          {c.author_pseudo}
+                        </span>
+                        <span className="comment-separator"> · </span>
+                        <span>{c.content}</span>
                       </p>
                       {canDelete && (
                         <button
@@ -655,342 +657,350 @@ const handleSaveEditPost = async () => {
         })}
       </div>
 
-     {/* DELETE POST MODAL */}
-{confirmDeletePostId && (
-  <div className="modal-backdrop">
-    <div className="modal-card">
-      <h3>Delete this post?</h3>
-      <p className="modal-text">
-        This action is permanent. The attached media will also be removed.
-      </p>
-      <div className="modal-actions">
-        <button
-          className="btn ghost-btn"
-          onClick={handleCancelDeletePost}
-        >
-          Cancel
-        </button>
-        <button
-          className="btn danger-btn"
-          onClick={handleConfirmDeletePost}
-        >
-          Delete
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
+      {/* DELETE POST MODAL */}
+      {confirmDeletePostId && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <h3>Delete this post?</h3>
+            <p className="modal-text">
+              This action is permanent. The attached media will also be removed.
+            </p>
+            <div className="modal-actions">
+              <button className="btn ghost-btn" onClick={handleCancelDeletePost}>
+                Cancel
+              </button>
+              <button
+                className="btn danger-btn"
+                onClick={handleConfirmDeletePost}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* STYLES */}
       <style jsx>{`
+        /********************************************
+         * FEED CONTAINER
+         ********************************************/
         .feed-container {
-          padding: 24px;
+          padding: 26px;
           max-width: 720px;
           margin: 0 auto;
-          color: #f5f5f5;
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-            sans-serif;
+          color: #f4f5ff;
         }
 
         .feed-title {
-          margin-bottom: 20px;
-          font-size: 1.5rem;
+          margin-bottom: 24px;
+          font-size: 1.6rem;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-shadow: 0 0 4px rgba(140, 160, 255, 0.2);
+        }
+
+        /********************************************
+         * CARD BASE  –  style « Neon Soft Hybrid »
+         ********************************************/
+        .card {
+          background: rgba(10, 10, 18, 0.65);
+          border-radius: 18px;
+          border: 1px solid rgba(95, 115, 200, 0.18);
+          padding: 18px 22px;
+          margin-bottom: 26px;
+          backdrop-filter: blur(16px);
+          box-shadow: 0 0 18px rgba(40, 80, 255, 0.12);
+          transition: 0.22s ease;
+        }
+
+        .card:hover {
+          border-color: rgba(130, 150, 255, 0.26);
+          box-shadow: 0 0 26px rgba(90, 120, 255, 0.18);
+          transform: translateY(-2px);
+        }
+
+        /* Create Post card – léger accent */
+        .card-create {
+          background:
+            radial-gradient(
+              circle at top left,
+              rgba(120, 140, 255, 0.22),
+              transparent 55%
+            ),
+            rgba(10, 10, 18, 0.75);
+        }
+
+        .card-title {
+          margin-bottom: 14px;
+          font-size: 1rem;
           font-weight: 600;
           letter-spacing: 0.03em;
         }
 
-        .card {
-          background: rgba(10, 10, 12, 0.9);
-          border-radius: 18px;
-          border: 1px solid rgba(120, 120, 140, 0.28);
-          padding: 16px 18px;
-          margin-bottom: 18px;
-          backdrop-filter: blur(12px);
-          box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
-        }
-
-        .card-create {
-          background: radial-gradient(
-              circle at top left,
-              rgba(120, 120, 255, 0.18),
-              transparent 55%
-            ),
-            rgba(10, 10, 14, 0.95);
-        }
-
-        .card-title {
-          margin-bottom: 10px;
-          font-size: 1rem;
-          font-weight: 500;
-        }
-
+        /********************************************
+         * INPUTS + TEXTAREA (version feed)
+         ********************************************/
         .input,
         .textarea {
           width: 100%;
-          background: rgba(20, 20, 30, 0.9);
-          border-radius: 10px;
-          border: 1px solid rgba(80, 80, 110, 0.6);
-          color: #f3f3f3;
-          padding: 8px 10px;
-          font-size: 0.9rem;
+          background: rgba(18, 20, 32, 0.92);
+          border-radius: 12px;
+          border: 1px solid rgba(80, 90, 130, 0.7);
+          color: #f4f6ff;
+          padding: 10px 13px;
+          font-size: 0.92rem;
           outline: none;
-          transition: border-color 0.16s ease, background 0.16s ease,
-            box-shadow 0.16s ease, transform 0.08s ease;
+          transition: 0.18s ease;
+        }
+
+        .input::placeholder,
+        .textarea::placeholder {
+          color: #7a7f90;
         }
 
         .input:focus,
         .textarea:focus {
-          border-color: rgba(140, 140, 255, 0.9);
-          box-shadow: 0 0 0 1px rgba(140, 140, 255, 0.3);
-          background: rgba(24, 24, 40, 0.95);
-          transform: translateY(-0.5px);
+          border-color: rgba(150, 170, 255, 0.95);
+          background: rgba(20, 22, 36, 0.94);
+          box-shadow: 0 0 0 1px rgba(150, 170, 255, 0.3);
+          transform: translateY(-1px);
         }
 
         .textarea {
           resize: vertical;
         }
 
+        /********************************************
+         * FILE UPLOAD LABEL
+         ********************************************/
         .file-label {
-          display: inline-flex;
+          display: flex;
           align-items: center;
-          justify-content: space-between;
-          margin-bottom: 12px;
-          padding: 8px 10px;
+          gap: 8px;
+          padding: 10px 12px;
+          margin: 12px 0;
+          border-radius: 12px;
+          border: 1px dashed rgba(110, 120, 170, 0.7);
+          background: rgba(18, 20, 34, 0.95);
+          color: #d6d9ff;
           font-size: 0.85rem;
-          border-radius: 10px;
-          background: rgba(22, 22, 32, 0.9);
-          border: 1px dashed rgba(90, 90, 120, 0.7);
-          color: #c7c7d8;
           cursor: pointer;
-          transition: border-color 0.16s ease, background 0.16s ease,
-            transform 0.08s ease;
+          transition: 0.18s ease;
         }
 
         .file-label:hover {
-          border-color: rgba(150, 150, 255, 0.9);
-          background: rgba(26, 26, 40, 0.95);
-          transform: translateY(-0.5px);
+          border-color: rgba(160, 180, 255, 0.95);
+          background: rgba(24, 26, 46, 0.98);
+          transform: translateY(-1px);
         }
 
         .file-label input {
           display: none;
         }
 
+        /********************************************
+         * BUTTONS – primary / ghost / danger
+         ********************************************/
         .btn {
-          border-radius: 999px;
-          border: 1px solid transparent;
-          padding: 7px 16px;
-          font-size: 0.85rem;
-          cursor: pointer;
-          transition: background 0.16s ease, transform 0.08s ease,
-            box-shadow 0.16s ease, border-color 0.16s ease;
           display: inline-flex;
           align-items: center;
-          justify-content: center;
           gap: 6px;
+          padding: 8px 20px;
+          border-radius: 999px;
+          border: 1px solid transparent;
+          font-size: 0.88rem;
+          cursor: pointer;
+          transition: 0.16s ease;
         }
 
         .primary-btn {
           background: linear-gradient(
             135deg,
-            rgba(130, 130, 255, 0.95),
-            rgba(100, 170, 255, 0.95)
+            rgba(130, 150, 255, 0.97),
+            rgba(100, 170, 255, 0.97)
           );
-          color: #050509;
-          font-weight: 500;
-          box-shadow: 0 8px 20px rgba(80, 120, 255, 0.45);
+          color: #050513;
+          font-weight: 600;
+          box-shadow: 0 10px 24px rgba(80, 120, 255, 0.45);
         }
 
         .primary-btn:hover {
           transform: translateY(-1px);
-          box-shadow: 0 12px 30px rgba(80, 120, 255, 0.6);
+          box-shadow: 0 14px 28px rgba(80, 120, 255, 0.55);
         }
 
         .ghost-btn {
-          background: transparent;
-          border-color: rgba(110, 110, 135, 0.7);
-          color: #d0d0e0;
+          background: rgba(15, 16, 26, 0.92);
+          border-color: rgba(90, 100, 140, 0.85);
+          color: #e0e2ff;
         }
 
         .ghost-btn:hover {
-          background: rgba(24, 24, 36, 0.95);
-          border-color: rgba(140, 140, 255, 0.9);
+          background: rgba(26, 28, 46, 0.96);
+          border-color: rgba(150, 160, 255, 0.95);
         }
 
         .danger-btn {
-          background: radial-gradient(
-              circle at top left,
-              rgba(255, 120, 120, 0.19),
-              transparent 50%
-            ),
-            rgba(70, 16, 24, 0.98);
-          border-color: rgba(235, 80, 90, 0.9);
-          color: #ffe9ef;
+          background: rgba(50, 14, 22, 0.98);
+          border-color: rgba(220, 80, 110, 0.8);
+          color: #ffdbe6;
         }
 
         .danger-btn:hover {
-          box-shadow: 0 10px 22px rgba(255, 80, 110, 0.6);
+          background: rgba(70, 18, 30, 0.98);
+          border-color: rgba(250, 110, 140, 0.95);
+          box-shadow: 0 10px 22px rgba(255, 80, 110, 0.55);
           transform: translateY(-1px);
         }
 
-        .post-card {
-          position: relative;
-        }
-
+        /********************************************
+         * AVATAR & POST HEADER
+         ********************************************/
         .post-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
         }
 
         .post-user {
           display: flex;
-          gap: 10px;
+          gap: 12px;
           align-items: center;
         }
 
         .avatar {
-          width: 44px;
-          height: 44px;
-          border-radius: 999px;
+          width: 46px;
+          height: 46px;
           object-fit: cover;
-          border: 1px solid rgba(140, 140, 180, 0.7);
+          border-radius: 999px;
+          border: 1px solid rgba(130, 140, 200, 0.85);
+          box-shadow: 0 0 8px rgba(45, 70, 130, 0.4);
         }
 
         .post-author {
           font-size: 0.95rem;
-          font-weight: 500;
-          color: #f3f3ff;
+          font-weight: 600;
           text-decoration: none;
+          color: #eff1ff;
         }
 
         .post-author:hover {
-          text-decoration: underline;
-        }
+  text-decoration: none !important;
+}
 
         .post-game {
-          font-size: 0.75rem;
-          color: #9a9ab8;
+          margin-top: 1px;
+          font-size: 0.78rem;
+          opacity: 0.75;
+          color: #b8baf2;
         }
 
+        /********************************************
+         * POST CONTENT / MEDIA
+         ********************************************/
         .post-content {
-          margin-top: 10px;
+          margin-top: 12px;
           font-size: 0.95rem;
-          line-height: 1.5;
-          color: #e2e2f2;
+          line-height: 1.55;
+          color: #e7e8ff;
         }
 
         .post-edit-block {
-          margin-top: 10px;
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          gap: 10px;
+          margin-top: 12px;
         }
 
         .edit-actions {
           display: flex;
           gap: 8px;
-          margin-top: 4px;
+          margin-top: 5px;
         }
 
         .post-media {
           width: 100%;
+          margin-top: 12px;
           border-radius: 14px;
-          margin-top: 10px;
-          border: 1px solid rgba(80, 80, 110, 0.7);
+          border: 1px solid rgba(100, 110, 170, 0.75);
+          box-shadow: 0 12px 26px rgba(0, 0, 0, 0.55);
         }
 
+        /********************************************
+         * ACTIONS : like / comment
+         ********************************************/
         .post-actions {
-          margin-top: 10px;
+          margin-top: 14px;
           display: flex;
           align-items: center;
           justify-content: space-between;
         }
 
         .icon-button {
-          border: none;
           background: transparent;
-          cursor: pointer;
-          padding: 4px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
+          border: none;
+          padding: 5px;
           border-radius: 999px;
-          transition: background 0.12s ease, transform 0.08s ease;
+          cursor: pointer;
+          transition: 0.12s ease;
         }
 
         .icon-button:hover {
-          background: rgba(50, 50, 70, 0.6);
-          transform: translateY(-0.5px);
+          background: rgba(40, 40, 70, 0.6);
+          transform: translateY(-1px);
         }
 
         .icon-button.small {
           padding: 3px;
         }
 
-        .icon-20 {
-          width: 20px;
-          height: 20px;
-        }
-
-        .icon-18 {
-          width: 18px;
-          height: 18px;
-        }
-
-        .icon-16 {
-          width: 16px;
-          height: 16px;
-        }
-
-        .icon-14 {
-          width: 14px;
-          height: 14px;
-        }
-
         .icon-text-button {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          padding: 6px 12px;
+          padding: 7px 14px;
           border-radius: 999px;
-          background: rgba(24, 24, 36, 0.9);
-          border: 1px solid rgba(70, 70, 110, 0.7);
-          color: #dadaf5;
+          background: rgba(20, 22, 34, 0.92);
+          border: 1px solid rgba(95, 115, 180, 0.65);
+          color: #e1e3ff;
           font-size: 0.85rem;
           cursor: pointer;
-          transition: background 0.16s ease, border-color 0.16s ease,
-            transform 0.08s ease;
+          transition: 0.18s ease;
         }
 
         .icon-text-button:hover {
-          background: rgba(34, 34, 50, 0.95);
-          border-color: rgba(140, 140, 255, 0.9);
-          transform: translateY(-0.5px);
+          background: rgba(30, 32, 48, 0.96);
+          border-color: rgba(120, 140, 255, 0.95);
+          box-shadow: 0 0 14px rgba(130, 150, 255, 0.28);
+          transform: translateY(-1px);
         }
 
         .icon-text-inline {
-          display: inline-flex;
+          display: flex;
           align-items: center;
-          gap: 5px;
-          font-size: 0.8rem;
-          color: #8b8ba5;
+          gap: 6px;
+          font-size: 0.82rem;
+          color: #a8a9cc;
         }
 
         .subtle {
-          opacity: 0.7;
+          opacity: 0.75;
         }
 
         .comment-count {
           font-size: 0.8rem;
+          color: #b9bdf4;
         }
 
+        /********************************************
+         * COMMENTS BLOCK
+         ********************************************/
         .comments-block {
           margin-top: 14px;
-          border-top: 1px solid rgba(60, 60, 90, 0.7);
           padding-top: 10px;
+          border-top: 1px solid rgba(65, 65, 100, 0.65);
         }
 
         .comment-row {
@@ -998,28 +1008,39 @@ const handleSaveEditPost = async () => {
           align-items: center;
           justify-content: space-between;
           gap: 8px;
-          margin-bottom: 6px;
+          margin-bottom: 7px;
+          padding: 7px 11px;
+          border-radius: 10px;
+          background: rgba(18, 18, 30, 0.72);
+          border: 1px solid rgba(75, 80, 130, 0.6);
         }
 
         .comment-text {
-          font-size: 0.8rem;
-          color: #d4d4ea;
-          margin: 0;
+          font-size: 0.82rem;
+          color: #d8daff;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .comment-separator {
+          opacity: 0.6;
         }
 
         .danger-text {
-          color: #ff7777;
+          color: #ff8b8b;
         }
 
         .comment-input-row {
-          margin-top: 8px;
+          margin-top: 10px;
           display: flex;
           gap: 8px;
           align-items: center;
         }
 
-        /* Menu options ⋮ */
-
+        /********************************************
+         * MENU ⋮ OPTIONS
+         ********************************************/
         .post-menu-wrapper {
           position: relative;
         }
@@ -1027,17 +1048,17 @@ const handleSaveEditPost = async () => {
         .options-menu {
           position: absolute;
           right: 0;
-          top: 32px;
-          min-width: 150px;
-          background: rgba(18, 18, 28, 0.98);
+          top: 34px;
+          min-width: 155px;
+          background: rgba(14, 14, 26, 0.96);
           border-radius: 14px;
-          border: 1px solid rgba(80, 80, 110, 0.8);
+          border: 1px solid rgba(90, 100, 150, 0.9);
           padding: 6px 0;
           box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
-          animation: fadeInScale 0.14s ease-out;
+          animation: fadeInScale 0.15s ease-out;
           transform-origin: top right;
           backdrop-filter: blur(16px);
-          z-index: 20;
+          z-index: 25;
         }
 
         .options-menu-item {
@@ -1045,57 +1066,58 @@ const handleSaveEditPost = async () => {
           padding: 8px 12px;
           background: transparent;
           border: none;
-          color: #e5e5f5;
+          color: #e8e8ff;
           display: flex;
           align-items: center;
           gap: 8px;
           font-size: 0.85rem;
           cursor: pointer;
-          transition: background 0.14s ease, color 0.14s ease;
+          transition: background 0.15s ease, color 0.15s ease;
         }
 
         .options-menu-item:hover {
-          background: rgba(44, 44, 70, 0.9);
+          background: rgba(44, 44, 70, 0.88);
         }
 
         .options-menu-item.danger {
-          color: #ff9a9a;
+          color: #ffb4b4;
         }
 
         .options-menu-item.danger:hover {
-          background: rgba(70, 20, 30, 0.9);
-          color: #ffe5ea;
+          background: rgba(80, 24, 36, 0.92);
+          color: #ffe5ed;
         }
 
-        /* Notifications */
-
+        /********************************************
+         * NOTIFICATIONS
+         ********************************************/
         .notification {
-          padding: 10px 14px;
+          margin-bottom: 16px;
+          padding: 9px 16px;
           border-radius: 999px;
+          animation: fadeInUp 0.2s ease-out;
+          border: 1px solid transparent;
           font-size: 0.85rem;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          margin-bottom: 16px;
-          border: 1px solid transparent;
-          animation: fadeInUp 0.2s ease-out;
         }
 
         .notif-success {
-          background: rgba(22, 50, 36, 0.95);
-          border-color: rgba(60, 170, 110, 0.9);
-          color: #d2ffea;
+          background: rgba(16, 48, 32, 0.96);
+          border-color: rgba(50, 160, 110, 0.9);
+          color: #d6ffe9;
         }
 
         .notif-error {
-          background: rgba(60, 24, 34, 0.96);
-          border-color: rgba(230, 90, 120, 0.9);
-          color: #ffe0ea;
+          background: rgba(55, 20, 28, 0.96);
+          border-color: rgba(210, 80, 120, 0.9);
+          color: #ffe2eb;
         }
 
-        /* Modal */
-
+        /********************************************
+         * DELETE POST MODAL
+         ********************************************/
         .modal-backdrop {
           position: fixed;
           inset: 0;
@@ -1103,32 +1125,32 @@ const handleSaveEditPost = async () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 40;
           backdrop-filter: blur(8px);
+          z-index: 50;
           animation: fadeIn 0.18s ease-out;
         }
 
         .modal-card {
           background: rgba(10, 10, 18, 0.98);
           border-radius: 18px;
-          padding: 18px 20px;
+          padding: 20px;
           max-width: 360px;
           width: 90%;
-          border: 1px solid rgba(90, 90, 130, 0.8);
-          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8);
+          border: 1px solid rgba(80, 80, 130, 0.8);
           animation: scaleIn 0.18s ease-out;
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
         }
 
         .modal-card h3 {
-          margin: 0 0 8px 0;
+          margin: 0 0 10px 0;
           font-size: 1.05rem;
-          font-weight: 500;
+          font-weight: 600;
         }
 
         .modal-text {
-          font-size: 0.85rem;
-          color: #c5c5dd;
-          margin-bottom: 14px;
+          font-size: 0.86rem;
+          color: #c6c6dd;
+          margin-bottom: 16px;
         }
 
         .modal-actions {
@@ -1137,8 +1159,9 @@ const handleSaveEditPost = async () => {
           gap: 8px;
         }
 
-        /* Animations */
-
+        /********************************************
+         * ANIMATIONS
+         ********************************************/
         @keyframes fadeInScale {
           from {
             opacity: 0;
@@ -1181,20 +1204,15 @@ const handleSaveEditPost = async () => {
           }
         }
 
-        .subtle {
-          opacity: 0.8;
-        }
-
-        .danger-text {
-          color: #ff8888;
-        }
-
-        @media (max-width: 600px) {
+        /********************************************
+         * RESPONSIVE
+         ********************************************/
+        @media (max-width: 650px) {
           .feed-container {
-            padding: 16px;
+            padding: 18px;
           }
           .card {
-            padding: 14px 14px;
+            padding: 16px;
           }
         }
       `}</style>

@@ -6,28 +6,63 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { BellIcon } from "@heroicons/react/24/outline";
 
+type NotificationRow = {
+  id: string;
+  message: string | null;
+  type: string | null;
+  seen: boolean;
+  created_at: string;
+};
+
 export default function Navbar() {
   const router = useRouter();
+
   const [logged, setLogged] = useState<boolean | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
-
-  // Notifications
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  // Mates
-  const [mateRequestsCount, setMateRequestsCount] = useState(0);
-
-  // Messages
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [messagesUnreadCount, setMessagesUnreadCount] = useState(0);
 
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notifRef = useRef<HTMLDivElement | null>(null);
 
-  // -------------------------------------------------------------
-  // MARK AS SEEN
-  // -------------------------------------------------------------
-  const markNotificationsAsSeen = async () => {
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.auth.getUser();
+      const user = data.user;
+
+      if (!user) {
+        setLogged(false);
+        setMyId(null);
+        return;
+      }
+
+      setLogged(true);
+      setMyId(user.id);
+
+      await Promise.all([
+        loadNotifications(user.id),
+        loadNavbarCounts(user.id),
+      ]);
+    };
+
+    load();
+  }, []);
+
+  const loadNotifications = async (userId: string) => {
+    const { data } = await supabase
+      .from("notifications")
+      .select("id, message, type, seen, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(15);
+
+    const rows = (data || []) as NotificationRow[];
+    setNotifications(rows);
+    setUnreadNotifCount(rows.filter((n) => !n.seen).length);
+  };
+
+  const markAllNotificationsAsSeen = async () => {
     if (!myId) return;
 
     await supabase
@@ -36,84 +71,14 @@ export default function Navbar() {
       .eq("user_id", myId)
       .eq("seen", false);
 
-    loadNotifications(myId);
-    setUnreadCount(0);
+    setNotifications((prev) =>
+      prev.map((n) => ({ ...n, seen: true }))
+    );
+
+    setUnreadNotifCount(0);
   };
 
-  // -------------------------------------------------------------
-  // AUTH STATE
-  // -------------------------------------------------------------
-  const refreshAuthState = async () => {
-    const { data } = await supabase.auth.getSession();
-
-    if (data.session?.user) {
-      setLogged(true);
-      setMyId(data.session.user.id);
-      localStorage.setItem("user_id", data.session.user.id);
-
-      setupRealtime(data.session.user.id);
-    } else {
-      setLogged(false);
-      setMyId(null);
-      localStorage.removeItem("user_id");
-    }
-  };
-
-  // OnAuthStateChange
-  useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setLogged(true);
-        setMyId(session.user.id);
-        localStorage.setItem("user_id", session.user.id);
-
-        setupRealtime(session.user.id);
-      } else {
-        setLogged(false);
-        setMyId(null);
-        localStorage.removeItem("user_id");
-      }
-    });
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
-
-  // -------------------------------------------------------------
-  // CLOSE POPOVER OUTSIDE CLICK
-  // -------------------------------------------------------------
-  useEffect(() => {
-    const handleOutside = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setPopoverOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", handleOutside);
-    return () => window.removeEventListener("mousedown", handleOutside);
-  }, []);
-
-  // -------------------------------------------------------------
-  // LOAD NOTIFICATIONS
-  // -------------------------------------------------------------
-  const loadNotifications = async (userId: string) => {
-    const { data } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(15);
-
-    setNotifications(data || []);
-    const unread = (data || []).filter((n) => !n.seen).length;
-    setUnreadCount(unread);
-  };
-
-  // -------------------------------------------------------------
-  // NAVBAR COUNTS
-  // -------------------------------------------------------------
   const loadNavbarCounts = async (userId: string) => {
-    // Messages
     const { data: conversations } = await supabase
       .from("conversations_users")
       .select("conversation_id")
@@ -121,330 +86,348 @@ export default function Navbar() {
 
     const convIds = conversations?.map((c) => c.conversation_id) || [];
 
-    if (convIds.length === 0) {
+    if (!convIds.length) {
       setMessagesUnreadCount(0);
-    } else {
-      const { count: unreadMessages } = await supabase
-        .from("messages")
-        .select("*", { count: "exact", head: true })
-        .in("conversation_id", convIds)
-        .neq("sender_id", userId)
-        .eq("seen", false);
-
-      setMessagesUnreadCount(unreadMessages || 0);
+      return;
     }
 
-    // Mate requests
-    const { count: mateRequests } = await supabase
-      .from("mate_requests")
+    const { count: unreadMessages } = await supabase
+      .from("messages")
       .select("*", { count: "exact", head: true })
-      .eq("receiver_id", userId)
-      .eq("status", "pending");
+      .in("conversation_id", convIds)
+      .neq("sender_id", userId)
+      .eq("seen", false);
 
-    setMateRequestsCount(mateRequests || 0);
+    setMessagesUnreadCount(unreadMessages || 0);
   };
 
-  // -------------------------------------------------------------
-  // REALTIME — notifications + messages + mate_requests
-  // -------------------------------------------------------------
-  const setupRealtime = (userId: string) => {
-    console.log("📡 Realtime activated for:", userId);
-
-    supabase
-      .channel(`navbar-realtime-${userId}`)
-
-      // Messages
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "messages" },
-        () => loadNavbarCounts(userId)
-      )
-
-      // Mate requests
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "mate_requests" },
-        () => loadNavbarCounts(userId)
-      )
-
-      // Notifications
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-        },
-        (payload) => {
-          console.log("🔔 realtime notifications change:", payload);
-          loadNotifications(userId);
-        }
-      )
-
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log("🔄 Realtime SUBSCRIBED for", userId);
-        }
-      });
-  };
-
-  // -------------------------------------------------------------
-  // INITIAL AUTH LOAD
-  // -------------------------------------------------------------
-  useEffect(() => {
-    (async () => {
-      await refreshAuthState();
-    })();
-
-    const handler = () => refreshAuthState();
-    window.addEventListener("authChanged", handler);
-
-    return () => window.removeEventListener("authChanged", handler);
-  }, []);
-
-  // -------------------------------------------------------------
-  // LOAD COUNTERS & NOTIFS WHEN myId AVAILABLE
-  // -------------------------------------------------------------
-  useEffect(() => {
-    if (!myId) return;
-
-    loadNotifications(myId);
-    loadNavbarCounts(myId);
-  }, [myId]);
-
-  // -------------------------------------------------------------
-  // LOGOUT
-  // -------------------------------------------------------------
-  const logout = async () => {
+  const handleLogout = async () => {
     await supabase.auth.signOut();
-    localStorage.removeItem("user_id");
-
-    window.dispatchEvent(new Event("authChanged"));
     router.push("/login");
   };
 
-  if (logged === null) return null;
+  // close dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!notifRef.current) return;
+      if (!notifRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
 
-  // -------------------------------------------------------------
-  // RENDER
-  // -------------------------------------------------------------
+    if (showNotifications) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+
+    return () =>
+      document.removeEventListener("mousedown", handleClickOutside);
+  }, [showNotifications]);
+
   return (
-    <nav
-      style={{
-        width: "100%",
-        padding: "15px 30px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        position: "sticky",
-        top: 0,
-        zIndex: 1000,
-        background: "rgba(0, 0, 0, 0.45)",
-        backdropFilter: "blur(12px)",
-        borderBottom: "1px solid rgba(255, 255, 255, 0.15)",
-      }}
-    >
-      {/* Logo */}
-      <Link href="/feed" style={{ color: "white", fontSize: 22, fontWeight: 700 }}>
-        SocialVD
-      </Link>
+    <>
+      <nav className="navbar-glass">
+        <div className="nav-inner">
 
-      {/* Middle links */}
-      {logged && (
-        <div style={{ display: "flex", gap: 30 }}>
-          <Link href="/feed" style={{ color: "white" }}>
-            News Feed
-          </Link>
-          <Link href="/explore" style={{ color: "white" }}>
-            Explore
-          </Link>
-        </div>
-      )}
+          {/* LEFT SIDE */}
+          <div className="nav-left">
+            <Link href="/feed" className="nav-btn logo-btn">
+              SocialVD
+            </Link>
 
-      {/* Right side */}
-      <div style={{ display: "flex", gap: 15, alignItems: "center" }}>
-        {logged && myId && (
-          <>
-            {/* 🔔 Notifications */}
-            <div style={{ position: "relative" }} ref={popoverRef}>
-              <button
-                onClick={() => {
-                  const newState = !popoverOpen;
-                  setPopoverOpen(newState);
+            <Link href="/feed" className="nav-btn">
+              News Feed
+            </Link>
 
-                  if (!popoverOpen) {
-                    markNotificationsAsSeen();
-                  }
-                }}
-                style={{
-                  background: "rgba(255,255,255,0.08)",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  padding: 8,
-                  borderRadius: "50%",
-                }}
-              >
-                <BellIcon width={24} height={24} color="white" />
+            <Link href="/explore" className="nav-btn">
+              Explore
+            </Link>
+          </div>
 
-                {unreadCount > 0 && (
-                  <span
-                    style={{
-                      position: "absolute",
-                      top: -2,
-                      right: -2,
-                      background: "red",
-                      color: "white",
-                      fontSize: 11,
-                      padding: "2px 5px",
-                      borderRadius: 999,
-                      fontWeight: 700,
-                    }}
+          {/* RIGHT SIDE */}
+          <div className="nav-right">
+            {logged && (
+              <>
+                {/* Notification Bell */}
+                <div className="notif-wrapper" ref={notifRef}>
+                  <button
+                    className="nav-btn icon-btn"
+                    onClick={() =>
+                      setShowNotifications((s) => !s)
+                    }
                   >
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
+                    <BellIcon className="icon-20" />
+                    {unreadNotifCount > 0 && (
+                      <span className="notif-dot">
+                        {unreadNotifCount}
+                      </span>
+                    )}
+                  </button>
 
-              {popoverOpen && (
-                <div
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: 45,
-                    width: 280,
-                    background: "rgba(20,20,26,0.92)",
-                    backdropFilter: "blur(16px)",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.15)",
-                    padding: "10px 0",
-                    boxShadow: "0 8px 28px rgba(0,0,0,0.55)",
-                  }}
-                >
-                  <div style={{ padding: "6px 14px", fontSize: 14, opacity: 0.7 }}>
-                    Notifications
-                  </div>
+                  {showNotifications && (
+                    <div className="notif-dropdown">
+                      <div className="notif-header">
+                        <span>Notifications</span>
+                        {unreadNotifCount === 0 && (
+                          <span className="notif-subtitle">
+                            All caught up
+                          </span>
+                        )}
+                      </div>
 
-                  {notifications.length === 0 && (
-                    <div style={{ padding: 14, color: "#ccc", fontSize: 14 }}>
-                      No notifications
+                      <div className="notif-list">
+                        {notifications.length === 0 && (
+                          <p className="notif-empty">No notifications yet.</p>
+                        )}
+
+                        {notifications.map((n) => (
+                          <div
+                            key={n.id}
+                            className={`notif-row ${
+                              n.seen
+                                ? "notif-seen"
+                                : "notif-unseen"
+                            }`}
+                          >
+                            <p className="notif-text">
+                              {n.message ||
+                                "New activity on your account"}
+                            </p>
+                            <span className="notif-type">{n.type}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-
-                  {notifications.slice(0, 6).map((notif) => (
-                    <div
-                      key={notif.id}
-                      style={{
-                        padding: "10px 14px",
-                        fontSize: 14,
-                        borderBottom: "1px solid rgba(255,255,255,0.07)",
-                        background: notif.seen
-                          ? "transparent"
-                          : "rgba(255,255,255,0.05)",
-                      }}
-                    >
-                      {notif.message}
-                    </div>
-                  ))}
-
-                  <Link
-                    href="/notifications"
-                    style={{
-                      display: "block",
-                      padding: 12,
-                      textAlign: "center",
-                      fontSize: 14,
-                      color: "#9bb7ff",
-                    }}
-                  >
-                    View all
-                  </Link>
                 </div>
-              )}
-            </div>
 
-            {/* 💬 Messages */}
-            <Link href="/messages">
-              <button
-                style={{
-                  position: "relative",
-                  background: "rgba(255,255,255,0.1)",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  padding: "8px 14px",
-                  borderRadius: 6,
-                  color: "white",
-                }}
-              >
-                Messages
+                {/* Messages */}
+                <Link href="/messages" className="nav-btn">
+                  Messages
+                  {messagesUnreadCount > 0 && (
+                    <span className="notif-dot">
+                      {messagesUnreadCount}
+                    </span>
+                  )}
+                </Link>
 
-                {messagesUnreadCount > 0 && (
-                  <span
-                    style={{
-                      position: "absolute",
-                      top: -4,
-                      right: -4,
-                      background: "red",
-                      color: "white",
-                      fontSize: 11,
-                      padding: "2px 6px",
-                      borderRadius: 999,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {messagesUnreadCount}
-                  </span>
-                )}
-              </button>
-            </Link>
+                {/* Profile */}
+                <Link href="/profile/me" className="nav-btn">
+                  My profile
+                </Link>
 
-            {/* Profile */}
-            <Link href={`/profile/${myId}`}>
-              <button
-                style={{
-                  background: "rgba(255,255,255,0.1)",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  padding: "8px 14px",
-                  borderRadius: 6,
-                  color: "white",
-                }}
-              >
-                My profile
-              </button>
-            </Link>
+                {/* Log out */}
+                <button
+                  className="nav-btn"
+                  onClick={handleLogout}
+                >
+                  Log out
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </nav>
 
-            {/* Logout */}
-            <button
-              onClick={logout}
-              style={{
-                background: "rgba(255, 0, 0, 0.8)",
-                padding: "8px 14px",
-                borderRadius: 6,
-                color: "white",
-              }}
-            >
-              Log out
-            </button>
-          </>
-        )}
+      <style jsx>{`
 
-        {!logged && (
-          <>
-            <Link href="/login">
-              <button>Login</button>
-            </Link>
-            <Link href="/signup">
-              <button
-                style={{
-                  background: "#1a73e8",
-                  padding: "8px 14px",
-                  borderRadius: 6,
-                  color: "white",
-                }}
-              >
-                Sign up
-              </button>
-            </Link>
-          </>
-        )}
-      </div>
-    </nav>
+        /********************
+         * NAVBAR CONTAINER
+         ********************/
+        .navbar-glass {
+          position: sticky;
+          top: 0;
+          z-index: 50;
+          width: 100%;
+          padding: 6px 0;
+          backdrop-filter: blur(14px);
+        }
+
+        .nav-inner {
+          max-width: 900px;
+          margin: 0 auto;
+          padding: 8px 12px;
+
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+
+          background: rgba(15, 15, 20, 0.50);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 12px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.55);
+        }
+
+        /********************
+         * BUTTON UNIVERSAL
+         ********************/
+        .nav-btn {
+          font-family: "Space Grotesk", sans-serif;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+
+          padding: 6px 12px;
+          border-radius: 8px;
+
+          background: rgba(32,32,40,0.90);
+          border: 1px solid rgba(255,255,255,0.10);
+          color: #f5f6ff;
+
+          font-size: 0.84rem;
+          font-weight: 500;
+          cursor: pointer;
+          text-decoration: none;
+
+          transition:
+            background .22s ease,
+            border-color .22s ease,
+            transform .22s ease,
+            color .22s ease,
+            box-shadow .22s ease;
+        }
+
+        .nav-btn:hover {
+          background: rgba(50,52,65,0.95);
+          border-color: rgba(255,255,255,0.18);
+          color: #ffffff;
+          transform: translateY(-2px);
+          box-shadow: 0 0 12px rgba(255,255,255,0.15);
+        }
+
+        /********************
+         * LOGO
+         ********************/
+        .logo-btn {
+          font-size: 1rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+        }
+
+        /********************
+         * ICON BUTTON
+         ********************/
+        .icon-btn {
+          padding: 6px;
+          width: 34px;
+          height: 34px;
+          justify-content: center;
+        }
+
+        .icon-20 {
+          width: 20px;
+          height: 20px;
+          color: #f5f6ff;
+        }
+
+        /********************
+         * BADGE (UNIFORM GRIS)
+         ********************/
+        .notif-dot {
+          position: absolute;
+          top: -4px;
+          right: -4px;
+
+          background: rgba(80,80,95,0.95);
+          padding: 0px 6px;
+          border-radius: 999px;
+
+          color: white;
+          font-size: 0.68rem;
+          font-weight: 600;
+
+          border: 1px solid rgba(255,255,255,0.20);
+        }
+
+        .notif-wrapper {
+          position: relative;
+        }
+
+        /********************
+         * NOTIFICATION DROPDOWN
+         ********************/
+        .notif-dropdown {
+          position: absolute;
+          right: 0;
+          top: 42px;
+
+          width: 260px;
+
+          background: rgba(22,22,30,0.92);
+          backdrop-filter: blur(16px);
+          border: 1px solid rgba(255,255,255,0.10);
+
+          border-radius: 12px;
+          padding: 10px 0;
+          box-shadow: 0 14px 28px rgba(0,0,0,0.55);
+          animation: fadeInScale .15s ease-out;
+        }
+
+        .notif-header {
+          padding: 6px 14px 10px;
+          display: flex;
+          justify-content: space-between;
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .notif-header span:first-of-type {
+          font-size: 0.85rem;
+          font-weight: 600;
+          color: #ffffff;
+        }
+
+        .notif-subtitle {
+          font-size: 0.75rem;
+          color: #bfc1e9;
+        }
+
+        .notif-list {
+          max-height: 240px;
+          overflow-y: auto;
+        }
+
+        .notif-empty {
+          padding: 14px;
+          color: #d0d1f0;
+          opacity: 0.75;
+          font-size: 0.82rem;
+        }
+
+        .notif-row {
+          padding: 10px 14px;
+          border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .notif-unseen {
+          background: rgba(30,30,40,0.90);
+        }
+
+        .notif-seen {
+          background: transparent;
+        }
+
+        .notif-text {
+          margin-bottom: 3px;
+        }
+
+        .notif-type {
+          font-size: 0.72rem;
+          color: #b8bad8;
+        }
+
+        @keyframes fadeInScale {
+          from {
+            opacity: 0;
+            transform: scale(0.96) translateY(-3px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
+      `}</style>
+    </>
   );
 }
