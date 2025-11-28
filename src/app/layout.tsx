@@ -4,8 +4,9 @@ import AuthProvider from "@/components/AuthProvider";
 import PageTransitionLoader from "@/components/PageTransitionLoader";
 import { Inter_Tight } from "next/font/google";
 
-// 👉 AJOUT
+// 👉 AJOUTS
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/react";
 
 const interTight = Inter_Tight({
   subsets: ["latin"],
@@ -39,6 +40,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </main>
           </PageTransitionLoader>
         </AuthProvider>
+
+        {/* 👉 AJOUT : Web Analytics */}
+        <Analytics />
 
         {/* 👉 AJOUT : SpeedInsights */}
         <SpeedInsights />
