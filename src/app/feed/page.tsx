@@ -147,7 +147,7 @@ export default function FeedPage() {
 
     const { data: commentsData } = await supabase
       .from("comments")
-      .select("*")
+      .select("*,user_id")
       .order("created_at", { ascending: true });
 
     setComments(commentsData || []);
@@ -242,15 +242,19 @@ export default function FeedPage() {
   // -----------------------------------------------------
   // Add a comment + Notification
   // -----------------------------------------------------
+  
+  if (!myId) return;
   const handleAddComment = async (postId: string) => {
     const content = newComments[postId];
     if (!content) return;
 
     const { error } = await supabase.from("comments").insert({
-      post_id: postId,
-      content,
-      author_pseudo: pseudo,
-    });
+  post_id: postId,
+  content,
+  author_pseudo: pseudo,
+  user_id: myId, // ✅ indispensable sinon c.user_id = null
+});
+
 
     if (error) {
       console.error(error);
@@ -613,9 +617,21 @@ export default function FeedPage() {
                   return (
                     <div key={c.id} className="comment-row">
                       <p className="comment-text">
-                        <span className="comment-author username-small">
-                          {c.author_pseudo}
-                        </span>
+                        {c.user_id ? (
+  <Link
+    href={`/profile/${c.user_id}`}
+    className="comment-author username-small"
+    style={{ textDecoration: "none" }}
+  >
+    {c.author_pseudo}
+  </Link>
+) : (
+  <span className="comment-author username-small">
+    {c.author_pseudo}
+  </span>
+)}
+
+
                         <span className="comment-separator"> · </span>
                         <span>{c.content}</span>
                       </p>
@@ -624,7 +640,7 @@ export default function FeedPage() {
                           className="icon-button small danger-text"
                           onClick={() => handleDeleteComment(c.id)}
                         >
-                          <TrashIcon className="icon-14" />
+                            <TrashIcon className="icon-14" />
                         </button>
                       )}
                     </div>
@@ -887,8 +903,8 @@ export default function FeedPage() {
         }
 
         .post-author:hover {
-  text-decoration: none !important;
-}
+          text-decoration: none !important;
+        }
 
         .post-game {
           margin-top: 1px;
@@ -956,6 +972,35 @@ export default function FeedPage() {
           padding: 3px;
         }
 
+        /* Icon sizes & color */
+        .icon-20 {
+          width: 20px;
+          height: 20px;
+          color: #f4f5ff;
+          flex-shrink: 0;
+        }
+
+        .icon-18 {
+          width: 18px;
+          height: 18px;
+          color: #f4f5ff;
+          flex-shrink: 0;
+        }
+
+        .icon-16 {
+          width: 16px;
+          height: 16px;
+          color: #f4f5ff;
+          flex-shrink: 0;
+        }
+
+        .icon-14 {
+          width: 14px;
+          height: 14px;
+          color: #ff8b8b;
+          flex-shrink: 0;
+        }
+
         .icon-text-button {
           display: inline-flex;
           align-items: center;
@@ -964,7 +1009,7 @@ export default function FeedPage() {
           border-radius: 999px;
           background: rgba(20, 22, 34, 0.92);
           border: 1px solid rgba(95, 115, 180, 0.65);
-          color: #e1e3ff;
+          color: #ffffff;
           font-size: 0.85rem;
           cursor: pointer;
           transition: 0.18s ease;
