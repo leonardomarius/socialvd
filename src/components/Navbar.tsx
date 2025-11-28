@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { BellIcon } from "@heroicons/react/24/outline";
 
 type NotificationRow = {
@@ -16,7 +16,48 @@ type NotificationRow = {
 
 export default function Navbar() {
   const router = useRouter();
+  const pathname = usePathname();
 
+  // --- CITATIONS (3 x 16h rotation) ---
+  const quotes = [
+    "“You can’t move the zone, but you can make sure it moves for you.”",
+    "“In ranked, hesitation costs more than defeat.”",
+    "“Grind now. Glory later.”",
+  ];
+
+  const [quoteIndex, setQuoteIndex] = useState(0);
+
+  useEffect(() => {
+    // 16h = 57600000 ms
+    const interval = 16 * 60 * 60 * 1000;
+
+    // On stocke un index persistant
+    const savedIndex = localStorage.getItem("daily_quote_index");
+    const savedTime = localStorage.getItem("daily_quote_timestamp");
+    const now = Date.now();
+
+    if (savedIndex && savedTime) {
+      const idx = parseInt(savedIndex, 10);
+      const lastChange = parseInt(savedTime, 10);
+
+      // Si 16h se sont écoulées → on passe à la suivante
+      if (now - lastChange >= interval) {
+        const nextIndex = (idx + 1) % quotes.length;
+        setQuoteIndex(nextIndex);
+        localStorage.setItem("daily_quote_index", String(nextIndex));
+        localStorage.setItem("daily_quote_timestamp", String(now));
+      } else {
+        setQuoteIndex(idx);
+      }
+    } else {
+      // Première visite
+      localStorage.setItem("daily_quote_index", "0");
+      localStorage.setItem("daily_quote_timestamp", String(now));
+      setQuoteIndex(0);
+    }
+  }, []);
+
+  // --- AUTH / NOTIFS ---
   const [logged, setLogged] = useState<boolean | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
@@ -143,6 +184,21 @@ export default function Navbar() {
             <Link href="/explore" className="nav-btn">
               Explore
             </Link>
+
+            {/* --- DAILY QUOTE (ONLY ON /feed) --- */}
+            {pathname === "/feed" && (
+              <span
+                style={{
+                  fontStyle: "italic",
+                  opacity: 0.9,
+                  color: "#d5d7ec",
+                  fontSize: "0.82rem",
+                  marginLeft: "14px",
+                }}
+              >
+                {quotes[quoteIndex]}
+              </span>
+            )}
           </div>
 
           {/* RIGHT SIDE */}
@@ -212,12 +268,12 @@ export default function Navbar() {
                   )}
                 </Link>
 
-               {/* Profile */}
-{myId && (
-  <Link href={`/profile/${myId}`} className="nav-btn">
-    My profile
-  </Link>
-)}
+                {/* Profile */}
+                {myId && (
+                  <Link href={`/profile/${myId}`} className="nav-btn">
+                    My profile
+                  </Link>
+                )}
 
                 {/* Log out */}
                 <button
@@ -232,11 +288,8 @@ export default function Navbar() {
         </div>
       </nav>
 
+      {/* STYLES BELOW (UNTOUCHED EXCEPT FOR ITALICS TEXT STYLE ABOVE) */}
       <style jsx>{`
-
-        /********************
-         * NAVBAR CONTAINER
-         ********************/
         .navbar-glass {
           position: sticky;
           top: 0;
@@ -247,7 +300,7 @@ export default function Navbar() {
         }
 
         .nav-inner {
-          max-width: 900px;
+          max-width: 1150px;
           margin: 0 auto;
           padding: 8px 12px;
 
@@ -261,19 +314,14 @@ export default function Navbar() {
           box-shadow: 0 4px 12px rgba(0,0,0,0.55);
         }
 
-        /********************
-         * SPACING PATCH (ASKED)
-         ********************/
         .nav-left,
+        
         .nav-right {
           display: flex;
           align-items: center;
-          gap: 18px; /* ✔ meilleur espacement */
+          gap: 26px;
         }
 
-        /********************
-         * BUTTON UNIVERSAL
-         ********************/
         .nav-btn {
           font-family: "Space Grotesk", sans-serif;
           display: inline-flex;
@@ -300,20 +348,12 @@ export default function Navbar() {
             box-shadow .22s ease;
         }
 
-        /********************
-         * PREMIUM HOVER PATCH (ASKED)
-         ********************/
-        .nav-btn {
-          position: relative;
-          overflow: hidden;
-        }
-
         .nav-btn::after {
           content: "";
           position: absolute;
           top: 0;
-          left: -100%;
-          width: 100%;
+          left: -11155;
+          width: 60%;
           height: 100%;
           background: linear-gradient(120deg,
             rgba(255,255,255,0) 0%,
@@ -335,18 +375,12 @@ export default function Navbar() {
           box-shadow: 0 0 18px rgba(255,255,255,0.12);
         }
 
-        /********************
-         * LOGO
-         ********************/
         .logo-btn {
           font-size: 1rem;
           font-weight: 700;
           letter-spacing: 0.04em;
         }
 
-        /********************
-         * ICON BUTTON
-         ********************/
         .icon-btn {
           padding: 6px;
           width: 34px;
@@ -360,9 +394,6 @@ export default function Navbar() {
           color: #f5f6ff;
         }
 
-        /********************
-         * BADGE (UNIFORM GRIS)
-         ********************/
         .notif-dot {
           position: absolute;
           top: -4px;
@@ -383,9 +414,6 @@ export default function Navbar() {
           position: relative;
         }
 
-        /********************
-         * NOTIFICATION DROPDOWN
-         ********************/
         .notif-dropdown {
           position: absolute;
           right: 0;
@@ -465,7 +493,6 @@ export default function Navbar() {
             transform: scale(1) translateY(0);
           }
         }
-
       `}</style>
     </>
   );

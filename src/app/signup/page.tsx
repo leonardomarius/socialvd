@@ -12,8 +12,22 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [pseudo, setPseudo] = useState("");
 
+  // 🔥 AJOUT — nouveau champ mindset
+  const [mindset, setMindset] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // 🔥 NEW — fun facts
+  const [passwordFocused, setPasswordFocused] = useState(false);
+
+  // 🔥 AJOUT — on fixe la fun fact une fois sélectionnée
+  const [currentFact, setCurrentFact] = useState("");
+
+  const funFacts = [
+    "Did you know? The most used password in 2025 is still: 123456. That's... Not great.",
+    "I keep this place safe. You're good.",
+  ];
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +44,20 @@ export default function SignupPage() {
       .maybeSingle();
 
     if (pseudoExists) {
-      setErrorMsg("Ce pseudo est déjà pris.");
+      setErrorMsg("This username is already taken.");
+      setLoading(false);
+      return;
+    }
+
+    // Mindset validation
+    const trimmedMindset = mindset.trim();
+    if (trimmedMindset.length < 3) {
+      setErrorMsg("Your mindset must be at least 3 characters long.");
+      setLoading(false);
+      return;
+    }
+    if (trimmedMindset.length > 160) {
+      setErrorMsg("Your mindset must be fewer than 160 characters.");
       setLoading(false);
       return;
     }
@@ -51,7 +78,7 @@ export default function SignupPage() {
 
     const user = data.user;
     if (!user) {
-      setErrorMsg("Impossible de créer votre compte.");
+      setErrorMsg("Unable to create your account.");
       setLoading(false);
       return;
     }
@@ -62,7 +89,7 @@ export default function SignupPage() {
     const { error: profileError } = await supabase.from("profiles").insert({
       id: user.id,
       pseudo: pseudo || email.split("@")[0],
-      bio: "",
+      bio: trimmedMindset,
       avatar_url: null,
     });
 
@@ -97,17 +124,17 @@ export default function SignupPage() {
         background: "#000",
       }}
     >
-      <h1 style={{ marginBottom: 16 }}>Créer un compte</h1>
+      <h1 style={{ marginBottom: 16 }}>Create an account</h1>
 
       <form
         onSubmit={handleSignup}
         style={{ display: "flex", flexDirection: "column", gap: 14 }}
       >
         <div>
-          <label>Pseudo</label>
+          <label>Username</label>
           <input
             type="text"
-            placeholder="Ton pseudo"
+            placeholder="Your username"
             value={pseudo}
             onChange={(e) => setPseudo(e.target.value)}
             required
@@ -119,7 +146,7 @@ export default function SignupPage() {
           <label>Email</label>
           <input
             type="email"
-            placeholder="Adresse email"
+            placeholder="Email address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -128,12 +155,49 @@ export default function SignupPage() {
         </div>
 
         <div>
-          <label>Mot de passe</label>
+          <label>Password</label>
           <input
             type="password"
-            placeholder="Mot de passe"
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onFocus={() => {
+              setPasswordFocused(true);
+              // 🔥 AJOUT — on choisit une fun fact UNIQUEMENT lorsqu'on clique
+              setCurrentFact(
+                funFacts[Math.floor(Math.random() * funFacts.length)]
+              );
+            }}
+            onBlur={() => setPasswordFocused(false)}
+            required
+            style={{ width: "100%", padding: 8, marginTop: 4 }}
+          />
+        </div>
+
+        {/* 🔥 NEW — Display fun fact */}
+        {passwordFocused && (
+          <p
+            style={{
+              marginTop: "-6px",
+              marginBottom: "4px",
+              fontSize: "0.78rem",
+              color: "rgba(220,220,235,0.7)",
+              opacity: 0.9,
+              transition: "opacity 0.3s ease",
+            }}
+          >
+            {currentFact}
+          </p>
+        )}
+
+        {/* 🔥 AJOUT — Champ mindset */}
+        <div>
+          <label>Mindset</label>
+          <input
+            type="text"
+            placeholder="What would define you best"
+            value={mindset}
+            onChange={(e) => setMindset(e.target.value)}
             required
             style={{ width: "100%", padding: 8, marginTop: 4 }}
           />
@@ -156,7 +220,7 @@ export default function SignupPage() {
             cursor: "pointer",
           }}
         >
-          {loading ? "Création du compte..." : "S'inscrire"}
+          {loading ? "Creating your account..." : "Sign up"}
         </button>
       </form>
     </div>

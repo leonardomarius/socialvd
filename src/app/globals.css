@@ -104,9 +104,9 @@ img {
 
   /* Dégradés spatiaux */
   background:
-    radial-gradient(circle at 70% 20%, rgba(180, 200, 255, 0.40), transparent 70%),
-    radial-gradient(circle at 20% 85%, rgba(120, 160, 255, 0.32), transparent 65%),
-    linear-gradient(130deg, #080a0f 0%, #101522 40%, #07090c 100%);
+    radial-gradient(circle at 70% 20%, rgba(103, 86, 135, 0.18), transparent 70%),
+    radial-gradient(circle at 20% 85%, rgba(89, 77, 122, 0.32), transparent 65%),
+    linear-gradient(130deg, #2a2c31 0%, #101522 40%, #2e353f 100%);
   
   filter: brightness(1.05) contrast(1.08);
 }

@@ -10,7 +10,7 @@ import Image from "next/image";
 type EditProfileFormProps = {
   userId: string;
   currentPseudo: string | null;
-  currentBio: string | null;
+  currentBio: string | null; // mindset stocké dans bio
   currentAvatar: string | null;
   onUpdated: () => void;
 };
@@ -43,7 +43,10 @@ export default function EditProfileForm({
   onUpdated,
 }: EditProfileFormProps) {
   const [pseudo, setPseudo] = useState(currentPseudo || "");
-  const [bio, setBio] = useState(currentBio || "");
+
+  // 🔥 REMPLACEMENT — bio → mindset
+  const [mindset, setMindset] = useState(currentBio || "");
+
   const [avatarUrl, setAvatarUrl] = useState(currentAvatar || null);
   const [uploading, setUploading] = useState(false);
 
@@ -107,9 +110,7 @@ export default function EditProfileForm({
 
       if (uploadError) throw uploadError;
 
-      const { data } = supabase.storage
-        .from("avatars")
-        .getPublicUrl(filePath);
+      const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
 
       setAvatarUrl(data.publicUrl);
     } catch (error) {
@@ -123,11 +124,23 @@ export default function EditProfileForm({
      Save profile
   --------------------------------------------- */
   const handleSave = async () => {
+    const trimmedMindset = mindset.trim();
+
+    // 🔥 AJOUT — validation mindset
+    if (trimmedMindset.length < 3) {
+      alert("Your mindset must be at least 3 characters long.");
+      return;
+    }
+    if (trimmedMindset.length > 80) {
+      alert("Your mindset must be shorter than 80 characters.");
+      return;
+    }
+
     const { error } = await supabase
       .from("profiles")
       .update({
         pseudo,
-        bio,
+        bio: trimmedMindset, // 🔥 SAVED CLEAN
         avatar_url: avatarUrl,
       })
       .eq("id", userId);
@@ -175,10 +188,7 @@ export default function EditProfileForm({
     const ok = confirm("Delete this performance?");
     if (!ok) return;
 
-    await supabase
-      .from("game_performances")
-      .delete()
-      .eq("id", id);
+    await supabase.from("game_performances").delete().eq("id", id);
 
     loadPerformances();
   };
@@ -249,8 +259,33 @@ export default function EditProfileForm({
         ></div>
       )}
 
-      <input type="file" onChange={handleAvatarUpload} />
-      {uploading && <p>Uploading...</p>}
+      {/* Avatar button */}
+      <div style={{ marginBottom: 20 }}>
+        <label
+          htmlFor="avatarUpload"
+          style={{
+            display: "inline-block",
+            padding: "10px 18px",
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            borderRadius: 10,
+            cursor: "pointer",
+            color: "#dce5ff",
+            fontSize: "0.9rem",
+            transition: "all 0.25s ease",
+          }}
+        >
+          {uploading ? "Uploading..." : "Change avatar"}
+        </label>
+
+        <input
+          id="avatarUpload"
+          type="file"
+          accept="image/*"
+          onChange={handleAvatarUpload}
+          style={{ display: "none" }}
+        />
+      </div>
 
       {/* Username */}
       <div style={{ marginTop: 20 }}>
@@ -263,12 +298,13 @@ export default function EditProfileForm({
         />
       </div>
 
-      {/* Bio */}
+      {/* 🔥 Mindset */}
       <div style={{ marginTop: 20 }}>
-        <label>Bio</label>
+        <label>Mindset</label>
         <textarea
-          value={bio}
-          onChange={(e) => setBio(e.target.value)}
+          value={mindset}
+          onChange={(e) => setMindset(e.target.value)}
+          placeholder='Ex: "Grind now. Glory later."'
           style={{ ...inputField, height: 80 }}
         />
       </div>
@@ -277,22 +313,25 @@ export default function EditProfileForm({
         Save
       </button>
 
-      {/* ---------------------------------------------
-          Performances Section
-      --------------------------------------------- */}
+      {/* Performances Section */}
       <h2 style={{ marginTop: 40 }}>Verified performances</h2>
 
       <form onSubmit={handleAddPerformance} style={addBox}>
         …
       </form>
 
-      <div style={{ marginTop: 30, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div
+        style={{
+          marginTop: 30,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
         …
       </div>
 
-      {/* ---------------------------------------------
-          GAME ACCOUNTS — ADD ONLY
-      --------------------------------------------- */}
+      {/* GAME ACCOUNTS */}
       <h2 style={{ marginTop: 40 }}>Game accounts</h2>
 
       <div
@@ -378,10 +417,8 @@ export default function EditProfileForm({
         </button>
       </div>
 
-      {/* No game account list rendered here */}
       <p style={{ opacity: 0.6, marginTop: 10 }}>
-        Your game accounts are successfully stored.  
-        A dedicated interface to view them will be added soon.
+        Your game accounts are successfully stored.
       </p>
     </div>
   );
