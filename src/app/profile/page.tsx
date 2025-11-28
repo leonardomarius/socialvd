@@ -24,7 +24,7 @@ type Post = {
 };
 
 export default function ProfilePage({ params }: any) {
-  const { id } = use(params) as { id: string };
+  const { id } = params; // <-- ✔ FIX: plus de use(params)
 
   const [myId, setMyId] = useState<string | null>(null);
   const [showEdit, setShowEdit] = useState(false);
@@ -45,12 +45,14 @@ export default function ProfilePage({ params }: any) {
   }, []);
 
   useEffect(() => {
-    if (!id) return;
-    loadProfile();
-    loadPosts();
-    loadFollowCounts();
-    checkFollow();
-  }, [id]);
+  if (!id || !myId) return;
+
+  loadProfile();
+  loadPosts();
+  loadFollowCounts();
+  checkFollow();
+}, [id, myId]);
+
 
   const loadProfile = async () => {
     const { data } = await supabase
@@ -211,10 +213,15 @@ export default function ProfilePage({ params }: any) {
                   border: "none",
                   cursor: "pointer",
                 }}
+
+
+                
               >
                 {showEdit ? "Close" : "Edit"}
               </button>
             )}
+
+            
           </div>
         </div>
       </div>

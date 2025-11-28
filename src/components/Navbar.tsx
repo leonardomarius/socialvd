@@ -212,10 +212,12 @@ export default function Navbar() {
                   )}
                 </Link>
 
-                {/* Profile */}
-                <Link href="/profile/me" className="nav-btn">
-                  My profile
-                </Link>
+               {/* Profile */}
+{myId && (
+  <Link href={`/profile/${myId}`} className="nav-btn">
+    My profile
+  </Link>
+)}
 
                 {/* Log out */}
                 <button
@@ -260,6 +262,16 @@ export default function Navbar() {
         }
 
         /********************
+         * SPACING PATCH (ASKED)
+         ********************/
+        .nav-left,
+        .nav-right {
+          display: flex;
+          align-items: center;
+          gap: 18px; /* ✔ meilleur espacement */
+        }
+
+        /********************
          * BUTTON UNIVERSAL
          ********************/
         .nav-btn {
@@ -288,12 +300,39 @@ export default function Navbar() {
             box-shadow .22s ease;
         }
 
+        /********************
+         * PREMIUM HOVER PATCH (ASKED)
+         ********************/
+        .nav-btn {
+          position: relative;
+          overflow: hidden;
+        }
+
+        .nav-btn::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(120deg,
+            rgba(255,255,255,0) 0%,
+            rgba(255,255,255,0.12) 50%,
+            rgba(255,255,255,0) 100%
+          );
+          transition: transform 0.35s ease;
+        }
+
+        .nav-btn:hover::after {
+          transform: translateX(200%);
+        }
+
         .nav-btn:hover {
           background: rgba(50,52,65,0.95);
           border-color: rgba(255,255,255,0.18);
           color: #ffffff;
-          transform: translateY(-2px);
-          box-shadow: 0 0 12px rgba(255,255,255,0.15);
+          transform: translateY(-2px) scale(1.03);
+          box-shadow: 0 0 18px rgba(255,255,255,0.12);
         }
 
         /********************

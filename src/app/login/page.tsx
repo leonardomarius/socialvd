@@ -65,18 +65,22 @@ export default function LoginPage() {
       />
 
       <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        style={{
-          width: "100%",
-          padding: "10px",
-          marginBottom: "20px",
-          borderRadius: 6,
-          border: "1px solid #ccc",
-        }}
-      />
+  type="password"
+  placeholder="Password"
+  value={password}
+  onChange={(e) => setPassword(e.target.value)}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") handleLogin();
+  }}
+  style={{
+    width: "100%",
+    padding: "10px",
+    marginBottom: "20px",
+    borderRadius: 6,
+    border: "1px solid #ccc",
+  }}
+/>
+
 
       <button
         onClick={handleLogin}

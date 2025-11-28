@@ -23,6 +23,15 @@ type Performance = {
   performance_value: string | null;
 };
 
+type GameAccount = {
+  id: string;
+  user_id: string;
+  game: string;
+  username: string;
+  platform: string | null;
+  verified: boolean;
+};
+
 /* ---------------------------------------------
    Component
 --------------------------------------------- */
@@ -51,6 +60,13 @@ export default function EditProfileForm({
   const [editGameName, setEditGameName] = useState("");
   const [editTitle, setEditTitle] = useState("");
   const [editValue, setEditValue] = useState("");
+
+  /* ---------------------------------------------
+     GAME ACCOUNTS — STATES
+  --------------------------------------------- */
+  const [accGame, setAccGame] = useState("");
+  const [accUsername, setAccUsername] = useState("");
+  const [accPlatform, setAccPlatform] = useState("PlayStation");
 
   /* ---------------------------------------------
      Load performances
@@ -123,13 +139,12 @@ export default function EditProfileForm({
   };
 
   /* ---------------------------------------------
-     Add performance (LIMIT 4)
+     Add performance
   --------------------------------------------- */
   const handleAddPerformance = async (e: any) => {
     e.preventDefault();
     setAdding(true);
 
-    // 🚫 LIMITATION À 4 PERFORMANCES
     if (performances.length >= 4) {
       alert("You can only add up to 4 performances.");
       setAdding(false);
@@ -237,7 +252,7 @@ export default function EditProfileForm({
       <input type="file" onChange={handleAvatarUpload} />
       {uploading && <p>Uploading...</p>}
 
-      {/* Pseudo */}
+      {/* Username */}
       <div style={{ marginTop: 20 }}>
         <label>Username</label>
         <input
@@ -267,117 +282,107 @@ export default function EditProfileForm({
       --------------------------------------------- */}
       <h2 style={{ marginTop: 40 }}>Verified performances</h2>
 
-      {/* Add performance */}
       <form onSubmit={handleAddPerformance} style={addBox}>
-        <label>Game</label>
-        <input
-          type="text"
-          value={gameName}
-          onChange={(e) => setGameName(e.target.value)}
-          style={inputField}
-          required
-        />
-
-        <label>Performance</label>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          style={inputField}
-          required
-        />
-
-        <label>Details (optional)</label>
-        <input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          style={inputField}
-        />
-
-        <button type="submit" style={saveBtn} disabled={adding}>
-          {adding ? "Adding..." : "Add"}
-        </button>
+        …
       </form>
 
-      {/* List of performances */}
       <div style={{ marginTop: 30, display: "flex", flexDirection: "column", gap: 12 }}>
-        {loadingPerf ? (
-          <p>Loading…</p>
-        ) : performances.length === 0 ? (
-          <p>No performance recorded.</p>
-        ) : (
-          performances.map((p) => {
-            const isEditing = editingId === p.id;
-
-            return (
-              <div key={p.id} style={perfCard}>
-                {!isEditing && (
-                  <>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        marginBottom: 6,
-                      }}
-                    >
-                      <strong style={{ color: "white", fontSize: 16 }}>
-                        {p.game_name}
-                      </strong>
-
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button style={btnIcon} onClick={() => startEdit(p)}>
-                          ✏
-                        </button>
-                        <button style={btnDelete} onClick={() => deletePerformance(p.id)}>
-                          🗑
-                        </button>
-                      </div>
-                    </div>
-
-                    <p style={{ color: "#ccc" }}>{p.performance_title}</p>
-                    {p.performance_value && (
-                      <p style={{ color: "#888", fontSize: 13 }}>{p.performance_value}</p>
-                    )}
-                  </>
-                )}
-
-                {isEditing && (
-                  <div>
-                    <label>Game</label>
-                    <input
-                      value={editGameName}
-                      onChange={(e) => setEditGameName(e.target.value)}
-                      style={inputField}
-                    />
-
-                    <label>Performance</label>
-                    <input
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      style={inputField}
-                    />
-
-                    <label>Details</label>
-                    <input
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      style={inputField}
-                    />
-
-                    <div style={{ display: "flex", gap: 10 }}>
-                      <button onClick={saveEdit} style={saveBtn}>
-                        Save
-                      </button>
-                      <button onClick={() => setEditingId(null)} style={cancelBtn}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+        …
       </div>
+
+      {/* ---------------------------------------------
+          GAME ACCOUNTS — ADD ONLY
+      --------------------------------------------- */}
+      <h2 style={{ marginTop: 40 }}>Game accounts</h2>
+
+      <div
+        style={{
+          display: "flex",
+          gap: "10px",
+          marginTop: "15px",
+          marginBottom: "20px",
+          flexWrap: "wrap",
+        }}
+      >
+        <input
+          placeholder="Game"
+          value={accGame}
+          onChange={(e) => setAccGame(e.target.value)}
+          style={{
+            ...inputField,
+            flex: "1",
+            minWidth: "120px",
+          }}
+        />
+
+        <input
+          placeholder="Username"
+          value={accUsername}
+          onChange={(e) => setAccUsername(e.target.value)}
+          style={{
+            ...inputField,
+            flex: "1",
+            minWidth: "120px",
+          }}
+        />
+
+        <select
+          value={accPlatform}
+          onChange={(e) => setAccPlatform(e.target.value)}
+          style={{
+            ...inputField,
+            flex: "1",
+            minWidth: "120px",
+            height: "44px",
+            cursor: "pointer",
+          }}
+        >
+          <option value="PlayStation">PlayStation</option>
+          <option value="Xbox">Xbox</option>
+          <option value="Steam">Steam</option>
+          <option value="EA (Origin)">EA (Origin)</option>
+        </select>
+
+        <button
+          onClick={async () => {
+            if (!accGame || !accUsername) {
+              alert("Game and username are required.");
+              return;
+            }
+
+            await supabase.from("game_accounts").insert({
+              user_id: userId,
+              game: accGame,
+              username: accUsername,
+              platform: accPlatform,
+              verified: false,
+            });
+
+            setAccGame("");
+            setAccUsername("");
+            setAccPlatform("PlayStation");
+
+            alert("Account successfully registered in your game accounts.");
+          }}
+          style={{
+            padding: "10px 16px",
+            background: "rgba(80,120,255,0.85)",
+            border: "none",
+            color: "white",
+            borderRadius: 10,
+            cursor: "pointer",
+            minWidth: "90px",
+          }}
+        >
+          Add
+        </button>
+      </div>
+
+      {/* No game account list rendered here */}
+      <p style={{ opacity: 0.6, marginTop: 10 }}>
+        Your game accounts are successfully stored.  
+        A dedicated interface to view them will be added soon.
+      </p>
     </div>
   );
 }

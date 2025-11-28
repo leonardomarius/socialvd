@@ -66,6 +66,8 @@ export default function ProfilePage() {
   const [editUsername, setEditUsername] = useState("");
   const [editPlatform, setEditPlatform] = useState("psn");
   const [savingEdit, setSavingEdit] = useState(false);
+// UI toggle for Game Accounts card
+const [showAccountsCard, setShowAccountsCard] = useState(false);
 
   // Load current user
   useEffect(() => {
@@ -378,6 +380,7 @@ export default function ProfilePage() {
             ></div>
           )}
 
+          {/* COLONNE GAUCHE : infos + actions */}
           <div style={{ flex: 1 }}>
             <h1
               style={{
@@ -510,6 +513,104 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
+
+       {/* COLONNE DROITE : 3 BOUTONS (Performances / Events / Game Accounts) */}
+<div
+  style={{
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    marginLeft: "auto",
+    minWidth: 170,
+  }}
+>
+  <Link
+    href={`/profile/${id}/performances`}
+    style={{
+      padding: "8px 16px",
+      borderRadius: 12,
+      background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.14)",
+      color: "#dbe9ff",
+      fontSize: "0.82rem",
+      textDecoration: "none",
+      textAlign: "center",
+      transition: "all 0.25s ease",
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.transform = "translateY(-2px)";
+      e.currentTarget.style.boxShadow =
+        "0 0 12px rgba(80,150,255,0.55), inset 0 0 4px rgba(90,140,255,0.4)";
+      e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.transform = "translateY(0px)";
+      e.currentTarget.style.boxShadow = "none";
+      e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+    }}
+  >
+    Performances
+  </Link>
+
+  <Link
+    href={`/profile/${id}/events`}
+    style={{
+      padding: "8px 16px",
+      borderRadius: 12,
+      background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.14)",
+      color: "#dbe9ff",
+      fontSize: "0.82rem",
+      textDecoration: "none",
+      textAlign: "center",
+      transition: "all 0.25s ease",
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.transform = "translateY(-2px)";
+      e.currentTarget.style.boxShadow =
+        "0 0 12px rgba(80,150,255,0.55), inset 0 0 4px rgba(90,140,255,0.4)";
+      e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.transform = "translateY(0px)";
+      e.currentTarget.style.boxShadow = "none";
+      e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+    }}
+  >
+    Events
+  </Link>
+
+  <button
+  onClick={() => setShowAccountsCard(!showAccountsCard)}
+  style={{
+    padding: "8px 16px",
+    borderRadius: 12,
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    color: "#dbe9ff",
+    fontSize: "0.82rem",
+    textDecoration: "none",
+    textAlign: "center",
+    transition: "all 0.25s ease",
+    cursor: "pointer",
+  }}
+  onMouseEnter={(e) => {
+    e.currentTarget.style.transform = "translateY(-2px)";
+    e.currentTarget.style.boxShadow =
+      "0 0 12px rgba(80,150,255,0.55), inset 0 0 4px rgba(90,140,255,0.4)";
+    e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.transform = "translateY(0px)";
+    e.currentTarget.style.boxShadow = "none";
+    e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+  }}
+>
+  Game Accounts
+</button>
+
+</div>
+
         </div>
 
         {/* EDIT PROFILE */}
@@ -526,349 +627,62 @@ export default function ProfilePage() {
           />
         )}
 
-        {/* GAME ACCOUNTS */}
-        <section style={{ marginTop: 40 }}>
-          <h2
+{/* GAME ACCOUNTS CARD */}
+{showAccountsCard && (
+  <div
+    style={{
+      marginTop: 20,
+      marginBottom: 30,
+      padding: 20,
+      borderRadius: 14,
+      background:
+        "linear-gradient(135deg, rgba(14,14,22,0.96), rgba(6,6,12,0.98))",
+      border: "1px solid rgba(110,110,155,0.20)",
+      boxShadow:
+        "0 0 24px rgba(90,110,255,0.25), inset 0 0 10px rgba(10,10,22,0.55)",
+      transition: "all 0.3s ease",
+    }}
+  >
+    <h2
+      style={{
+        fontSize: 18,
+        marginBottom: 14,
+        color: "rgba(240,240,255,0.9)",
+        letterSpacing: "0.4px",
+      }}
+    >
+      Game Accounts
+    </h2>
+
+    {loadingGames ? (
+      <p>Loading...</p>
+    ) : gameAccounts.length === 0 ? (
+      <p>No accounts found.</p>
+    ) : (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {gameAccounts.map((acc) => (
+          <div
+            key={acc.id}
             style={{
-              fontSize: 20,
-              marginBottom: 12,
-              letterSpacing: "0.4px",
+              padding: 14,
+              borderRadius: 12,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.10)",
             }}
           >
-            Game accounts
-          </h2>
+            <p style={{ color: "#fff" }}><b>Game:</b> {acc.game}</p>
+            <p style={{ color: "#ddd" }}><b>Username:</b> {acc.username}</p>
+            <p style={{ color: "#aaa" }}><b>Platform:</b> {acc.platform}</p>
+            <p style={{ marginTop: 6, color: acc.verified ? "lightgreen" : "orange" }}>
+              {acc.verified ? "✔ Verified" : "⚠ Not verified"}
+            </p>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+)}
 
-          {myId === id && (
-            <Link
-              href={`/profile/${id}/add-game-account`}
-              style={{
-                display: "inline-block",
-                marginBottom: 14,
-                padding: "8px 14px",
-                background: "rgba(0,112,243,0.9)",
-                color: "white",
-                borderRadius: 999,
-                textDecoration: "none",
-                border: "1px solid rgba(255,255,255,0.18)",
-                fontSize: 13,
-              }}
-            >
-              ➕ Add a game account
-            </Link>
-          )}
-
-          {loadingGames ? (
-            <p>Loading...</p>
-          ) : gameAccounts.length === 0 ? (
-            <p>No account added.</p>
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
-              }}
-            >
-              {gameAccounts.map((acc) => {
-                const isEditing = editingAccountId === acc.id;
-
-                return (
-                  <div
-                    key={acc.id}
-                    style={{
-                      padding: 16,
-                      background:
-                        "linear-gradient(135deg, rgba(14,14,22,0.96), rgba(6,6,12,0.98))",
-                      borderRadius: 14,
-                      border: "1px solid rgba(110,110,155,0.2)",
-                      boxShadow:
-                        "0 0 20px rgba(70,90,255,0.16), inset 0 0 10px rgba(10,10,22,0.5)",
-                      transition: "all 0.22s cubic-bezier(.25,.8,.25,1)",
-                      position: "relative",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                      e.currentTarget.style.boxShadow =
-                        "0 0 24px rgba(90,110,255,0.2), inset 0 0 12px rgba(10,10,22,0.6)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "translateY(0px)";
-                      e.currentTarget.style.boxShadow =
-                        "0 0 20px rgba(70,90,255,0.16), inset 0 0 10px rgba(10,10,22,0.5)";
-                    }}
-                  >
-                    {!isEditing && (
-                      <>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            marginBottom: 6,
-                            alignItems: "center",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 14,
-                              padding: "3px 10px",
-                              borderRadius: 999,
-                              border:
-                                "1px solid rgba(150,150,200,0.5)",
-                              background:
-                                "rgba(30,30,60,0.85)",
-                            }}
-                          >
-                            🎮 {acc.game}
-                          </span>
-
-                          <span
-                            style={{
-                              fontSize: 12,
-                              padding: "3px 10px",
-                              borderRadius: 999,
-                              background: "rgba(10,10,25,0.9)",
-                              border:
-                                "1px solid rgba(120,120,180,0.6)",
-                            }}
-                          >
-                            {acc.platform || "Platform"}
-                          </span>
-                        </div>
-
-                        <p style={{ marginTop: 6, fontSize: 15 }}>
-                          <b>Username: </b> {acc.username}
-                        </p>
-
-                        <p style={{ marginTop: 4, fontSize: 13 }}>
-                          {acc.verified ? (
-                            <span style={{ color: "lightgreen" }}>
-                              ✔ Verified account
-                            </span>
-                          ) : (
-                            <span style={{ color: "orange" }}>
-                              ⚠ Not verified
-                            </span>
-                          )}
-                        </p>
-
-                        {myId === id && (
-                          <div
-                            style={{
-                              marginTop: 10,
-                              display: "flex",
-                              gap: 8,
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            <button
-                              onClick={() => startEditAccount(acc)}
-                              style={{
-                                padding: "6px 10px",
-                                fontSize: 12,
-                                borderRadius: 6,
-                                border:
-                                  "1px solid rgba(150,150,200,0.6)",
-                                background: "rgba(10,10,20,0.9)",
-                                color: "#fff",
-                                cursor: "pointer",
-                              }}
-                            >
-                              ✏ Edit
-                            </button>
-
-                            {!acc.verified && (
-                              <button
-                                onClick={() => markAccountVerified(acc.id)}
-                                style={{
-                                  padding: "6px 10px",
-                                  fontSize: 12,
-                                  borderRadius: 6,
-                                  background: "#198754",
-                                  color: "#fff",
-                                  border: "none",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                ✔ Verify
-                              </button>
-                            )}
-
-                                                       <button
-                              onClick={() => deleteAccount(acc.id)}
-                              style={{
-                                padding: "6px 10px",
-                                fontSize: 12,
-                                borderRadius: 6,
-                                background: "#b00020",
-                                color: "#fff",
-                                border: "none",
-                                cursor: "pointer",
-                              }}
-                            >
-                              🗑 Delete
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    {isEditing && (
-                      <div style={{ marginTop: 4 }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: 8,
-                            marginBottom: 8,
-                          }}
-                        >
-                          <div style={{ flex: 1 }}>
-                            <label style={{ fontSize: 12 }}>Game</label>
-                            <select
-                              value={editGame}
-                              onChange={(e) =>
-                                setEditGame(e.target.value)
-                              }
-                              style={{
-                                width: "100%",
-                                marginTop: 3,
-                                padding: 6,
-                                background: "#111",
-                                color: "#fff",
-                                borderRadius: 6,
-                                border: "1px solid #444",
-                              }}
-                            >
-                              <option value="apex">
-                                Apex Legends
-                              </option>
-                              <option value="fortnite">
-                                Fortnite
-                              </option>
-                              <option value="gta">
-                                GTA Online
-                              </option>
-                              <option value="valorant">
-                                Valorant
-                              </option>
-                              <option value="cod">
-                                Call of Duty
-                              </option>
-                            </select>
-                          </div>
-
-                          <div style={{ flex: 1 }}>
-                            <label style={{ fontSize: 12 }}>
-                              Platform
-                            </label>
-                            <select
-                              value={editPlatform}
-                              onChange={(e) =>
-                                setEditPlatform(e.target.value)
-                              }
-                              style={{
-                                width: "100%",
-                                marginTop: 3,
-                                padding: 6,
-                                background: "#111",
-                                color: "#fff",
-                                borderRadius: 6,
-                                border: "1px solid #444",
-                              }}
-                            >
-                              <option value="psn">PlayStation</option>
-                              <option value="xbl">Xbox</option>
-                              <option value="steam">Steam</option>
-                              <option value="epic">Epic Games</option>
-                              <option value="origin">EA Origin</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label style={{ fontSize: 12 }}>
-                            Username
-                          </label>
-                          <input
-                            type="text"
-                            value={editUsername}
-                            onChange={(e) =>
-                              setEditUsername(e.target.value)
-                            }
-                            style={{
-                              width: "100%",
-                              marginTop: 3,
-                              padding: 6,
-                              background: "#111",
-                              color: "#fff",
-                              borderRadius: 6,
-                              border: "1px solid #444",
-                            }}
-                          />
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: 8,
-                            display: "flex",
-                            gap: 8,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <button
-                            onClick={saveEditAccount}
-                            disabled={savingEdit}
-                            style={{
-                              padding: "6px 10px",
-                              fontSize: 12,
-                              borderRadius: 6,
-                              background: "#0070f3",
-                              color: "#fff",
-                              border: "none",
-                              cursor: "pointer",
-                            }}
-                          >
-                            {savingEdit
-                              ? "Saving..."
-                              : "💾 Save"}
-                          </button>
-
-                          <button
-                            onClick={cancelEditAccount}
-                            style={{
-                              padding: "6px 10px",
-                              fontSize: 12,
-                              borderRadius: 6,
-                              background: "#111",
-                              color: "#fff",
-                              border: "1px solid #555",
-                              cursor: "pointer",
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-               {/* PERFORMANCES */}
-        <section style={{ marginTop: 40 }}>
-          <h2
-            style={{
-              fontSize: 20,
-              marginBottom: 12,
-              letterSpacing: "0.4px",
-            }}
-          >
-            Verifiable performances
-          </h2>
-          <ProfilePerformances userId={id} myId={myId} />
-        </section>
 
         {/* POSTS */}
         <section style={{ marginTop: 40 }}>
