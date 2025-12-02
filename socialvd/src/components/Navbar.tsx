@@ -18,6 +18,7 @@ export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
 
+  
   // --- CITATIONS (3 x 16h rotation) ---
   const quotes = [
     "“You can’t move the zone, but you can make sure it moves for you.”",
@@ -89,6 +90,48 @@ export default function Navbar() {
 
     load();
   }, []);
+  
+    useEffect(() => {
+  if (!myId) return;
+
+  const channel = supabase
+    .channel("navbar-messages-live")
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `sender_id=neq.${myId}`,
+      },
+      async (payload) => {
+        if (!payload.new) return;
+        const msg = payload.new;
+
+        // Vérifier que le message appartient à une conversation du user
+        const { data: member } = await supabase
+          .from("conversations_users")
+          .select("id")
+          .eq("conversation_id", msg.conversation_id)
+          .eq("user_id", myId)
+          .maybeSingle();
+
+        if (!member) return;
+
+        // 🔥 Incrémente instantanément la pastille Messages
+        setMessagesUnreadCount((prev) => prev + 1);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [myId]);
+
+
+
+
 
   const loadNotifications = async (userId: string) => {
     const { data } = await supabase
@@ -132,14 +175,21 @@ export default function Navbar() {
       return;
     }
 
-    const { count: unreadMessages } = await supabase
-      .from("messages")
-      .select("*", { count: "exact", head: true })
-      .in("conversation_id", convIds)
-      .neq("sender_id", userId)
-      .eq("seen", false);
+    let total = 0;
 
-    setMessagesUnreadCount(unreadMessages || 0);
+for (const convId of convIds) {
+  const { count } = await supabase
+    .from("messages")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", convId)
+    .neq("sender_id", userId)
+    .eq("seen", false);
+
+  if (count) total += count;
+}
+
+setMessagesUnreadCount(total);
+
   };
 
   const handleLogout = async () => {
@@ -209,9 +259,17 @@ export default function Navbar() {
                 <div className="notif-wrapper" ref={notifRef}>
                   <button
                     className="nav-btn icon-btn"
-                    onClick={() =>
-                      setShowNotifications((s) => !s)
-                    }
+                    onClick={async () => {
+  setShowNotifications((s) => {
+    const next = !s;
+    if (next) {
+      // si on ouvre → marquer comme vues
+      markAllNotificationsAsSeen();
+    }
+    return next;
+  });
+}}
+
                   >
                     <BellIcon className="icon-20" />
                     {unreadNotifCount > 0 && (
@@ -259,14 +317,16 @@ export default function Navbar() {
                 </div>
 
                 {/* Messages */}
-                <Link href="/messages" className="nav-btn">
-                  Messages
-                  {messagesUnreadCount > 0 && (
-                    <span className="notif-dot">
-                      {messagesUnreadCount}
-                    </span>
-                  )}
-                </Link>
+                <div style={{ position: "relative" }}>
+  <Link href="/messages" className="nav-btn">
+    Messages
+  </Link>
+
+  {messagesUnreadCount > 0 && (
+    <span className="notif-dot">{messagesUnreadCount}</span>
+  )}
+</div>
+
 
                 {/* Profile */}
                 {myId && (
@@ -395,20 +455,21 @@ export default function Navbar() {
         }
 
         .notif-dot {
-          position: absolute;
-          top: -4px;
-          right: -4px;
+  position: absolute;
+  top: -10px;      /* ↑ légèrement plus haut */
+  right: -10px;    /* → légèrement plus à droite */
 
-          background: rgba(80,80,95,0.95);
-          padding: 0px 6px;
-          border-radius: 999px;
+  background: rgba(80,80,95,0.95);
+  padding: 0px 6px;
+  border-radius: 999px;
 
-          color: white;
-          font-size: 0.68rem;
-          font-weight: 600;
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 600;
 
-          border: 1px solid rgba(255,255,255,0.20);
-        }
+  border: 1px solid rgba(255,255,255,0.20);
+}
+
 
         .notif-wrapper {
           position: relative;

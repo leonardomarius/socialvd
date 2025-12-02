@@ -26,9 +26,21 @@ export default function ConversationPage() {
 
   const [myId, setMyId] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+    const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
+
+  /* MARK SEEN — After messages are fully loaded */
+  useEffect(() => {
+    if (!myId || messages.length === 0) return;
+
+    supabase
+      .from("messages")
+      .update({ seen: true })
+      .eq("conversation_id", conversationId)
+      .neq("sender_id", myId)
+      .eq("seen", false);
+  }, [messages, myId]);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -54,9 +66,9 @@ export default function ConversationPage() {
 
       if (!conv) return router.push("/messages");
 
-      await loadParticipants(uid);
+           await loadParticipants(uid);
       await loadMessages();
-      await markMessagesSeen(uid);
+      // ❌ NE PLUS mettre markMessagesSeen ici
 
       /* REALTIME — ignorer mes propres messages */
       const channel = supabase
