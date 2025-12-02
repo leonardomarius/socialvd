@@ -83,15 +83,23 @@ export default function SignupPage() {
       return;
     }
 
-    // -----------------------------
-    // 2) Création du profil associé
-    // -----------------------------
-    const { error: profileError } = await supabase.from("profiles").insert({
-      id: user.id,
-      pseudo: pseudo || email.split("@")[0],
-      bio: trimmedMindset,
-      avatar_url: null,
-    });
+  // ---------------------------------------------------
+// 2) Forcer la session AVANT d’insérer dans profiles
+// ---------------------------------------------------
+await new Promise((resolve) => setTimeout(resolve, 200));
+await supabase.auth.getSession();
+
+// -----------------------------------------
+// 3) Création du profil associé (RLS OK)
+// -----------------------------------------
+const { error: profileError } = await supabase.from("profiles").insert({
+  id: user.id,
+  pseudo: pseudo || email.split("@")[0],
+  bio: trimmedMindset,
+  avatar_url: null,
+});
+
+
 
     if (profileError) {
       setErrorMsg(profileError.message);
@@ -100,7 +108,7 @@ export default function SignupPage() {
     }
 
     // -----------------------------
-    // 3) Mettre à jour la session locale
+    // 4) Mettre à jour la session locale
     // -----------------------------
     localStorage.setItem("user_id", user.id);
     window.dispatchEvent(new Event("authChanged"));

@@ -27,8 +27,11 @@ export default function MateSessionButton({
 
   const [, forceUpdate] = useState(0);
 
-  useEffect(() => {
-    if (session?.status !== "active") return;
+    useEffect(() => {
+    // On ne lance le timer que si la session est en cours
+    if (!session || (session.status !== "active" && session.status !== "ongoing")) {
+      return;
+    }
 
     const interval = setInterval(() => {
       forceUpdate((x) => x + 1);
@@ -37,25 +40,30 @@ export default function MateSessionButton({
     return () => clearInterval(interval);
   }, [session]);
 
-  useEffect(() => {
+
+    useEffect(() => {
     if (!myId || !otherId) return;
     fetchActiveSession();
   }, [myId, otherId]);
 
   async function fetchActiveSession() {
-    const { data } = await supabase
-      .from("mate_sessions")
-      .select("*")
-      .or(
-        `and(user1_id.eq.${myId},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${myId})`
-      )
-      .neq("status", "ended")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    if (!myId || !otherId) return;
 
-    setSession(data || null);
+    const { data, error } = await supabase.rpc("get_active_session", {
+      p_other_user_id: otherId,
+    });
+
+    if (error) {
+      console.error("Error get_active_session:", error);
+      setSession(null);
+      return;
+    }
+
+    console.log("DEBUG get_active_session =>", data);
+    setSession(data as MateSession | null);
   }
+
+
 
   // -------------------------------------------------
   // 🔥 Realtime pour NOUVELLE session
@@ -149,12 +157,10 @@ export default function MateSessionButton({
       .eq("type", "session_request");
 
     // créer nouvelle session
-    await supabase.from("mate_sessions").insert({
-      user1_id: myId,
-      user2_id: otherId,
-      start_request_by: myId,
-      status: "pending",
-    });
+    await supabase.rpc("start_mate_session", {
+  p_other_user_id: otherId,
+});
+
 
     // 🔔 créer nouvelle notif propre
     await sendNotification(otherId!, myId!, "session_request", "wants to start a gaming session with you 🎮");
@@ -179,7 +185,9 @@ export default function MateSessionButton({
       .eq("type", "session_request");
 
     // supprimer session
-    await supabase.from("mate_sessions").delete().eq("id", session.id);
+   await supabase.rpc("end_mate_session", {
+  p_session_id: session.id,
+});
 
     setLoading(false);
     setSession(null);
@@ -192,14 +200,9 @@ export default function MateSessionButton({
     if (!session) return;
     setLoading(true);
 
-    await supabase
-      .from("mate_sessions")
-      .update({
-        start_accepted: true,
-        status: "active",
-        started_at: new Date().toISOString(),
-      })
-      .eq("id", session.id);
+    await supabase.rpc("accept_active_session", {
+  p_session_id: session.id,
+});
 
     // 🔔 notif acceptation
     await sendNotification(otherId!, myId!, "session_accept", "accepted your gaming session 🎮🔥");
@@ -222,14 +225,10 @@ export default function MateSessionButton({
     const duration =
       Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000) || 1;
 
-    await supabase
-      .from("mate_sessions")
-      .update({
-        status: "ended",
-        ended_at: endedAt.toISOString(),
-        duration_seconds: duration,
-      })
-      .eq("id", session.id);
+    await supabase.rpc("end_mate_session", {
+  p_session_id: session.id,
+});
+
 
     setLoading(false);
     setSession(null);
@@ -239,7 +238,20 @@ export default function MateSessionButton({
   // 🔥 UI
   // -------------------------------------------------
 
-  if (!session) {
+  // -------------------------------------------------
+  // 🔥 UI
+  // -------------------------------------------------
+
+  const currentStatus = session?.status;
+
+  // 🔒 Sécurité : si pas de session OU statut inconnu (= pas pending / active / ongoing),
+  // on affiche TOUJOURS le bouton "Start", jamais un trou vide.
+  if (
+    !session ||
+    (currentStatus !== "pending" &&
+      currentStatus !== "active" &&
+      currentStatus !== "ongoing")
+  ) {
     return (
       <button onClick={requestSession} disabled={loading} className="mate-btn">
         Start a gaming session 🎮
@@ -247,7 +259,8 @@ export default function MateSessionButton({
     );
   }
 
-  if (session.status === "pending") {
+  // 🟡 Session en attente (optionnel : l’autre doit accepter)
+  if (currentStatus === "pending") {
     if (session.start_request_by === myId) {
       return (
         <div style={{ display: "flex", gap: 10 }}>
@@ -272,7 +285,8 @@ export default function MateSessionButton({
     );
   }
 
-  if (session.status === "active") {
+  // 🟢 Session en cours (active ou ongoing)
+  if (currentStatus === "active" || currentStatus === "ongoing") {
     const elapsed =
       session.started_at
         ? Math.floor(
@@ -302,5 +316,11 @@ export default function MateSessionButton({
     );
   }
 
-  return null;
+  // Théoriquement on ne devrait jamais arriver ici,
+  // mais par sécurité on remet le bouton Start.
+  return (
+    <button onClick={requestSession} disabled={loading} className="mate-btn">
+      Start a gaming session 🎮
+    </button>
+  );
 }

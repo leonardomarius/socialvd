@@ -69,7 +69,7 @@ export default function FeedPage() {
   // Post menu ⋮
   const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-
+  const uploadRef = useRef<HTMLInputElement | null>(null);
   const [notification, setNotification] = useState<Notification | null>(null);
 
   const showNotification = (
@@ -81,172 +81,206 @@ export default function FeedPage() {
   };
 
   // Close menu if clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpenMenuPostId(null);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // -----------------------------------------
-  // LOAD SESSION
-  // -----------------------------------------
-  useEffect(() => {
-    const loadSession = async () => {
-      const { data } = await supabase.auth.getUser();
-
-      if (!data.user) {
-        router.push("/login");
-        return;
-      }
-
-      setMyId(data.user.id);
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("pseudo")
-        .eq("id", data.user.id)
-        .single();
-
-      setPseudo(profile?.pseudo || "Utilisateur");
-      loadAllData();
-    };
-
-    loadSession();
-  }, [router]);
-
-  // -----------------------------------------
-  // LOAD POSTS + COMMENTS
-  // -----------------------------------------
-  const loadAllData = async () => {
-    const { data: postsData } = await supabase
-      .from("posts")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, avatar_url");
-
-    const avatarMap: Record<string, string | null> = {};
-    profiles?.forEach((p) => {
-      avatarMap[p.id] = p.avatar_url;
-    });
-
-    const postsFormatted =
-      postsData?.map((p: any) => ({
-        ...p,
-        avatar_url: avatarMap[p.user_id] || null,
-      })) || [];
-
-    setPosts(postsFormatted);
-
-    const { data: commentsData } = await supabase
-      .from("comments")
-      .select("*, user_id")
-      .order("created_at", { ascending: true });
-
-    const { data: myLikes } = await supabase
-      .from("comment_likes")
-      .select("comment_id")
-      .eq("user_id", myId);
-
-    const likedSet = new Set(myLikes?.map((l) => l.comment_id) || []);
-
-    const commentsFormatted =
-      commentsData?.map((c: any) => ({
-        ...c,
-        is_liked_by_me: likedSet.has(c.id),
-      })) || [];
-
-    setComments(commentsFormatted);
-  };
-  // -----------------------------------------
-  // UPLOAD MEDIA
-  // -----------------------------------------
-  const uploadMedia = async (): Promise<{ url: string | null; type: string | null }> => {
-    if (!mediaFile) return { url: null, type: null };
-
-    const ext = mediaFile.name.split(".").pop();
-    const path = `${Date.now()}.${ext}`;
-
-    const { error } = await supabase.storage
-      .from("posts-media")
-      .upload(path, mediaFile);
-
-    if (error) {
-      console.error(error);
-      showNotification("Erreur lors de l'upload du fichier", "error");
-      return { url: null, type: null };
-    }
-
-    const url = supabase.storage
-      .from("posts-media")
-      .getPublicUrl(path).data.publicUrl;
-
-    const type = mediaFile.type.startsWith("image/")
-      ? "image"
-      : mediaFile.type.startsWith("video/")
-      ? "video"
-      : null;
-
-    return { url, type };
-  };
-
-  // -----------------------------------------
-  // DELETE MEDIA FROM STORAGE
-  // -----------------------------------------
-  const deleteMediaFile = async (mediaUrl: string | null) => {
-    if (!mediaUrl) return;
-
-    const parts = mediaUrl.split("/posts-media/");
-    if (parts.length < 2) return;
-
-    const path = parts[1];
-
-    const { error } = await supabase.storage
-      .from("posts-media")
-      .remove([path]);
-
-    if (error) {
-      console.error("Erreur suppression Storage :", error);
+ useEffect(() => {
+  const handleClick = (e: MouseEvent) => {
+    const el = menuRef.current;
+    if (!el) return;
+    if (!el.contains(e.target as Node)) {
+      setOpenMenuPostId(null);
     }
   };
 
+  document.addEventListener("mousedown", handleClick);
+  return () => document.removeEventListener("mousedown", handleClick);
+}, []); 
+
+
   // -----------------------------------------
-  // CREATE POST
-  // -----------------------------------------
-  const handleCreatePost = async () => {
-    if (!myId || !newPost.trim()) return;
+// LOAD SESSION
+// -----------------------------------------
+useEffect(() => {
+  const loadSession = async () => {
+    await supabase.auth.getSession();
 
-    const { url, type } = await uploadMedia();
-
-    const { error } = await supabase.from("posts").insert({
-      user_id: myId,
-      content: newPost,
-      game: newGame || null,
-      author_pseudo: pseudo,
-      media_url: url,
-      media_type: type,
-    });
-
-    if (error) {
-      console.error(error);
-      showNotification("Error creating post", "error");
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) {
+      router.push("/login");
       return;
     }
 
-    setNewPost("");
-    setNewGame("");
-    setMediaFile(null);
+    setMyId(data.user.id);
 
-    showNotification("Post published!");
-    loadAllData();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("pseudo")
+      .eq("id", data.user.id)
+      .single();
+
+    setPseudo(profile?.pseudo || "Utilisateur");
   };
+
+  loadSession();
+}, []); // <--- NE RIEN CHANGER ICI
+
+// -----------------------------------------
+// LOAD POSTS AUTOMATIQUEMENT QUAND myId EXISTE
+// -----------------------------------------
+useEffect(() => {
+  if (!myId) return;
+  loadAllData();
+}, [myId]);
+
+
+// -----------------------------------------
+// LOAD POSTS + COMMENTS
+// -----------------------------------------
+const loadAllData = async () => {
+  if (!myId) return;   // 🔥 évite la requête user_id=null
+
+  const { data: postsData } = await supabase
+  .from("posts")
+  .select(`
+    *,
+    likes:likes(count)
+  `)
+  .order("created_at", { ascending: false });
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, avatar_url");
+
+  const avatarMap: Record<string, string | null> = {};
+  profiles?.forEach((p) => {
+    avatarMap[p.id] = p.avatar_url;
+  });
+
+  const postsFormatted =
+    postsData?.map((p: any) => ({
+      ...p,
+avatar_url: avatarMap[p.user_id] || null,
+likes: p.likes[0]?.count || 0,
+
+    })) || [];
+
+  setPosts(postsFormatted);
+
+  const { data: commentsData } = await supabase
+    .from("comments")
+    .select("*, user_id")
+    .order("created_at", { ascending: true });
+
+  const { data: myLikes } = await supabase
+    .from("comment_likes")
+    .select("comment_id")
+    .eq("user_id", myId);
+
+  const likedSet = new Set(myLikes?.map((l) => l.comment_id) || []);
+
+  const commentsFormatted =
+    commentsData?.map((c: any) => ({
+      ...c,
+      is_liked_by_me: likedSet.has(c.id),
+    })) || [];
+
+  setComments(commentsFormatted);
+};
+
+// -----------------------------------------
+// UPLOAD MEDIA
+// -----------------------------------------
+const uploadMedia = async (): Promise<{ url: string | null; type: string | null }> => {
+  if (!mediaFile) return { url: null, type: null };
+
+  const ext = mediaFile.name.split(".").pop();
+  const path = `${Date.now()}.${ext}`;
+
+  console.log("FILE BEFORE UPLOAD:", mediaFile);
+
+  const { error } = await supabase.storage
+    .from("posts-media")
+    .upload(path, mediaFile, {
+      contentType: mediaFile.type,
+      upsert: true,
+    });
+
+  if (error) {
+    console.error(error);
+    showNotification("Erreur lors de l'upload du fichier", "error");
+    return { url: null, type: null };
+  }
+
+  const url = supabase.storage
+    .from("posts-media")
+    .getPublicUrl(path).data.publicUrl;
+
+  const type = mediaFile.type.startsWith("image/")
+    ? "image"
+    : mediaFile.type.startsWith("video/")
+    ? "video"
+    : null;
+
+  return { url, type };
+};
+
+// -----------------------------------------
+// DELETE MEDIA FROM STORAGE
+// -----------------------------------------
+const deleteMediaFile = async (mediaUrl: string | null) => {
+  if (!mediaUrl) return;
+
+  const parts = mediaUrl.split("/posts-media/");
+  if (parts.length < 2) return;
+
+  const path = parts[1];
+
+  const { error } = await supabase.storage
+    .from("posts-media")
+    .remove([path]);
+
+  if (error) {
+    console.error("Erreur suppression Storage :", error);
+  }
+};
+
+// -----------------------------------------
+// CREATE POST
+// -----------------------------------------
+const handleCreatePost = async () => {
+  if (!myId) return;
+  if (!newPost.trim() && !mediaFile) {
+    showNotification("Write something or select an image/video", "error");
+    return;
+  }
+
+  const { url, type } = await uploadMedia();
+
+  const { error } = await supabase.from("posts").insert({
+    user_id: myId,
+    content: newPost,
+    game: newGame || null,
+    author_pseudo: pseudo,
+    media_url: url,
+    media_type: type,
+  });
+
+  if (error) {
+    console.error(error);
+    showNotification("Error creating post", "error");
+    return;
+  }
+
+  setNewPost("");
+  setNewGame("");
+  setMediaFile(null);
+
+  if (uploadRef.current) {
+    uploadRef.current.value = "";   // 🔥 RESET DU INPUT FILE DANS LE DOM
+  }
+
+  showNotification("Post published!");
+  loadAllData();
+};
+
 
   // -----------------------------------------
   // ADD COMMENT
@@ -525,14 +559,31 @@ const handleDeletePost = async (postId: string) => {
             className="textarea"
           />
 
-          <label className="file-label">
-            <span>Add an image / video</span>
-            <input
-              type="file"
-              accept="image/*,video/*"
-              onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
-            />
-          </label>
+          <div style={{ margin: "12px 0" }}>
+  <label
+    htmlFor="media-upload"
+    className="file-label"
+    style={{ cursor: "pointer" }}
+  >
+    Add image / video
+  </label>
+
+  <input
+    ref={uploadRef}  // 🔥 LA REF QUI FIXE LE BUG
+    id="media-upload"
+    type="file"
+    accept="image/*,video/*"
+    onChange={(e) => {
+      const f = e.target.files?.[0];
+      console.log("DEBUG SELECTED FILE:", f);
+      setMediaFile(f || null);
+    }}
+    style={{ display: "none" }}
+  />
+
+</div>
+
+
 
           <button className="btn primary-btn" onClick={handleCreatePost}>
             Publish

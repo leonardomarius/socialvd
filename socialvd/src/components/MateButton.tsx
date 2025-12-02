@@ -13,58 +13,39 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
   }, [myId, otherId]);
 
   const loadStatus = async () => {
-    // Check request sent by me
-    const { data: sent } = await supabase
-      .from("mate_requests")
-      .select("*")
-      .eq("sender_id", myId)
-      .eq("receiver_id", otherId)
-      .eq("status", "pending")
-      .single();
+  if (!myId || !otherId) return;
 
-    if (sent) {
-      setStatus("pending_sent");
-      setRequestId(sent.id);
-      return;
-    }
+  const { data, error } = await supabase.rpc("get_mate_status", {
+    p_other_user: otherId,
+  });
 
-    // Check request received
-    const { data: received } = await supabase
-      .from("mate_requests")
-      .select("*")
-      .eq("sender_id", otherId)
-      .eq("receiver_id", myId)
-      .eq("status", "pending")
-      .single();
+  if (error) {
+    console.error("Error get_mate_status:", error);
+    return;
+  }
 
-    if (received) {
-      setStatus("pending_received");
-      setRequestId(received.id);
-      return;
-    }
+  // Expected : 
+  // { status: "none" | "pending_sent" | "pending_received" | "mates", request_id: uuid? }
+  setStatus(
+    data.status === "mates"
+      ? "mate"
+      : data.status === "pending_sent"
+      ? "pending_sent"
+      : data.status === "pending_received"
+      ? "pending_received"
+      : "none"
+  );
 
-    // Check if already mates
-    const { data: mate } = await supabase
-      .from("mates")
-      .select("*")
-      .or(`user1_id.eq.${myId},user2_id.eq.${myId}`)
-      .or(`user1_id.eq.${otherId},user2_id.eq.${otherId}`);
+  setRequestId(data.request_id || null);
+};
 
-    if (mate && mate.length > 0) {
-      setStatus("mate");
-      return;
-    }
-
-    setStatus("none");
-  };
 
   // Send request
   const sendRequest = async () => {
-    await supabase.from("mate_requests").insert({
-      sender_id: myId,
-      receiver_id: otherId,
-      status: "pending",
-    });
+    await supabase.rpc("send_mate_request", {
+  p_receiver_id: otherId,
+});
+
 
     // 👉 Step 1: fetch username
     const { data: me } = await supabase
@@ -87,7 +68,9 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
   // Cancel request I sent
   const cancelRequest = async () => {
     if (!requestId) return;
-    await supabase.from("mate_requests").delete().eq("id", requestId);
+    await supabase.rpc("cancel_mate_request", {
+  p_request_id: requestId,
+});
     loadStatus();
   };
 
@@ -95,14 +78,10 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
   const acceptRequest = async () => {
     if (!requestId) return;
 
-    // delete request
-    await supabase.from("mate_requests").delete().eq("id", requestId);
+   await supabase.rpc("accept_mate_request", {
+  p_request_id: requestId,
+});
 
-    // create mate
-    await supabase.from("mates").insert({
-      user1_id: myId,
-      user2_id: otherId,
-    });
 
     // 👉 Step 1: get username
     const { data: me } = await supabase

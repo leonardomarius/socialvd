@@ -14,28 +14,56 @@ export default function CreateConversationClient() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || !otherId) return;
 
-      // Vérifier si une conversation existe déjà
-      const { data: existing } = await supabase
-        .from("conversations")
-        .select("*")
-        .or(`and(user1.eq.${user.id},user2.eq.${otherId}),and(user1.eq.${otherId},user2.eq.${user.id})`)
-        .single();
+      /* 1️⃣ Récupérer toutes mes conversations */
+      const { data: myConversations } = await supabase
+        .from("conversations_users")
+        .select("conversation_id")
+        .eq("user_id", user.id);
 
-      if (existing) {
-        router.push(`/messages/${existing.id}`);
-        return;
+      const myConvIds = myConversations?.map((c) => c.conversation_id) || [];
+
+      /* 2️⃣ Vérifier si l’autre user est déjà dans une conv avec moi */
+      if (myConvIds.length > 0) {
+        const { data: match } = await supabase
+          .from("conversations_users")
+          .select("conversation_id")
+          .in("conversation_id", myConvIds)
+          .eq("user_id", otherId)
+          .maybeSingle();
+
+        /* Conversation EXISTE déjà → redirection directe */
+        if (match) {
+          router.push(`/messages/${match.conversation_id}`);
+          return;
+        }
       }
 
-      // Sinon créer une conversation
-      const { data: newConv } = await supabase
+      /* 3️⃣ Sinon créer la conversation */
+      const { data: newConv, error: convErr } = await supabase
         .from("conversations")
-        .insert({
-          user1: user.id,
-          user2: otherId
-        })
+        .insert({})
         .select()
         .single();
 
+      if (convErr) {
+        console.error("Conversation creation error:", convErr);
+        return;
+      }
+
+      /* 4️⃣ Enregistrer les deux participants */
+      const { error: linkErr } = await supabase
+        .from("conversations_users")
+        .insert([
+          { conversation_id: newConv.id, user_id: user.id },
+          { conversation_id: newConv.id, user_id: otherId }
+        ]);
+
+      if (linkErr) {
+        console.error("Conversation_users error:", linkErr);
+        return;
+      }
+
+      /* 5️⃣ Redirection vers la nouvelle conversation */
       router.push(`/messages/${newConv.id}`);
     };
 
