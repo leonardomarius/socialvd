@@ -25,6 +25,7 @@ export default function Navbar() {
     "“Grind now. Glory later.”",
   ];
 
+
   const [quoteIndex, setQuoteIndex] = useState(0);
 
   useEffect(() => {
