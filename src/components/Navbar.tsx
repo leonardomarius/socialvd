@@ -18,7 +18,7 @@ export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // --- CITATIONS (3 x 16h rotation) ---
+  // --- CITATIONS (3 x 16h rotation) --- 11111111111
   const quotes = [
     "“You can’t move the zone, but you can make sure it moves for you.”",
     "“In ranked, hesitation costs more than defeat.”",
