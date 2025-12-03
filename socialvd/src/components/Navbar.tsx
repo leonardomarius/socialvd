@@ -19,7 +19,7 @@ export default function Navbar() {
   const pathname = usePathname();
 
   
-  // --- CITATIONS (3 x 16h rotation) ---
+  // --- CITATIONS (3 x 16h rotation) --- 111111111
   const quotes = [
     "“You can’t move the zone, but you can make sure it moves for you.”",
     "“In ranked, hesitation costs more than defeat.”",
@@ -32,7 +32,7 @@ export default function Navbar() {
     // 16h = 57600000 ms
     const interval = 16 * 60 * 60 * 1000;
 
-    // On stocke un index persistant
+    // On stocke un index persistantdddddddddddddddddddddddddd
     const savedIndex = localStorage.getItem("daily_quote_index");
     const savedTime = localStorage.getItem("daily_quote_timestamp");
     const now = Date.now();
