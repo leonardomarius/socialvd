@@ -35,7 +35,7 @@ export default function Navbar() {
     // 16h = 57600000 ms
     const interval = 16 * 60 * 60 * 1000;
 
-    // On stocke un index persistant
+    // On stocke un index persistant 11111111
     const savedIndex = localStorage.getItem("daily_quote_index");
     const savedTime = localStorage.getItem("daily_quote_timestamp");
     const now = Date.now();
