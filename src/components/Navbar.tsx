@@ -6,6 +6,9 @@ import { supabase } from "@/lib/supabase";
 import { useRouter, usePathname } from "next/navigation";
 import { BellIcon } from "@heroicons/react/24/outline";
 
+
+
+
 type NotificationRow = {
   id: string;
   message: string | null;
@@ -290,7 +293,7 @@ export default function Navbar() {
       </nav>
 
       {/* STYLES BELOW (UNTOUCHED EXCEPT FOR ITALICS TEXT STYLE ABOVE) */}
-      <style jsx>{`
+      <style>{`
         .navbar-glass {
           position: sticky;
           top: 0;
