@@ -10,7 +10,6 @@ import {
   EllipsisVerticalIcon,
   PencilSquareIcon,
   TrashIcon,
-  HandThumbUpIcon,
   ChatBubbleLeftIcon,
 } from "@heroicons/react/24/outline";
 
@@ -19,12 +18,15 @@ type Post = {
   content: string;
   game: string | null;
   author_pseudo: string | null;
-  likes: number;
   media_url: string | null;
   media_type: string | null;
   created_at: string;
   user_id: string;
   avatar_url?: string | null;
+
+  // 🔥 ajout pour les likes
+  likes_count?: number;
+  isLikedByMe?: boolean;
 };
 
 type Comment = {
@@ -93,62 +95,112 @@ export default function FeedPage() {
   }, []);
 
   // -----------------------------------------------------
-  // Vérifier session
+// Vérifier session
+// -----------------------------------------------------
+useEffect(() => {
+  const loadSession = async () => {
+    const { data } = await supabase.auth.getUser();
+
+    if (!data.user) {
+      router.push("/login");
+      return;
+    }
+
+    setMyId(data.user.id);
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("pseudo")
+      .eq("id", data.user.id)
+      .single();
+
+    setPseudo(profile?.pseudo || "Utilisateur");
+  };
+
+  loadSession();
+}, [router]);
+
+// Charger les données seulement quand myId est défini
+useEffect(() => {
+  if (myId) {
+    loadAllData();
+  }
+}, [myId]);
+
   // -----------------------------------------------------
-  useEffect(() => {
-    const loadSession = async () => {
-      const { data } = await supabase.auth.getUser();
-
-      if (!data.user) {
-        router.push("/login");
-        return;
-      }
-
-      setMyId(data.user.id);
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("pseudo")
-        .eq("id", data.user.id)
-        .single();
-
-      setPseudo(profile?.pseudo || "Utilisateur");
-      loadAllData();
-    };
-
-    loadSession();
-  }, [router]);
-
-  // -----------------------------------------------------
-  // Charger posts + commentaires
+  // Charger posts + commentaires (+ likes)
   // -----------------------------------------------------
   const loadAllData = async () => {
-    const { data: postsData } = await supabase
+    const { data: postsData, error: postsError } = await supabase
       .from("posts")
-      .select("*")
+      .select("*, likes(count)") // 🔥 on récupère l'agrégat des likes
       .order("created_at", { ascending: false });
 
-    const { data: profiles } = await supabase
+    if (postsError) {
+      console.error(postsError);
+      showNotification("Error loading posts", "error");
+      return;
+    }
+
+    const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
       .select("id, avatar_url");
+
+    if (profilesError) {
+      console.error(profilesError);
+    }
 
     const avatarMap: Record<string, string | null> = {};
     profiles?.forEach((p) => {
       avatarMap[p.id] = p.avatar_url;
     });
 
-    const postsFormatted =
-      postsData?.map((p: any) => ({
-        ...p,
-        avatar_url: avatarMap[p.user_id] || null,
-      })) || [];
+    // 🔥 Récupérer les likes de l'utilisateur connecté (pour isLikedByMe)
+    let myLikesMap: Record<string, boolean> = {};
+    if (myId) {
+      const { data: myLikes, error: myLikesError } = await supabase
+        .from("likes")
+        .select("post_id")
+        .eq("user_id", myId);
+
+      if (myLikesError) {
+        console.error(myLikesError);
+      } else if (myLikes) {
+        myLikesMap = myLikes.reduce((acc: Record<string, boolean>, row: any) => {
+          acc[row.post_id] = true;
+          return acc;
+        }, {});
+      }
+    }
+
+    const postsFormatted: Post[] =
+      postsData?.map((p: any) => {
+        const likesArray = p.likes || [];
+        const likesCount =
+          Array.isArray(likesArray) && likesArray[0]?.count
+            ? likesArray[0].count
+            : 0;
+
+        return {
+          ...p,
+          avatar_url: avatarMap[p.user_id] || null,
+          likes_count: likesCount,
+          isLikedByMe: !!myLikesMap[p.id],
+        };
+      }) || [];
 
     setPosts(postsFormatted);
 
-    const { data: commentsData } = await supabase
+    const { data: commentsData, error: commentsError } = await supabase
       .from("comments")
-      .select("*,user_id")
+      .select("*, user_id")
       .order("created_at", { ascending: true });
+
+    if (commentsError) {
+      console.error(commentsError);
+      showNotification("Error loading comments", "error");
+      return;
+    }
 
     setComments(commentsData || []);
   };
@@ -242,19 +294,18 @@ export default function FeedPage() {
   // -----------------------------------------------------
   // Add a comment + Notification
   // -----------------------------------------------------
-  
-  if (!myId) return;
   const handleAddComment = async (postId: string) => {
+    if (!myId) return;
+
     const content = newComments[postId];
     if (!content) return;
 
     const { error } = await supabase.from("comments").insert({
-  post_id: postId,
-  content,
-  author_pseudo: pseudo,
-  user_id: myId, // ✅ indispensable sinon c.user_id = null
-});
-
+      post_id: postId,
+      content,
+      author_pseudo: pseudo,
+      user_id: myId,
+    });
 
     if (error) {
       console.error(error);
@@ -282,36 +333,7 @@ export default function FeedPage() {
   };
 
   // -----------------------------------------------------
-  // Like via RPC + Notification
-  // -----------------------------------------------------
-  const handleLike = async (postId: string) => {
-    const { error } = await supabase.rpc("toggle_like", { p_post_id: postId });
-
-    if (error) {
-      console.error(error);
-      showNotification("Error while liking", "error");
-      return;
-    }
-
-    // 🔍 Find liked post
-    const post = posts.find((p) => p.id === postId);
-
-    // 🛑 Do not notify yourself
-    if (post && post.user_id !== myId) {
-      await supabase.from("notifications").insert({
-        user_id: post.user_id, // recipient
-        from_user_id: myId, // you
-        type: "like",
-        post_id: postId,
-        message: `${pseudo} liked your post`,
-      });
-    }
-
-    loadAllData();
-  };
-
-  // -----------------------------------------------------
-  // Delete comment
+  // DELETE comment
   // -----------------------------------------------------
   const handleDeleteComment = async (commentId: string) => {
     const { error } = await supabase
@@ -420,6 +442,58 @@ export default function FeedPage() {
   };
 
   // -----------------------------------------------------
+  // LIKE / UNLIKE post
+  // -----------------------------------------------------
+  const handleToggleLike = async (postId: string) => {
+    if (!myId) return;
+
+    const targetPost = posts.find((p) => p.id === postId);
+    const currentlyLiked = !!targetPost?.isLikedByMe;
+
+    if (currentlyLiked) {
+      // UNLIKE : on supprime uniquement le like de ce user
+      const { error } = await supabase
+        .from("likes")
+        .delete()
+        .eq("post_id", postId)
+        .eq("user_id", myId);
+
+      if (error) {
+        console.error("Error unliking:", error);
+        showNotification("Error while unliking", "error");
+        return;
+      }
+    } else {
+      // LIKE : on insère le like
+      const { error } = await supabase.from("likes").insert({
+        post_id: postId,
+        user_id: myId,
+      });
+
+      if (error) {
+        // si jamais unique_violation (déjà liké), on ignore
+        console.error("Error liking:", error);
+        showNotification("Error while liking", "error");
+        return;
+      }
+    }
+
+    // Mise à jour optimiste locale
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id !== postId) return p;
+        const delta = currentlyLiked ? -1 : 1;
+        const currentCount = p.likes_count ?? 0;
+        return {
+          ...p,
+          likes_count: Math.max(0, currentCount + delta),
+          isLikedByMe: !currentlyLiked,
+        };
+      })
+    );
+  };
+
+    // -----------------------------------------------------
   // RENDER
   // -----------------------------------------------------
   return (
@@ -591,14 +665,30 @@ export default function FeedPage() {
 
               {/* Actions */}
               <div className="post-actions">
+                {/* LIKE BUTTON */}
                 <button
-                  className="icon-text-button"
-                  onClick={() => handleLike(post.id)}
+                  className={`like-button ${
+                    post.isLikedByMe ? "liked" : ""
+                  }`}
+                  onClick={() => handleToggleLike(post.id)}
                 >
-                  <HandThumbUpIcon className="icon-18" />
-                  <span>{post.likes}</span>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill={post.isLikedByMe ? "#ff6b81" : "none"}
+                    stroke="#ffffff"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M14 9V5a3 3 0 0 0-6 0v4" />
+                    <path d="M5 15V11a2 2 0 0 1 2-2h11l-1 8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2" />
+                  </svg>
+                  <span>{post.likes_count ?? 0}</span>
                 </button>
 
+                {/* COMMENT COUNT */}
                 <div className="icon-text-inline">
                   <ChatBubbleLeftIcon className="icon-18 subtle" />
                   <span className="comment-count">
@@ -618,19 +708,18 @@ export default function FeedPage() {
                     <div key={c.id} className="comment-row">
                       <p className="comment-text">
                         {c.user_id ? (
-  <Link
-    href={`/profile/${c.user_id}`}
-    className="comment-author username-small"
-    style={{ textDecoration: "none" }}
-  >
-    {c.author_pseudo}
-  </Link>
-) : (
-  <span className="comment-author username-small">
-    {c.author_pseudo}
-  </span>
-)}
-
+                          <Link
+                            href={`/profile/${c.user_id}`}
+                            className="comment-author username-small"
+                            style={{ textDecoration: "none" }}
+                          >
+                            {c.author_pseudo}
+                          </Link>
+                        ) : (
+                          <span className="comment-author username-small">
+                            {c.author_pseudo}
+                          </span>
+                        )}
 
                         <span className="comment-separator"> · </span>
                         <span>{c.content}</span>
@@ -640,7 +729,7 @@ export default function FeedPage() {
                           className="icon-button small danger-text"
                           onClick={() => handleDeleteComment(c.id)}
                         >
-                            <TrashIcon className="icon-14" />
+                          <TrashIcon className="icon-14" />
                         </button>
                       )}
                     </div>
@@ -698,9 +787,6 @@ export default function FeedPage() {
 
       {/* STYLES */}
       <style jsx>{`
-        /********************************************
-         * FEED CONTAINER
-         ********************************************/
         .feed-container {
           padding: 26px;
           max-width: 720px;
@@ -716,9 +802,6 @@ export default function FeedPage() {
           text-shadow: 0 0 4px rgba(140, 160, 255, 0.2);
         }
 
-        /********************************************
-         * CARD BASE  –  style « Neon Soft Hybrid »
-         ********************************************/
         .card {
           background: rgba(10, 10, 18, 0.65);
           border-radius: 18px;
@@ -736,7 +819,6 @@ export default function FeedPage() {
           transform: translateY(-2px);
         }
 
-        /* Create Post card – léger accent */
         .card-create {
           background:
             radial-gradient(
@@ -754,9 +836,6 @@ export default function FeedPage() {
           letter-spacing: 0.03em;
         }
 
-        /********************************************
-         * INPUTS + TEXTAREA (version feed)
-         ********************************************/
         .input,
         .textarea {
           width: 100%;
@@ -787,9 +866,6 @@ export default function FeedPage() {
           resize: vertical;
         }
 
-        /********************************************
-         * FILE UPLOAD LABEL
-         ********************************************/
         .file-label {
           display: flex;
           align-items: center;
@@ -815,9 +891,6 @@ export default function FeedPage() {
           display: none;
         }
 
-        /********************************************
-         * BUTTONS – primary / ghost / danger
-         ********************************************/
         .btn {
           display: inline-flex;
           align-items: center;
@@ -870,9 +943,6 @@ export default function FeedPage() {
           transform: translateY(-1px);
         }
 
-        /********************************************
-         * AVATAR & POST HEADER
-         ********************************************/
         .post-header {
           display: flex;
           justify-content: space-between;
@@ -913,9 +983,6 @@ export default function FeedPage() {
           color: #b8baf2;
         }
 
-        /********************************************
-         * POST CONTENT / MEDIA
-         ********************************************/
         .post-content {
           margin-top: 12px;
           font-size: 0.95rem;
@@ -944,9 +1011,6 @@ export default function FeedPage() {
           box-shadow: 0 12px 26px rgba(0, 0, 0, 0.55);
         }
 
-        /********************************************
-         * ACTIONS : like / comment
-         ********************************************/
         .post-actions {
           margin-top: 14px;
           display: flex;
@@ -972,56 +1036,6 @@ export default function FeedPage() {
           padding: 3px;
         }
 
-        /* Icon sizes & color */
-        .icon-20 {
-          width: 20px;
-          height: 20px;
-          color: #f4f5ff;
-          flex-shrink: 0;
-        }
-
-        .icon-18 {
-          width: 18px;
-          height: 18px;
-          color: #f4f5ff;
-          flex-shrink: 0;
-        }
-
-        .icon-16 {
-          width: 16px;
-          height: 16px;
-          color: #f4f5ff;
-          flex-shrink: 0;
-        }
-
-        .icon-14 {
-          width: 14px;
-          height: 14px;
-          color: #ff8b8b;
-          flex-shrink: 0;
-        }
-
-        .icon-text-button {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 7px 14px;
-          border-radius: 999px;
-          background: rgba(20, 22, 34, 0.92);
-          border: 1px solid rgba(95, 115, 180, 0.65);
-          color: #ffffff;
-          font-size: 0.85rem;
-          cursor: pointer;
-          transition: 0.18s ease;
-        }
-
-        .icon-text-button:hover {
-          background: rgba(30, 32, 48, 0.96);
-          border-color: rgba(120, 140, 255, 0.95);
-          box-shadow: 0 0 14px rgba(130, 150, 255, 0.28);
-          transform: translateY(-1px);
-        }
-
         .icon-text-inline {
           display: flex;
           align-items: center;
@@ -1039,9 +1053,6 @@ export default function FeedPage() {
           color: #b9bdf4;
         }
 
-        /********************************************
-         * COMMENTS BLOCK
-         ********************************************/
         .comments-block {
           margin-top: 14px;
           padding-top: 10px;
@@ -1083,9 +1094,6 @@ export default function FeedPage() {
           align-items: center;
         }
 
-        /********************************************
-         * MENU ⋮ OPTIONS
-         ********************************************/
         .post-menu-wrapper {
           position: relative;
         }
@@ -1133,9 +1141,6 @@ export default function FeedPage() {
           color: #ffe5ed;
         }
 
-        /********************************************
-         * NOTIFICATIONS
-         ********************************************/
         .notification {
           margin-bottom: 16px;
           padding: 9px 16px;
@@ -1160,9 +1165,6 @@ export default function FeedPage() {
           color: #ffe2eb;
         }
 
-        /********************************************
-         * DELETE POST MODAL
-         ********************************************/
         .modal-backdrop {
           position: fixed;
           inset: 0;
@@ -1204,9 +1206,33 @@ export default function FeedPage() {
           gap: 8px;
         }
 
-        /********************************************
-         * ANIMATIONS
-         ********************************************/
+        /* 🔥 Styles pour le bouton Like */
+        .like-button {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 14px;
+          border-radius: 999px;
+          background: rgba(20, 22, 34, 0.92);
+          border: 1px solid rgba(95, 115, 180, 0.65);
+          color: #ffffff;
+          font-size: 0.85rem;
+          cursor: pointer;
+          transition: 0.18s ease;
+        }
+
+        .like-button:hover {
+          background: rgba(30, 32, 48, 0.96);
+          border-color: rgba(120, 140, 255, 0.95);
+          box-shadow: 0 0 14px rgba(130, 150, 255, 0.28);
+          transform: translateY(-1px);
+        }
+
+        .like-button.liked {
+          border-color: rgba(255, 120, 150, 0.95);
+          box-shadow: 0 0 16px rgba(255, 120, 150, 0.45);
+        }
+
         @keyframes fadeInScale {
           from {
             opacity: 0;
@@ -1249,9 +1275,6 @@ export default function FeedPage() {
           }
         }
 
-        /********************************************
-         * RESPONSIVE
-         ********************************************/
         @media (max-width: 650px) {
           .feed-container {
             padding: 18px;
