@@ -127,25 +127,45 @@ export default function MessagesPage() {
     load();
   }, []);
 
-  // 🔥 REALTIME watch messages → reload
+    // 🔥 REALTIME watch messages → reload UNIQUEMENT quand je suis loggé
   useEffect(() => {
+    if (!myId) return;
+
     const channel = supabase
-      .channel("messages-list")
+      .channel("messages-list-" + myId)
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "INSERT",
           schema: "public",
           table: "messages",
+          // on s'intéresse surtout aux messages reçus,
+          // mais RLS filtrera de toute façon
+          filter: `sender_id=neq.${myId}`,
         },
-        () => load()
+        () => {
+          load();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `sender_id=neq.${myId}`,
+        },
+        () => {
+          load();
+        }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [myId]);
+
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleString("en-US", {

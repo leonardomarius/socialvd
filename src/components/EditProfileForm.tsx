@@ -313,23 +313,117 @@ export default function EditProfileForm({
         Save
       </button>
 
-      {/* Performances Section */}
       <h2 style={{ marginTop: 40 }}>Verified performances</h2>
 
-      <form onSubmit={handleAddPerformance} style={addBox}>
-        …
-      </form>
+{/* --- ADD PERFORMANCE FORM --- */}
+<form onSubmit={handleAddPerformance} style={addBox}>
+  <div style={{ marginBottom: 10 }}>
+    <label>Game</label>
+    <input
+      type="text"
+      value={gameName}
+      onChange={(e) => setGameName(e.target.value)}
+      required
+      style={inputField}
+    />
+  </div>
 
-      <div
-        style={{
-          marginTop: 30,
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-        }}
-      >
-        …
-      </div>
+  <div style={{ marginBottom: 10 }}>
+    <label>Performance</label>
+    <input
+      type="text"
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
+      required
+      style={inputField}
+    />
+  </div>
+
+  <div style={{ marginBottom: 10 }}>
+    <label>Details (optional)</label>
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      style={inputField}
+    />
+  </div>
+
+  <button
+    type="submit"
+    disabled={adding}
+    style={saveBtn}
+  >
+    {adding ? "Adding..." : "Add performance"}
+  </button>
+</form>
+
+{/* --- LIST EXISTING PERFORMANCES --- */}
+<div
+  style={{
+    marginTop: 30,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  }}
+>
+  {performances.length === 0 && (
+    <p style={{ opacity: 0.7 }}>No performance yet.</p>
+  )}
+
+  {performances.map((p) => (
+    <div key={p.id} style={perfCard}>
+      {editingId !== p.id ? (
+        <>
+          <strong style={{ fontSize: 16 }}>{p.game_name}</strong>
+          <p>{p.performance_title}</p>
+          {p.performance_value && (
+            <p style={{ opacity: 0.7 }}>{p.performance_value}</p>
+          )}
+
+          {/* Buttons */}
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <button onClick={() => startEdit(p)} style={btnIcon}>✏</button>
+            <button onClick={() => deletePerformance(p.id)} style={btnDelete}>🗑</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <input
+            value={editGameName}
+            onChange={(e) => setEditGameName(e.target.value)}
+            style={inputField}
+          />
+
+          <input
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            style={inputField}
+          />
+
+          <input
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            style={inputField}
+          />
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={saveEdit} style={saveBtn}>
+              Save
+            </button>
+            <button
+              onClick={() => setEditingId(null)}
+              style={cancelBtn}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  ))}
+</div>
+
 
       {/* GAME ACCOUNTS */}
       <h2 style={{ marginTop: 40 }}>Game accounts</h2>

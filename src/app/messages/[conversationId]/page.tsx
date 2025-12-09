@@ -37,85 +37,108 @@ export default function ConversationPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /* LOAD ALL DATA */
+   /* LOAD ALL DATA + REALTIME */
   useEffect(() => {
-    const load = async () => {
+    if (!conversationId) return;
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let isMounted = true;
+
+    const init = async () => {
+      // 1. Vérifier l'auth
       const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) return router.push("/login");
+      if (!auth.user) {
+        router.push("/login");
+        return;
+      }
 
       const uid = auth.user.id;
+      if (!isMounted) return;
       setMyId(uid);
 
+      // 2. Vérifier que la conversation existe bien
       const { data: conv } = await supabase
         .from("conversations")
         .select("id")
         .eq("id", conversationId)
         .maybeSingle();
 
-      if (!conv) return router.push("/messages");
+      if (!conv) {
+        router.push("/messages");
+        return;
+      }
 
+      // 3. Charger participants + messages
       await loadParticipants(uid);
       await loadMessages();
       await markMessagesSeen(uid);
-          
-// 🔥 MARK NOTIFICATIONS SEEN when opening conversation
-await supabase
-  .from("notifications")
-  .update({ seen: true })
-  .eq("user_id", uid)
-  .eq("type", "message")
-  .eq("seen", false);
 
+      // 4. Marquer les notifications "message" comme vues
+      await supabase
+        .from("notifications")
+        .update({ seen: true })
+        .eq("user_id", uid)
+        .eq("type", "message")
+        .eq("seen", false);
 
+      // 5. Ouvrir le canal realtime
+      channel = supabase
+        .channel("conv-" + conversationId)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `conversation_id=eq.${conversationId}`,
+          },
+          (payload) => {
+            const msg = payload.new as Message;
 
-      /* REALTIME — ignorer mes propres messages */
-      const channel = supabase
-  .channel("conv-" + conversationId)
-  .on(
-    "postgres_changes",
-    {
-      event: "INSERT",
-      schema: "public",
-      table: "messages",
-      filter: `conversation_id=eq.${conversationId}`
-    },
-    (payload) => {
-      const msg = payload.new as Message;
+            // Ajout propre + dédoublonnage
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
 
-      // ignore les messages déjà affichés
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev;
-        return [...prev, msg];
-      });
-    }
-  )
-  .on(
-    "postgres_changes",
-    {
-      event: "UPDATE",
-      schema: "public",
-      table: "messages",
-      filter: `conversation_id=eq.${conversationId}`
-    },
-    (payload) => {
-      const msg = payload.new as Message;
+            // Si c'est un message reçu, on le marque lu
+            if (msg.sender_id !== uid) {
+              markMessagesSeen(uid);
+            }
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "messages",
+            filter: `conversation_id=eq.${conversationId}`,
+          },
+          (payload) => {
+            const msg = payload.new as Message;
 
-      // mettre à jour seen / contenu
-      setMessages((prev) =>
-        prev.map((m) => (m.id === msg.id ? msg : m))
-      );
-    }
-  )
-  .subscribe();
-
+            setMessages((prev) =>
+              prev.map((m) => (m.id === msg.id ? msg : m))
+            );
+          }
+        )
+        .subscribe();
 
       setLoading(false);
-
-      return () => supabase.removeChannel(channel);
     };
 
-    if (conversationId) load();
+    init();
+
+    // Cleanup réel du canal
+    return () => {
+      isMounted = false;
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [conversationId]);
+
 
   /* LOAD PARTICIPANT */
   const loadParticipants = async (userId: string) => {
