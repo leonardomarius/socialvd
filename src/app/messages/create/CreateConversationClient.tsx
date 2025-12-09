@@ -11,36 +11,47 @@ export default function CreateConversationClient() {
 
   useEffect(() => {
     const start = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !otherId) return;
+      // 1) Auth
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-      // Vérifier si une conversation existe déjà
-      const { data: existing } = await supabase
-        .from("conversations")
-        .select("*")
-        .or(`and(user1.eq.${user.id},user2.eq.${otherId}),and(user1.eq.${otherId},user2.eq.${user.id})`)
-        .single();
-
-      if (existing) {
-        router.push(`/messages/${existing.id}`);
+      if (authError || !user) {
+        router.push("/login");
         return;
       }
 
-      // Sinon créer une conversation
-      const { data: newConv } = await supabase
-        .from("conversations")
-        .insert({
-          user1: user.id,
-          user2: otherId
-        })
-        .select()
-        .single();
+      if (!otherId) {
+        router.push("/messages");
+        return;
+      }
 
-      router.push(`/messages/${newConv.id}`);
+      try {
+        // 2) RPC : crée ou récupère la conversation
+        const { data, error } = await supabase.rpc(
+          "create_or_get_conversation",
+          { other_user: otherId }
+        );
+
+        if (error || !data) {
+          console.error("create_or_get_conversation error", error);
+          router.push("/messages");
+          return;
+        }
+
+        const conversationId = data as string;
+
+        // 3) Redirection vers la page de conversation
+        router.replace(`/messages/${conversationId}`);
+      } catch (e) {
+        console.error(e);
+        router.push("/messages");
+      }
     };
 
     start();
-  }, [otherId]);
+  }, [otherId, router]);
 
   return <p>Chargement...</p>;
 }

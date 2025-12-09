@@ -71,28 +71,104 @@ export default function Navbar() {
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase.auth.getUser();
-      const user = data.user;
+ // --- AUTH (IMPORTANT : initialise logged + myId + compteurs initiaux)
+useEffect(() => {
+  const load = async () => {
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
 
-      if (!user) {
-        setLogged(false);
-        setMyId(null);
-        return;
+    if (!user) {
+      setLogged(false);
+      setMyId(null);
+      return;
+    }
+
+    setLogged(true);
+    setMyId(user.id);
+
+    await Promise.all([
+      loadNotifications(user.id),
+      loadNavbarCounts(user.id),
+    ]);
+  };
+
+  load();
+}, []);
+
+// --- REALTIME — messages + notifications
+useEffect(() => {
+  if (!myId) return;
+
+  // --- Channel messages ---
+  const msgChannel = supabase
+    .channel("navbar-messages-" + myId)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `sender_id=neq.${myId}`, // messages reçus uniquement
+      },
+      () => {
+        loadNavbarCounts(myId); // message reçu → +1
       }
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "messages",
+        filter: `sender_id=neq.${myId}`,
+      },
+      (payload) => {
+        if (payload.new.seen === true && payload.old.seen === false) {
+          loadNavbarCounts(myId); // message lu → -1
+        }
+      }
+    )
+    .subscribe();
 
-      setLogged(true);
-      setMyId(user.id);
+  // --- Channel notifications ---
+  const notifChannel = supabase
+    .channel("navbar-notifs-" + myId)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${myId}`,
+      },
+      () => {
+        loadNotifications(myId); // nouvelle notif → +1
+      }
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${myId}`,
+      },
+      (payload) => {
+        if (payload.new.seen === true && payload.old.seen === false) {
+          loadNotifications(myId); // notif vue → -1
+        }
+      }
+    )
+    .subscribe();
 
-      await Promise.all([
-        loadNotifications(user.id),
-        loadNavbarCounts(user.id),
-      ]);
-    };
+  // Cleanup
+  return () => {
+    supabase.removeChannel(msgChannel);
+    supabase.removeChannel(notifChannel);
+  };
+}, [myId]);
 
-    load();
-  }, []);
+
 
   const loadNotifications = async (userId: string) => {
     const { data } = await supabase
@@ -124,27 +200,30 @@ export default function Navbar() {
   };
 
   const loadNavbarCounts = async (userId: string) => {
-    const { data: conversations } = await supabase
-      .from("conversations_users")
-      .select("conversation_id")
-      .eq("user_id", userId);
+  // 1. Récupérer les conversations où je suis
+  const { data: convUsers } = await supabase
+    .from("conversations_users")
+    .select("conversation_id")
+    .eq("user_id", userId);
 
-    const convIds = conversations?.map((c) => c.conversation_id) || [];
+  const convIds = (convUsers || []).map((c) => c.conversation_id);
 
-    if (!convIds.length) {
-      setMessagesUnreadCount(0);
-      return;
-    }
+  if (convIds.length === 0) {
+    setMessagesUnreadCount(0);
+    return;
+  }
 
-    const { count: unreadMessages } = await supabase
-      .from("messages")
-      .select("*", { count: "exact", head: true })
-      .in("conversation_id", convIds)
-      .neq("sender_id", userId)
-      .eq("seen", false);
+  // 2. Récupérer les messages non lus dans ces conversations
+  const { data: unreadMessages } = await supabase
+    .from("messages")
+    .select("id")
+    .in("conversation_id", convIds)
+    .neq("sender_id", userId)
+    .eq("seen", false);
 
-    setMessagesUnreadCount(unreadMessages || 0);
-  };
+  setMessagesUnreadCount(unreadMessages?.length || 0);
+};
+
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -263,14 +342,15 @@ export default function Navbar() {
                 </div>
 
                 {/* Messages */}
-                <Link href="/messages" className="nav-btn">
-                  Messages
-                  {messagesUnreadCount > 0 && (
-                    <span className="notif-dot">
-                      {messagesUnreadCount}
-                    </span>
-                  )}
-                </Link>
+                <Link href="/messages" className="nav-btn msg-btn">
+  Messages
+  {messagesUnreadCount > 0 && (
+    <span className="notif-dot msg-dot">
+      {messagesUnreadCount}
+    </span>
+  )}
+</Link>
+
 
                 {/* Profile */}
                 {myId && (
@@ -497,6 +577,27 @@ export default function Navbar() {
             transform: scale(1) translateY(0);
           }
         }
+
+        .msg-btn {
+  position: relative;
+}
+
+.msg-dot {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+
+  background: rgba(80,80,95,0.95);
+  padding: 0px 6px;
+  border-radius: 999px;
+
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 600;
+
+  border: 1px solid rgba(255,255,255,0.20);
+}
+
       `}</style>
     </>
   );

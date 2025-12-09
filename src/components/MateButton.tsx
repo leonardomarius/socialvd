@@ -43,14 +43,16 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
       return;
     }
 
-    // Check if already mates
+    // Check if mates
     const { data: mate } = await supabase
       .from("mates")
       .select("*")
-      .or(`user1_id.eq.${myId},user2_id.eq.${myId}`)
-      .or(`user1_id.eq.${otherId},user2_id.eq.${otherId}`);
+      .or(
+        `and(user1_id.eq.${myId},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${myId})`
+      )
+      .maybeSingle();
 
-    if (mate && mate.length > 0) {
+    if (mate) {
       setStatus("mate");
       return;
     }
@@ -66,14 +68,12 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
       status: "pending",
     });
 
-    // 👉 Step 1: fetch username
     const { data: me } = await supabase
       .from("profiles")
       .select("pseudo")
       .eq("id", myId)
       .single();
 
-    // 🔔 Notification: mate request sent
     await supabase.from("notifications").insert({
       user_id: otherId,
       from_user_id: myId,
@@ -93,25 +93,46 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
 
   // Accept request received
   const acceptRequest = async () => {
-    if (!requestId) return;
+    if (!myId || !otherId) return;
 
-    // delete request
-    await supabase.from("mate_requests").delete().eq("id", requestId);
+    // 1) Get the pending request
+    const { data: req } = await supabase
+      .from("mate_requests")
+      .select("*")
+      .eq("sender_id", otherId)
+      .eq("receiver_id", myId)
+      .eq("status", "pending")
+      .single();
 
-    // create mate
-    await supabase.from("mates").insert({
-      user1_id: myId,
-      user2_id: otherId,
+    if (!req) return;
+
+    // 2) Mark request as accepted
+    const { error: err1 } = await supabase
+      .from("mate_requests")
+      .update({ status: "accepted" })
+      .eq("id", req.id);
+
+    if (err1) return console.error("Error updating request:", err1);
+
+    // 3) Insert into mates
+    const orderedUser1 = otherId < myId ? otherId : myId;
+    const orderedUser2 = otherId < myId ? myId : otherId;
+
+    const { error: err2 } = await supabase.from("mates").insert({
+      user1_id: orderedUser1,
+      user2_id: orderedUser2,
+      start_date: new Date().toISOString(),
     });
 
-    // 👉 Step 1: get username
+    if (err2) return console.error("Error creating mate:", err2);
+
+    // Notification
     const { data: me } = await supabase
       .from("profiles")
       .select("pseudo")
       .eq("id", myId)
       .single();
 
-    // 🔔 Notification: mate request accepted
     await supabase.from("notifications").insert({
       user_id: otherId,
       from_user_id: myId,
@@ -121,6 +142,8 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
 
     loadStatus();
   };
+
+  // ---------------- UI ----------------
 
   if (status === "mate") {
     return (

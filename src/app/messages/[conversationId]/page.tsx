@@ -57,30 +57,57 @@ export default function ConversationPage() {
       await loadParticipants(uid);
       await loadMessages();
       await markMessagesSeen(uid);
+          
+// 🔥 MARK NOTIFICATIONS SEEN when opening conversation
+await supabase
+  .from("notifications")
+  .update({ seen: true })
+  .eq("user_id", uid)
+  .eq("type", "message")
+  .eq("seen", false);
+
+
 
       /* REALTIME — ignorer mes propres messages */
       const channel = supabase
-        .channel("conv-" + conversationId)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            table: "messages",
-            schema: "public",
-            filter: `conversation_id=eq.${conversationId}`,
-          },
-          (payload) => {
-            const msg = payload.new as Message;
+  .channel("conv-" + conversationId)
+  .on(
+    "postgres_changes",
+    {
+      event: "INSERT",
+      schema: "public",
+      table: "messages",
+      filter: `conversation_id=eq.${conversationId}`
+    },
+    (payload) => {
+      const msg = payload.new as Message;
 
-            if (msg.sender_id === uid) return;
+      // ignore les messages déjà affichés
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+    }
+  )
+  .on(
+    "postgres_changes",
+    {
+      event: "UPDATE",
+      schema: "public",
+      table: "messages",
+      filter: `conversation_id=eq.${conversationId}`
+    },
+    (payload) => {
+      const msg = payload.new as Message;
 
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === msg.id)) return prev;
-              return [...prev, msg];
-            });
-          }
-        )
-        .subscribe();
+      // mettre à jour seen / contenu
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? msg : m))
+      );
+    }
+  )
+  .subscribe();
+
 
       setLoading(false);
 
@@ -127,15 +154,29 @@ export default function ConversationPage() {
     setLoading(false);
   };
 
-  /* MARK SEEN */
-  const markMessagesSeen = async (userId: string) => {
-    await supabase
+  /* MARK SEEN — marque tous les messages reçus comme lus */
+const markMessagesSeen = async (userId: string) => {
+  try {
+    const { data } = await supabase
       .from("messages")
       .update({ seen: true })
       .eq("conversation_id", conversationId)
       .neq("sender_id", userId)
-      .eq("seen", false);
-  };
+      .eq("seen", false)
+      .select("id");
+
+    // 🔥 IMPORTANT : Notifier la navbar qu'il faut recharger les compteurs
+    if (data && data.length > 0) {
+      localStorage.setItem("messages_seen_event", Date.now().toString());
+      window.dispatchEvent(new Event("messages_seen_event"));
+    }
+
+  } catch (err) {
+    console.error("Erreur lors du mark as seen:", err);
+  }
+};
+
+
 
   /* SEND MESSAGE — 🔥 AJOUT LOCAL IMMÉDIAT + PATCH */
   const handleSend = async () => {

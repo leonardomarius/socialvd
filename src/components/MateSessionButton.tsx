@@ -44,15 +44,17 @@ export default function MateSessionButton({
 
   async function fetchActiveSession() {
     const { data } = await supabase
-      .from("mate_sessions")
-      .select("*")
-      .or(
-        `and(user1_id.eq.${myId},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${myId})`
-      )
-      .neq("status", "ended")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  .from("mate_sessions")
+  .select("*")
+  .or(
+    `and(user1_id.eq.${myId},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${myId})`
+  )
+  .not("status", "eq", "ended")
+  .order("created_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
+
 
     setSession(data || null);
   }

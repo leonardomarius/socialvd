@@ -183,35 +183,28 @@
 
     // DM creation
     const handleStartConversation = async () => {
-      if (!myId || !id) {
-        alert("Error: user not loaded.");
-        return;
-      }
+  if (!myId || !id) {
+    alert("Error: user not loaded.");
+    return;
+  }
 
-      try {
-        const { data: newConv, error: convErr } = await supabase
-          .from("conversations")
-          .insert({ created_at: new Date().toISOString() })
-          .select("id")
-          .single();
+  try {
+    const { data, error } = await supabase.rpc(
+      "create_or_get_conversation",
+      { other_user: id }
+    );
 
-        if (convErr || !newConv) {
-          alert("Error creating conversation: " + convErr?.message);
-          return;
-        }
+    if (error || !data) {
+      alert("Error creating conversation: " + error?.message);
+      return;
+    }
 
-        const convId = newConv.id as string;
+    router.push(`/messages/${data}`);
+  } catch (e: any) {
+    alert("Error: " + e?.message);
+  }
+};
 
-        await supabase.from("conversations_users").insert([
-          { conversation_id: convId, user_id: myId },
-          { conversation_id: convId, user_id: id },
-        ]);
-
-        router.push(`/messages/${convId}`);
-      } catch (error: any) {
-        alert("Error: " + error?.message);
-      }
-    };
 
     // ⭐ FIX : missing function re-added
     const markAccountVerified = async (accountId: string) => {
