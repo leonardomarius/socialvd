@@ -36,7 +36,10 @@ type Comment = {
   content: string;
   created_at: string;
   user_id?: string | null;
+  likes_count?: number;
+  isLikedByMe?: boolean;
 };
+
 
 type Notification = {
   type: "success" | "error";
@@ -50,10 +53,12 @@ export default function FeedPage() {
   const [pseudo, setPseudo] = useState<string>("");
 
   const [posts, setPosts] = useState<Post[]>([]);
-  const [comments, setComments] = useState<Comment[]>([]);
+    const [comments, setComments] = useState<Comment[]>([]);
 
   const [newComments, setNewComments] = useState<Record<string, string>>({});
+  const [replyTo, setReplyTo] = useState<Record<string, string | null>>({});
   const [newPost, setNewPost] = useState("");
+
   const [newGame, setNewGame] = useState("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
 
@@ -64,10 +69,6 @@ export default function FeedPage() {
 
   // Menu ⋮ ouvert pour quel post
   const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);
-
-  // Modal de confirmation de suppression de post
-  const [confirmDeletePostId, setConfirmDeletePostId] =
-    useState<string | null>(null);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -191,9 +192,9 @@ useEffect(() => {
 
     setPosts(postsFormatted);
 
-    const { data: commentsData, error: commentsError } = await supabase
+        const { data: commentsData, error: commentsError } = await supabase
       .from("comments")
-      .select("*, user_id")
+      .select("*, comment_likes(count)")
       .order("created_at", { ascending: true });
 
     if (commentsError) {
@@ -202,8 +203,52 @@ useEffect(() => {
       return;
     }
 
-    setComments(commentsData || []);
+    // Formater les commentaires avec le compteur de likes
+    const baseComments: Comment[] =
+      commentsData?.map((c: any) => {
+        const likesArray = c.comment_likes || [];
+        const likesCount =
+          Array.isArray(likesArray) && likesArray[0]?.count
+            ? likesArray[0].count
+            : 0;
+
+        return {
+          ...c,
+          likes_count: likesCount,
+          isLikedByMe: false, // sera ajusté juste après
+        };
+      }) || [];
+
+    // Récupérer les likes de commentaires de l'utilisateur connecté
+    let myCommentLikesMap: Record<string, boolean> = {};
+    if (myId) {
+      const { data: myCommentLikes, error: myCommentLikesError } =
+        await supabase
+          .from("comment_likes")
+          .select("comment_id")
+          .eq("user_id", myId);
+
+      if (myCommentLikesError) {
+        console.error(myCommentLikesError);
+      } else if (myCommentLikes) {
+        myCommentLikesMap = myCommentLikes.reduce(
+          (acc: Record<string, boolean>, row: any) => {
+            acc[row.comment_id] = true;
+            return acc;
+          },
+          {}
+        );
+      }
+    }
+
+    const commentsWithFlags = baseComments.map((c) => ({
+      ...c,
+      isLikedByMe: !!myCommentLikesMap[c.id],
+    }));
+
+    setComments(commentsWithFlags);
   };
+
 
   // -----------------------------------------------------
   // Upload media
@@ -294,7 +339,8 @@ useEffect(() => {
   // -----------------------------------------------------
   // Add a comment + Notification
   // -----------------------------------------------------
-  const handleAddComment = async (postId: string) => {
+  const handleAddComment = async (postId: string, parentId?: string) => {
+
     if (!myId) return;
 
     const content = newComments[postId];
@@ -302,9 +348,11 @@ useEffect(() => {
 
     const { error } = await supabase.from("comments").insert({
       post_id: postId,
-      content,
-      author_pseudo: pseudo,
-      user_id: myId,
+parent_id: parentId ?? null,
+content,
+author_pseudo: pseudo,
+user_id: myId,
+
     });
 
     if (error) {
@@ -327,10 +375,12 @@ useEffect(() => {
       });
     }
 
-    setNewComments((prev) => ({ ...prev, [postId]: "" }));
+        setNewComments((prev) => ({ ...prev, [postId]: "" }));
+    setReplyTo((prev) => ({ ...prev, [postId]: null }));
     showNotification("Comment added");
     loadAllData();
   };
+
 
   // -----------------------------------------------------
   // DELETE comment
@@ -352,20 +402,17 @@ useEffect(() => {
   };
 
   // -----------------------------------------------------
-  // Ask delete confirmation for post
+  // Delete post (with browser confirm)
   // -----------------------------------------------------
-  const requestDeletePost = (postId: string) => {
-    setConfirmDeletePostId(postId);
-    setOpenMenuPostId(null);
-  };
+  const handleDeletePost = async (postId: string) => {
+    if (!myId) return;
 
-  // -----------------------------------------------------
-  // Confirm delete post
-  // -----------------------------------------------------
-  const handleConfirmDeletePost = async () => {
-    if (!confirmDeletePostId || !myId) return;
+    const confirmed = window.confirm(
+      "Delete this post? This action is permanent. The attached media will also be removed."
+    );
+    if (!confirmed) return;
 
-    const post = posts.find((p) => p.id === confirmDeletePostId);
+    const post = posts.find((p) => p.id === postId);
     const mediaUrl = post?.media_url || null;
 
     if (mediaUrl) {
@@ -375,7 +422,7 @@ useEffect(() => {
     const { error } = await supabase
       .from("posts")
       .delete()
-      .eq("id", confirmDeletePostId)
+      .eq("id", postId)
       .eq("user_id", myId);
 
     if (error) {
@@ -384,14 +431,43 @@ useEffect(() => {
       return;
     }
 
-    setPosts((prev) => prev.filter((p) => p.id !== confirmDeletePostId));
-    setConfirmDeletePostId(null);
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
     showNotification("Post deleted");
   };
 
-  const handleCancelDeletePost = () => {
-    setConfirmDeletePostId(null);
-  };
+const handleToggleCommentLike = async (commentId: string) => {
+  if (!myId) return;
+
+  const comment = comments.find((c) => c.id === commentId);
+  const currentlyLiked = comment?.isLikedByMe;
+
+  if (currentlyLiked) {
+    await supabase
+      .from("comment_likes")
+      .delete()
+      .eq("comment_id", commentId)
+      .eq("user_id", myId);
+  } else {
+    await supabase.from("comment_likes").insert({
+      comment_id: commentId,
+      user_id: myId,
+    });
+  }
+
+  // Mise à jour locale
+  setComments((prev) =>
+    prev.map((c) =>
+      c.id !== commentId
+        ? c
+        : {
+            ...c,
+            isLikedByMe: !currentlyLiked,
+            likes_count: (c.likes_count ?? 0) + (currentlyLiked ? -1 : 1),
+          }
+    )
+  );
+};
+
 
   // -----------------------------------------------------
   // Edit post
@@ -596,15 +672,11 @@ useEffect(() => {
                     {isMenuOpen && (
                       <div ref={menuRef} className="options-menu">
                         <button
-                          className="options-menu-item"
-                          onClick={() => handleStartEditPost(post)}
-                        >
-                          <PencilSquareIcon className="icon-16" />
-                          <span>Edit</span>
-                        </button>
-                        <button
                           className="options-menu-item danger"
-                          onClick={() => requestDeletePost(post.id)}
+                          onClick={() => {
+                            setOpenMenuPostId(null);
+                            handleDeletePost(post.id);
+                          }}
                         >
                           <TrashIcon className="icon-16" />
                           <span>Delete</span>
@@ -614,6 +686,8 @@ useEffect(() => {
                   </div>
                 )}
               </div>
+
+
 
               {/* Contenu / Édition */}
               {!isEditing ? (
@@ -706,32 +780,74 @@ useEffect(() => {
 
                   return (
                     <div key={c.id} className="comment-row">
-                      <p className="comment-text">
-                        {c.user_id ? (
-                          <Link
-                            href={`/profile/${c.user_id}`}
-                            className="comment-author username-small"
-                            style={{ textDecoration: "none" }}
-                          >
-                            {c.author_pseudo}
-                          </Link>
-                        ) : (
-                          <span className="comment-author username-small">
-                            {c.author_pseudo}
-                          </span>
-                        )}
+                     <p className="comment-text">
+  {c.user_id ? (
+    <Link
+      href={`/profile/${c.user_id}`}
+      className="comment-author username-small"
+      style={{ textDecoration: "none" }}
+    >
+      {c.author_pseudo}
+    </Link>
+  ) : (
+    <span className="comment-author username-small">
+      {c.author_pseudo}
+    </span>
+  )}
 
-                        <span className="comment-separator"> · </span>
-                        <span>{c.content}</span>
-                      </p>
-                      {canDelete && (
-                        <button
-                          className="icon-button small danger-text"
-                          onClick={() => handleDeleteComment(c.id)}
-                        >
-                          <TrashIcon className="icon-14" />
-                        </button>
-                      )}
+  <span className="comment-separator"> · </span>
+  <span>{c.content}</span>
+
+    {/* --- REPLY BUTTON --- */}
+  <button
+    className="icon-button small"
+    style={{ marginLeft: "6px", fontSize: "0.75rem", opacity: 0.8 }}
+    onClick={() => {
+      setNewComments((prev) => ({
+        ...prev,
+        [post.id]: `@${c.author_pseudo} `,
+      }));
+      setReplyTo((prev) => ({
+        ...prev,
+        [post.id]: c.id,
+      }));
+    }}
+  >
+    Reply
+  </button>
+</p>
+
+
+                     {canDelete && (
+  <button
+    className="icon-button small danger-text"
+    onClick={() => handleDeleteComment(c.id)}
+  >
+    <TrashIcon className="icon-14" />
+  </button>
+)}
+
+{/* --- LIKE COMMENTAIRE --- */}
+<button
+  className="icon-button small"
+  onClick={() => handleToggleCommentLike(c.id)}
+>
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill={c.isLikedByMe ? "#ff6b81" : "none"}
+    stroke="#ffffff"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M14 9V5a3 3 0 0 0-6 0v4" />
+    <path d="M5 15V11a2 2 0 0 1 2-2h11l-1 8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2" />
+  </svg>
+  <span style={{ fontSize: "0.75rem" }}>{c.likes_count ?? 0}</span>
+</button>
+
                     </div>
                   );
                 })}
@@ -751,7 +867,12 @@ useEffect(() => {
                   />
                   <button
                     className="btn ghost-btn"
-                    onClick={() => handleAddComment(post.id)}
+                    onClick={() =>
+                      handleAddComment(
+                        post.id,
+                        replyTo[post.id] ?? undefined
+                      )
+                    }
                   >
                     Send
                   </button>
@@ -761,29 +882,6 @@ useEffect(() => {
           );
         })}
       </div>
-
-      {/* DELETE POST MODAL */}
-      {confirmDeletePostId && (
-        <div className="modal-backdrop">
-          <div className="modal-card">
-            <h3>Delete this post?</h3>
-            <p className="modal-text">
-              This action is permanent. The attached media will also be removed.
-            </p>
-            <div className="modal-actions">
-              <button className="btn ghost-btn" onClick={handleCancelDeletePost}>
-                Cancel
-              </button>
-              <button
-                className="btn danger-btn"
-                onClick={handleConfirmDeletePost}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* STYLES */}
       <style jsx>{`
@@ -1166,16 +1264,35 @@ useEffect(() => {
         }
 
         .modal-backdrop {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.55);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          backdrop-filter: blur(8px);
-          z-index: 50;
-          animation: fadeIn 0.18s ease-out;
-        }
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+
+  /* 🔥 Toujours au-dessus de tout */
+  z-index: 9999;
+
+  animation: fadeIn 0.18s ease-out;
+}
+
+.modal-card {
+  background: rgba(10, 10, 18, 0.98);
+  border-radius: 18px;
+  padding: 20px;
+  max-width: 360px;
+  width: 90%;
+  border: 1px solid rgba(80, 80, 130, 0.8);
+
+  /* 🔥 Force la carte au-dessus du backdrop */
+  z-index: 10000;
+
+  animation: scaleIn 0.18s ease-out;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+}
+
 
         .modal-card {
           background: rgba(10, 10, 18, 0.98);
