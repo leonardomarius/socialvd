@@ -406,46 +406,60 @@ useEffect(() => {
           gap: 26px;
         }
 
-        .nav-btn {
-          font-family: "Space Grotesk", sans-serif;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
+        /* --- NAV BUTTON BASE --- */
+.nav-btn {
+  position: relative; /* ⭐ ESSENTIEL POUR CENTRER L’ANIMATION */
+  overflow: hidden;   /* ⭐ EMPÊCHE TOUT DÉPASSEMENT → PLUS DE SCROLLBARS */
 
-          padding: 6px 12px;
-          border-radius: 8px;
+  font-family: "Space Grotesk", sans-serif;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 
-          background: rgba(32,32,40,0.90);
-          border: 1px solid rgba(255,255,255,0.10);
-          color: #f5f6ff;
+  padding: 6px 12px;
+  border-radius: 8px;
 
-          font-size: 0.84rem;
-          font-weight: 500;
-          cursor: pointer;
-          text-decoration: none;
+  background: rgba(32,32,40,0.90);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #f5f6ff;
 
-          transition:
-            background .22s ease,
-            border-color .22s ease,
-            transform .22s ease,
-            color .22s ease,
-            box-shadow .22s ease;
-        }
+  font-size: 0.84rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
 
-        .nav-btn::after {
-          content: "";
-          position: absolute;
-          top: 0;
-          left: -11155;
-          width: 60%;
-          height: 100%;
-          background: linear-gradient(120deg,
-            rgba(255,255,255,0) 0%,
-            rgba(255,255,255,0.12) 50%,
-            rgba(255,255,255,0) 100%
-          );
-          transition: transform 0.35s ease;
-        }
+  transition:
+    background .22s ease,
+    border-color .22s ease,
+    transform .22s ease,
+    color .22s ease,
+    box-shadow .22s ease;
+}
+
+/* --- HOVER LIGHT SWEEP FIX --- */
+.nav-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -80%;        /* ⭐ CENTRÉ, PLUS DE -11155 */
+  width: 60%;
+  height: 100%;
+
+  background: linear-gradient(
+    120deg,
+    rgba(255,255,255,0) 0%,
+    rgba(255,255,255,0.12) 50%,
+    rgba(255,255,255,0) 100%
+  );
+
+  transform: translateX(0);
+  transition: transform 0.35s ease;
+}
+
+.nav-btn:hover::after {
+  transform: translateX(230%); /* ⭐ mouvement fluide et centré */
+}
+
 
         .nav-btn:hover::after {
           transform: translateX(200%);
