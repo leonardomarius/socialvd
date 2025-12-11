@@ -23,7 +23,7 @@ body {
   color: white;
 
   /* Fond spatial */
-  background-image: url("/space-bg.jpg");
+  background-image: url("/fond1.jpg");
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
