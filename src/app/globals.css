@@ -43,7 +43,8 @@ p, span, a, button, input, textarea {
 /* ======================================
    BOUTONS GÉNÉRAUX
 ====================================== */
-button {
+/* Boutons globaux - n'affecte que .btn */
+.btn {
   background: linear-gradient(135deg, #0f4cff, #1a73e8);
   padding: 10px 16px;
   border: none;
@@ -57,7 +58,7 @@ button {
   backdrop-filter: blur(4px);
 }
 
-button:hover {
+.btn:hover {
   background: linear-gradient(135deg, #0d3ed1, #145bb5);
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(0, 60, 255, 0.35);

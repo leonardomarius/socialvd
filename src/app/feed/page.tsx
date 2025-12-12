@@ -38,6 +38,8 @@ type Comment = {
   user_id?: string | null;
   likes_count?: number;
   isLikedByMe?: boolean;
+  parent_id?: string | null;
+  avatar_url?: string | null;
 };
 
 
@@ -74,6 +76,9 @@ export default function FeedPage() {
 
   // Notifications
   const [notification, setNotification] = useState<Notification | null>(null);
+
+const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
+
 
   const showNotification = (
     message: string,
@@ -193,9 +198,10 @@ useEffect(() => {
     setPosts(postsFormatted);
 
         const { data: commentsData, error: commentsError } = await supabase
-      .from("comments")
-      .select("*, comment_likes(count)")
-      .order("created_at", { ascending: true });
+  .from("comments")
+  .select("id, post_id, user_id, author_pseudo, content, created_at, parent_id, comment_likes(count)")
+  .order("created_at", { ascending: true });
+
 
     if (commentsError) {
       console.error(commentsError);
@@ -242,9 +248,11 @@ useEffect(() => {
     }
 
     const commentsWithFlags = baseComments.map((c) => ({
-      ...c,
-      isLikedByMe: !!myCommentLikesMap[c.id],
-    }));
+  ...c,
+  isLikedByMe: !!myCommentLikesMap[c.id],
+  avatar_url: avatarMap[c.user_id ?? ""] || null,   // ✅ AJOUT
+}));
+
 
     setComments(commentsWithFlags);
   };
@@ -569,6 +577,107 @@ const handleToggleCommentLike = async (commentId: string) => {
     );
   };
 
+// ---------------------
+// TYPES POUR THREADS
+// ---------------------
+type CommentNode = Comment & {
+  parent_id?: string | null;
+  replies: CommentNode[];
+};
+
+// ---------------------
+// BUILD COMMENT TREE
+// ---------------------
+function buildCommentTree(allComments: Comment[]): CommentNode[] {
+  const map: Record<string, CommentNode> = {};
+  const tree: CommentNode[] = [];
+
+  allComments.forEach((c: any) => {
+    map[c.id] = { ...c, replies: [], parent_id: c.parent_id || null };
+  });
+
+  allComments.forEach((c: any) => {
+    if (c.parent_id && map[c.parent_id]) {
+      map[c.parent_id].replies.push(map[c.id]);
+    } else if (!c.parent_id) {
+      tree.push(map[c.id]);
+    }
+  });
+
+  return tree;
+}
+
+// ---------------------
+// RENDER THREADED COMMENT (Instagram / TikTok style)
+// ---------------------
+function renderThreadedComment(comment: CommentNode, depth: number, post: Post) {
+  const canDelete =
+    (comment.user_id && comment.user_id === myId) ||
+    comment.author_pseudo === pseudo;
+
+  return (
+    <div
+      key={comment.id}
+      className="comment-wrapper"
+      style={{ paddingLeft: depth * 10 }}
+    >
+      <div className="comment-body glass-comment">
+        <div className="comment-line">
+          <Link
+            href={`/profile/${comment.user_id}`}
+            className="comment-author clickable-author"
+          >
+            {comment.author_pseudo}
+          </Link>
+
+          <span className="comment-separator">:</span>
+
+
+          <span className="comment-text">{comment.content}</span>
+        </div>
+
+        <div className="comment-actions">
+          <button
+            className="comment-action"
+            onClick={() => {
+              setNewComments(prev => ({
+                ...prev,
+                [post.id]: `@${comment.author_pseudo} `
+              }));
+              setReplyTo(prev => ({ ...prev, [post.id]: comment.id }));
+            }}
+          >
+            Reply
+          </button>
+
+          {canDelete && (
+            <button
+              className="comment-action danger"
+              onClick={() => handleDeleteComment(comment.id)}
+            >
+              Delete
+            </button>
+          )}
+
+          <button
+            className="comment-action"
+            onClick={() => handleToggleCommentLike(comment.id)}
+          >
+            ❤️ {comment.likes_count ?? 0}
+          </button>
+        </div>
+
+        {comment.replies.map(child =>
+          renderThreadedComment(child, depth + 1, post)
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+
+
     // -----------------------------------------------------
   // RENDER
   // -----------------------------------------------------
@@ -771,113 +880,46 @@ const handleToggleCommentLike = async (commentId: string) => {
                 </div>
               </div>
 
-              {/* Commentaires */}
-              <div className="comments-block">
-                {postComments.map((c) => {
-                  const canDelete =
-                    (c.user_id && c.user_id === myId) ||
-                    c.author_pseudo === pseudo;
-
-                  return (
-                    <div key={c.id} className="comment-row">
-                     <p className="comment-text">
-  {c.user_id ? (
-    <Link
-      href={`/profile/${c.user_id}`}
-      className="comment-author username-small"
-      style={{ textDecoration: "none" }}
-    >
-      {c.author_pseudo}
-    </Link>
-  ) : (
-    <span className="comment-author username-small">
-      {c.author_pseudo}
-    </span>
-  )}
-
-  <span className="comment-separator"> · </span>
-  <span>{c.content}</span>
-
-    {/* --- REPLY BUTTON --- */}
-  <button
-    className="icon-button small"
-    style={{ marginLeft: "6px", fontSize: "0.75rem", opacity: 0.8 }}
-    onClick={() => {
-      setNewComments((prev) => ({
-        ...prev,
-        [post.id]: `@${c.author_pseudo} `,
-      }));
-      setReplyTo((prev) => ({
-        ...prev,
-        [post.id]: c.id,
-      }));
-    }}
-  >
-    Reply
-  </button>
-</p>
-
-
-                     {canDelete && (
-  <button
-    className="icon-button small danger-text"
-    onClick={() => handleDeleteComment(c.id)}
-  >
-    <TrashIcon className="icon-14" />
-  </button>
-)}
-
-{/* --- LIKE COMMENTAIRE --- */}
+              {/* Comment toggle button */}
 <button
-  className="icon-button small"
-  onClick={() => handleToggleCommentLike(c.id)}
+  className="comment-toggle-btn"
+  onClick={() =>
+    setOpenComments(prev => ({ ...prev, [post.id]: !prev[post.id] }))
+  }
 >
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill={c.isLikedByMe ? "#ff6b81" : "none"}
-    stroke="#ffffff"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M14 9V5a3 3 0 0 0-6 0v4" />
-    <path d="M5 15V11a2 2 0 0 1 2-2h11l-1 8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2" />
-  </svg>
-  <span style={{ fontSize: "0.75rem" }}>{c.likes_count ?? 0}</span>
+  {openComments[post.id] ? "Hide comments" : `Show comments (${postComments.length})`}
 </button>
 
-                    </div>
-                  );
-                })}
+{/* Comment drawer */}
+{openComments[post.id] && (
+  <div className="comments-card glass-card">
+    {buildCommentTree(postComments).map(c =>
+      renderThreadedComment(c, 0, post)
+    )}
 
-                <div className="comment-input-row">
-                  <input
-                    type="text"
-                    placeholder="Comment..."
-                    value={newComments[post.id] || ""}
-                    onChange={(e) =>
-                      setNewComments((prev) => ({
-                        ...prev,
-                        [post.id]: e.target.value,
-                      }))
-                    }
-                    className="input"
-                  />
-                  <button
-                    className="btn ghost-btn"
-                    onClick={() =>
-                      handleAddComment(
-                        post.id,
-                        replyTo[post.id] ?? undefined
-                      )
-                    }
-                  >
-                    Send
-                  </button>
-                </div>
-              </div>
+    <div className="comment-input-row">
+      <input
+        type="text"
+        placeholder="Comment..."
+        value={newComments[post.id] || ""}
+        onChange={(e) =>
+          setNewComments((prev) => ({ ...prev, [post.id]: e.target.value }))
+        }
+        className="input"
+      />
+      <button
+        className="btn ghost-btn"
+        onClick={() =>
+          handleAddComment(post.id, replyTo[post.id] ?? undefined)
+        }
+      >
+        Send
+      </button>
+    </div>
+  </div>
+)}
+
+
             </div>
           );
         })}
@@ -1157,17 +1199,6 @@ const handleToggleCommentLike = async (commentId: string) => {
           border-top: 1px solid rgba(65, 65, 100, 0.65);
         }
 
-        .comment-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          margin-bottom: 7px;
-          padding: 7px 11px;
-          border-radius: 10px;
-          background: rgba(18, 18, 30, 0.72);
-          border: 1px solid rgba(75, 80, 130, 0.6);
-        }
 
         .comment-text {
           font-size: 0.82rem;
@@ -1392,6 +1423,178 @@ const handleToggleCommentLike = async (commentId: string) => {
           }
         }
 
+/* Neutralise le style global des boutons pour les commentaires */
+.unstyled-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+
+/* ======================================
+   COMMENTAIRES — VERSION PROPRE VERRE
+====================================== */
+
+.comment-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-left: calc(26px * var(--depth));
+}
+
+
+.depth-0 { --depth: 0; }
+.depth-1 { --depth: 1; }
+.depth-2 { --depth: 2; }
+.depth-3 { --depth: 3; }
+
+/* Bulle de commentaire façon Instagram / verre */
+.glass-comment {
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  backdrop-filter: blur(14px);
+  flex: 1;
+}
+
+/* Ligne auteur + texte */
+.comment-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.comment-author {
+  font-weight: 600;
+  opacity: 0.75;
+color: #c7cae0;   /* gris bleuté, plus sobre */
+transition: 0.2s ease;
+}
+
+.comment-author:hover {
+  opacity: 1;
+  color: #e5e7ff;
+}
+
+.comment-separator {
+  margin: 0 100px;
+  opacity: 0.55;
+}
+
+
+
+.comment-text {
+  font-size: 0.88rem;
+  color: #f1f2ff;
+  line-height: 1.45;
+  opacity: 0.9;
+}
+
+
+/* Actions */
+
+.comment-actions {
+  margin-top: 6px;
+  display: flex;
+  gap: 10px;
+}
+
+.comment-action {
+  font-weight: 500;
+  color: #ebecff;
+}
+
+
+.comment-action {
+  all: unset;
+  cursor: pointer;
+  font-size: 0.76rem;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  backdrop-filter: blur(6px);
+  transition: 0.2s ease;
+}
+
+.comment-action:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+.comment-action.danger {
+  color: #ff9b9b;
+}
+
+.comment-toggle-btn {
+  all: unset;
+  cursor: pointer;
+  font-size: 0.86rem;
+  color: #cfd3ff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(8px);
+  margin-top: 10px;
+  transition: 0.2s;
+}
+
+.comment-toggle-btn:hover {
+  background: rgba(255,255,255,0.12);
+}
+
+.glass-card {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(20px);
+}
+
+
+.comment-toggle-btn {
+  all: unset;
+  cursor: pointer;
+  font-size: 0.86rem;
+  color: #cfd3ff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(8px);
+  margin-top: 10px;
+  transition: 0.2s;
+}
+
+.comment-toggle-btn:hover {
+  background: rgba(255,255,255,0.12);
+}
+
+.glass-card {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(20px);
+}
+
+
+.clickable-author {
+  color: #91a5ff;
+  cursor: pointer;
+}
+
+.clickable-author:hover {
+  text-decoration: underline;
+}
+
+
         @media (max-width: 650px) {
           .feed-container {
             padding: 18px;
@@ -1400,6 +1603,8 @@ const handleToggleCommentLike = async (commentId: string) => {
             padding: 16px;
           }
         }
+
+
       `}</style>
     </>
   );
