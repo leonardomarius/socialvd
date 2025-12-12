@@ -138,15 +138,18 @@ useEffect(() => {
   // -----------------------------------------------------
   const loadAllData = async () => {
     const { data: postsData, error: postsError } = await supabase
-      .from("posts")
-      .select("*, likes(count)") // 🔥 on récupère l'agrégat des likes
-      .order("created_at", { ascending: false });
+  .from("posts")
+  .select("*, likes(count)")
+  .order("created_at", { ascending: false });
 
-    if (postsError) {
-      console.error(postsError);
-      showNotification("Error loading posts", "error");
-      return;
-    }
+console.log("POSTS ERROR RAW:", postsError, postsData); // 👈 AJOUT
+
+if (postsError) {
+  console.error(postsError);
+  showNotification("Error loading posts", "error");
+  return;
+}
+
 
     const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
@@ -199,15 +202,17 @@ useEffect(() => {
 
         const { data: commentsData, error: commentsError } = await supabase
   .from("comments")
-  .select("id, post_id, user_id, author_pseudo, content, created_at, parent_id, comment_likes(count)")
+  .select("id, post_id, user_id, author_pseudo, content, created_at, parent_id")
   .order("created_at", { ascending: true });
 
+console.log("COMMENTS ERROR RAW:", commentsError, commentsData); // 👈 AJOUT
 
-    if (commentsError) {
-      console.error(commentsError);
-      showNotification("Error loading comments", "error");
-      return;
-    }
+if (commentsError) {
+  console.error(commentsError);
+  showNotification("Error loading comments", "error");
+  return;
+}
+
 
     // Formater les commentaires avec le compteur de likes
     const baseComments: Comment[] =
