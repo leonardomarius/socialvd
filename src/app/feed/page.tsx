@@ -202,7 +202,16 @@ if (postsError) {
 
         const { data: commentsData, error: commentsError } = await supabase
   .from("comments")
-  .select("id, post_id, user_id, author_pseudo, content, created_at, parent_id")
+  .select(`
+    id,
+    post_id,
+    user_id,
+    author_pseudo,
+    content,
+    created_at,
+    parent_id,
+    comment_likes(count)
+  `)
   .order("created_at", { ascending: true });
 
 console.log("COMMENTS ERROR RAW:", commentsError, commentsData); // 👈 AJOUT
@@ -624,7 +633,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
     <div
       key={comment.id}
       className="comment-wrapper"
-      style={{ paddingLeft: depth * 10 }}
+      style={{ paddingLeft: depth * 15 }}
     >
       <div className="comment-body glass-comment">
         <div className="comment-line">
