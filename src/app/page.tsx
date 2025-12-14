@@ -21,26 +21,32 @@ export default function HomePage() {
 
   return (
     <main
-      style={{
-        padding: "40px",
-        maxWidth: "600px",
-        margin: "0 auto",
-        textAlign: "center",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
-      <h1>Welcome to SocialVD</h1>
-      <p>Realize how much gaming is made for you.</p>
+  className="home-animate"
+  style={{
+    padding: "40px",
+    maxWidth: "600px",
+    margin: "0 auto",
+    textAlign: "center",
+  }}
+>
+
+      <h1 className="home-animate home-delay-1">
+  Welcome to SocialVD
+</h1>
+      <p className="home-animate home-delay-2">
+  Realize how much gaming is made for you.
+</p>
 
       {/* Buttons side by side */}
       <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          gap: "30px",
-          marginTop: "30px",
-        }}
-      >
+  className="home-animate home-delay-3"
+  style={{
+    display: "flex",
+    justifyContent: "center",
+    gap: "30px",
+    marginTop: "30px",
+  }}
+>
         {/* LOGIN */}
         <a
           href="/login"
