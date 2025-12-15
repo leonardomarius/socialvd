@@ -264,3 +264,32 @@ a:visited {
   opacity: 0;
   animation: TEST_FADE 1.2s ease-out forwards;
 }
+
+/* FORCE hover visibility for game badge */
+a.game-link {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  margin-left: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.15s ease;
+}
+
+a.game-link:hover {
+  background: rgba(120, 140, 255, 0.25) !important;
+  border-color: rgba(120, 140, 255, 0.9) !important;
+  box-shadow: 0 0 18px rgba(120, 140, 255, 0.75) !important;
+}
+
+a.game-link:active {
+  transform: scale(0.96);
+}

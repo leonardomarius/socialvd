@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
@@ -16,18 +16,22 @@ import {
 type Post = {
   id: string;
   content: string;
-  game: string | null;
+  game_id: string;
+  games: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
   author_pseudo: string | null;
   media_url: string | null;
   media_type: string | null;
   created_at: string;
   user_id: string;
   avatar_url?: string | null;
-
-  // 🔥 ajout pour les likes
   likes_count?: number;
   isLikedByMe?: boolean;
 };
+
 
 type Comment = {
   id: string;
@@ -50,6 +54,7 @@ type Notification = {
 
 export default function FeedPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [myId, setMyId] = useState<string | null>(null);
   const [pseudo, setPseudo] = useState<string>("");
@@ -60,14 +65,19 @@ export default function FeedPage() {
   const [newComments, setNewComments] = useState<Record<string, string>>({});
   const [replyTo, setReplyTo] = useState<Record<string, string | null>>({});
   const [newPost, setNewPost] = useState("");
+  const [games, setGames] = useState<
+  { id: string; name: string; slug: string }[]
+>([]);
 
-  const [newGame, setNewGame] = useState("");
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
+const [selectedGameId, setSelectedGameId] = useState<string>("");
+const [mediaFile, setMediaFile] = useState<File | null>(null);
+const [filterGameId, setFilterGameId] = useState<string>("all");
+
+
 
   // Édition de post
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState<string>("");
-  const [editGame, setEditGame] = useState<string>("");
 
   // Menu ⋮ ouvert pour quel post
   const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);
@@ -131,18 +141,50 @@ useEffect(() => {
   if (myId) {
     loadAllData();
   }
-}, [myId]);
+}, [myId, filterGameId]);
+
+useEffect(() => {
+  const gameFromUrl = searchParams.get("game");
+  if (gameFromUrl) {
+    setSelectedGameId(gameFromUrl);
+  }
+}, [searchParams]);
+
 
   // -----------------------------------------------------
   // Charger posts + commentaires (+ likes)
   // -----------------------------------------------------
   const loadAllData = async () => {
-    const { data: postsData, error: postsError } = await supabase
+      const { data: gamesData, error: gamesError } = await supabase
+    .from("games")
+    .select("id, name, slug")
+    .order("name");
+
+  if (gamesError) {
+    console.error(gamesError);
+  } else {
+    setGames(gamesData || []);
+  }
+
+    let postsQuery = supabase
   .from("posts")
-  .select("*, likes(count)")
+  .select(`
+    *,
+    games (
+      id,
+      name,
+      slug
+    ),
+    likes(count)
+  `)
   .order("created_at", { ascending: false });
 
-console.log("POSTS ERROR RAW:", postsError, postsData); // 👈 AJOUT
+if (filterGameId !== "all") {
+  postsQuery = postsQuery.eq("game_id", filterGameId);
+}
+
+const { data: postsData, error: postsError } = await postsQuery;
+
 
 if (postsError) {
   console.error(postsError);
@@ -214,7 +256,6 @@ if (postsError) {
   `)
   .order("created_at", { ascending: true });
 
-console.log("COMMENTS ERROR RAW:", commentsError, commentsData); // 👈 AJOUT
 
 if (commentsError) {
   console.error(commentsError);
@@ -331,18 +372,19 @@ if (commentsError) {
   // Create a post
   // -----------------------------------------------------
   const handleCreatePost = async () => {
-    if (!myId || !newPost.trim()) return;
+  if (!myId || !newPost.trim() || !selectedGameId) return;
 
     const { url, type } = await uploadMedia();
 
     const { error } = await supabase.from("posts").insert({
-      user_id: myId,
-      content: newPost,
-      game: newGame || null,
-      author_pseudo: pseudo,
-      media_url: url,
-      media_type: type,
-    });
+  user_id: myId,
+  content: newPost,
+  game_id: selectedGameId,
+  author_pseudo: pseudo,
+  media_url: url,
+  media_type: type,
+});
+
 
     if (error) {
       console.error(error);
@@ -351,7 +393,7 @@ if (commentsError) {
     }
 
     setNewPost("");
-    setNewGame("");
+    setSelectedGameId("");
     setMediaFile(null);
 
     showNotification("Post published!");
@@ -495,49 +537,47 @@ const handleToggleCommentLike = async (commentId: string) => {
   // Edit post
   // -----------------------------------------------------
   const handleStartEditPost = (post: Post) => {
-    setEditingPostId(post.id);
-    setEditContent(post.content);
-    setEditGame(post.game || "");
-    setOpenMenuPostId(null);
-  };
+  setEditingPostId(post.id);
+  setEditContent(post.content);
+  setSelectedGameId(post.game_id);
+  setOpenMenuPostId(null);
+};
 
   const handleCancelEditPost = () => {
-    setEditingPostId(null);
-    setEditContent("");
-    setEditGame("");
-  };
+  setEditingPostId(null);
+  setEditContent("");
+  setSelectedGameId("");
+  setMediaFile(null);
+};
+
 
   const handleSaveEditPost = async () => {
-    if (!editingPostId || !myId || !editContent.trim()) return;
+  if (!editingPostId || !myId || !editContent.trim() || !selectedGameId) return;
 
-    const { error } = await supabase
-      .from("posts")
-      .update({
-        content: editContent,
-        game: editGame || null,
-      })
-      .eq("id", editingPostId)
-      .eq("user_id", myId);
+  const { error } = await supabase
+    .from("posts")
+    .update({
+      content: editContent,
+      game_id: selectedGameId,
+    })
+    .eq("id", editingPostId)
+    .eq("user_id", myId);
 
-    if (error) {
-      console.error("Error editing post:", error);
-      showNotification("Error editing post", "error");
-      return;
-    }
+  if (error) {
+    console.error("Error editing post:", error);
+    showNotification("Error editing post", "error");
+    return;
+  }
 
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === editingPostId
-          ? { ...p, content: editContent, game: editGame || null }
-          : p
-      )
-    );
+  // Reload propre pour récupérer la jointure games
+  await loadAllData();
 
-    setEditingPostId(null);
-    setEditContent("");
-    setEditGame("");
-    showNotification("Post updated");
-  };
+  setEditingPostId(null);
+  setEditContent("");
+  setSelectedGameId("");
+  showNotification("Post updated");
+};
+
 
   // -----------------------------------------------------
   // LIKE / UNLIKE post
@@ -711,17 +751,37 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
         <h1 className="feed-title">News Feed</h1>
 
+<select
+  className="input"
+  value={filterGameId}
+  onChange={(e) => setFilterGameId(e.target.value)}
+  style={{ maxWidth: 220, marginBottom: 20 }}
+>
+  <option value="all">All games</option>
+  {games.map((game) => (
+    <option key={game.id} value={game.id}>
+      {game.name}
+    </option>
+  ))}
+</select>
+
         {/* Formulaire post */}
         <div className="card card-create">
           <h3 className="card-title">Create a post</h3>
 
-          <input
-            type="text"
-            placeholder="Game (optional)"
-            value={newGame}
-            onChange={(e) => setNewGame(e.target.value)}
-            className="input"
-          />
+          <select
+  className="input"
+  value={selectedGameId}
+  onChange={(e) => setSelectedGameId(e.target.value)}
+>
+  <option value="">Select a game</option>
+  {games.map((game) => (
+    <option key={game.id} value={game.id}>
+      {game.name}
+    </option>
+  ))}
+</select>
+
 
           <textarea
             value={newPost}
@@ -766,17 +826,25 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
                     />
                   </Link>
 
-                  <div>
-                    <Link
-                      href={`/profile/${post.user_id}`}
-                      className="post-author username-display"
-                    >
-                      {post.author_pseudo}
-                    </Link>
-                    {post.game && (
-                      <div className="post-game">{post.game}</div>
-                    )}
-                  </div>
+                  <div style={{ display: "flex", alignItems: "center" }}>
+  <Link
+    href={`/profile/${post.user_id}`}
+    className="post-author username-display"
+  >
+    {post.author_pseudo}
+  </Link>
+
+  {post.games && (
+    <Link
+      href={`/games/${post.games.slug}`}
+      className="game-link"
+      style={{ marginLeft: "10px" }}
+    >
+      {post.games.name}
+    </Link>
+  )}
+</div>
+
                 </div>
 
                 {/* Menu ⋮ */}
@@ -817,13 +885,19 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
                 <p className="post-content">{post.content}</p>
               ) : (
                 <div className="post-edit-block">
-                  <input
-                    type="text"
-                    placeholder="Game (optional)"
-                    value={editGame}
-                    onChange={(e) => setEditGame(e.target.value)}
-                    className="input"
-                  />
+                  <select
+  className="input"
+  value={selectedGameId}
+  onChange={(e) => setSelectedGameId(e.target.value)}
+>
+  <option value="">Select a game</option>
+  {games.map((game) => (
+    <option key={game.id} value={game.id}>
+      {game.name}
+    </option>
+  ))}
+</select>
+
                   <textarea
                     rows={3}
                     value={editContent}
