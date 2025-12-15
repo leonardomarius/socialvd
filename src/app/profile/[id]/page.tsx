@@ -22,6 +22,7 @@
 
   type Post = {
     id: string;
+    user_id: string;
     content: string;
     game: string | null;
     likes: number;
@@ -29,6 +30,18 @@
     media_type: string | null;
     created_at: string;
   };
+
+type Comment = {
+  id: string;
+  post_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  author_pseudo: string | null;
+  author_avatar: string | null;
+  likes: number;
+};
+
 
   type GameAccount = {
     id: string;
@@ -52,6 +65,13 @@
 
     const [userPosts, setUserPosts] = useState<Post[]>([]);
     const [loadingPosts, setLoadingPosts] = useState(true);
+    const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+    const [comments, setComments] = useState<Comment[]>([]);
+    const [loadingComments, setLoadingComments] = useState(false);
+    const [newComment, setNewComment] = useState("");
+    const [isLiking, setIsLiking] = useState(false);
+    const [localLikes, setLocalLikes] = useState<number>(0);
+
 
     const [followersCount, setFollowersCount] = useState(0);
     const [followingCount, setFollowingCount] = useState(0);
@@ -68,6 +88,49 @@
     const [savingEdit, setSavingEdit] = useState(false);
   // UI toggle for Game Accounts card
   const [showAccountsCard, setShowAccountsCard] = useState(false);
+
+  useEffect(() => {
+  if (!selectedPost) return;
+
+setLocalLikes(selectedPost.likes ?? 0);
+
+  const loadComments = async () => {
+    setLoadingComments(true);
+
+    const { data } = await supabase
+      .from("comments")
+      .select(`
+        id,
+        post_id,
+        user_id,
+        content,
+        created_at,
+        likes,
+        profiles:profiles (
+          pseudo,
+          avatar_url
+        )
+      `)
+      .eq("post_id", selectedPost.id)
+      .order("created_at", { ascending: true });
+
+    const formatted = (data || []).map((c: any) => ({
+      id: c.id,
+      post_id: c.post_id,
+      user_id: c.user_id,
+      content: c.content,
+      created_at: c.created_at,
+      likes: c.likes ?? 0,
+      author_pseudo: c.profiles?.pseudo ?? null,
+      author_avatar: c.profiles?.avatar_url ?? null,
+    }));
+
+    setComments(formatted);
+    setLoadingComments(false);
+  };
+
+  loadComments();
+}, [selectedPost]);
 
     // Load current user
     useEffect(() => {
@@ -168,18 +231,57 @@
       setIsFollowing(!!data && data.length > 0);
     };
 
+const handleToggleFollow = async () => {
+  if (!myId) return;
+
+  await supabase.rpc("toggle_follow", {
+    p_follower: myId,
+    p_following: id,
+  });
+
+  checkFollow();
+  loadFollowCounts();
+};
+
+
     // Follow toggle
-    const handleToggleFollow = async () => {
-      if (!myId) return;
+    
+const handleToggleLike = async () => {
+  if (!myId || !selectedPost || isLiking) return;
 
-      await supabase.rpc("toggle_follow", {
-        p_follower: myId,
-        p_following: id,
-      });
+  setIsLiking(true);
 
-      checkFollow();
-      loadFollowCounts();
-    };
+  // Toggle like in DB
+  const { error } = await supabase.rpc("toggle_like", {
+    p_post_id: selectedPost.id,
+    p_user_id: myId,
+  });
+
+  if (error) {
+    console.error("Like error:", error.message);
+    setIsLiking(false);
+    return;
+  }
+
+  // 🔁 Refetch likes from DB (source of truth)
+  const { data: freshPost, error: fetchError } = await supabase
+    .from("posts")
+    .select("likes")
+    .eq("id", selectedPost.id)
+    .single();
+
+  if (!fetchError && freshPost) {
+  setLocalLikes(freshPost.likes ?? 0);
+  setSelectedPost((prev) =>
+    prev ? { ...prev, likes: freshPost.likes ?? 0 } : prev
+  );
+}
+
+
+  setIsLiking(false);
+};
+
+
 
     // DM creation
     const handleStartConversation = async () => {
@@ -204,6 +306,7 @@
     alert("Error: " + e?.message);
   }
 };
+
 
 
     // ⭐ FIX : missing function re-added
@@ -317,9 +420,267 @@
 
     if (!profile) return <p>Profile not found...</p>;
 
+
     return (
       <>
         <div className="profile-background"></div>
+
+{selectedPost && (
+  <div
+    onClick={() => setSelectedPost(null)}
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.75)",
+      zIndex: 9999,
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+    }}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: "680px",
+        maxHeight: "90vh",
+        overflowY: "auto",
+        borderRadius: 16,
+        padding: 20,
+        background:
+          "linear-gradient(135deg, rgba(14,14,22,0.98), rgba(6,6,12,0.98))",
+        border: "1px solid rgba(110,110,155,0.25)",
+      }}
+    >
+      <div style={{ marginBottom: 14 }}>
+  <div
+    style={{
+      display: "flex",
+      justifyContent: "space-between",
+      fontSize: 12,
+      color: "rgba(220,220,235,0.75)",
+      marginBottom: 6,
+    }}
+  >
+    <span>{selectedPost.game || "Unspecified game"}</span>
+    <span>
+      {new Date(selectedPost.created_at).toLocaleString("en-US", {
+        dateStyle: "short",
+        timeStyle: "short",
+      })}
+    </span>
+  </div>
+
+
+  <p
+    style={{
+      fontSize: 15,
+      color: "rgba(245,245,255,0.95)",
+      marginBottom: 10,
+      lineHeight: 1.45,
+    }}
+  >
+    {selectedPost.content}
+  </p>
+
+  {selectedPost.media_type === "image" && (
+    <img
+      src={selectedPost.media_url!}
+      alt="post media"
+      style={{
+        width: "100%",
+        borderRadius: 14,
+        marginTop: 10,
+      }}
+    />
+  )}
+
+  {selectedPost.media_type === "video" && (
+    <video
+      src={selectedPost.media_url!}
+      controls
+      style={{
+        width: "100%",
+        borderRadius: 14,
+        marginTop: 10,
+      }}
+    />
+  )}
+</div>
+
+
+
+<div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 18,
+    marginTop: 18,
+    paddingTop: 12,
+    borderTop: "1px solid rgba(255,255,255,0.08)",
+  }}
+>
+  {/* LIKE */}
+  <button
+  onClick={handleToggleLike}
+  disabled={isLiking}
+  style={{
+    background: "transparent",
+    border: "none",
+    color: "rgba(230,230,255,0.9)",
+    fontSize: 15,
+    cursor: isLiking ? "not-allowed" : "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    opacity: isLiking ? 0.6 : 1,
+  }}
+>
+  👍{" "}
+  <span style={{ fontSize: 13 }}>
+    {localLikes}
+  </span>
+</button>
+
+
+  {/* COMMENT */}
+  <button
+    style={{
+      background: "transparent",
+      border: "none",
+      color: "rgba(230,230,255,0.9)",
+      fontSize: 15,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+    }}
+  >
+    💬 <span style={{ fontSize: 13 }}>Comment</span>
+  </button>
+
+  {/* DELETE (owner only) */}
+  {myId === selectedPost.user_id && (
+    <button
+      style={{
+        marginLeft: "auto",
+        background: "transparent",
+        border: "none",
+        color: "rgba(255,120,120,0.9)",
+        fontSize: 14,
+        cursor: "pointer",
+      }}
+    >
+      🗑 Delete
+    </button>
+  )}
+</div>
+
+{/* ADD COMMENT */}
+<div style={{ marginTop: 16 }}>
+  <textarea
+    value={newComment}
+    onChange={(e) => setNewComment(e.target.value)}
+    placeholder="Write a comment..."
+    style={{
+      width: "100%",
+      minHeight: 60,
+      background: "rgba(20,20,30,0.8)",
+      border: "1px solid rgba(255,255,255,0.12)",
+      borderRadius: 10,
+      padding: 10,
+      color: "white",
+      resize: "none",
+      fontSize: 14,
+    }}
+  />
+
+  <button
+    disabled={!newComment.trim()}
+    onClick={async () => {
+      if (!myId || !selectedPost || !newComment.trim()) return;
+
+      await supabase.from("comments").insert({
+        post_id: selectedPost.id,
+        user_id: myId,
+        content: newComment.trim(),
+      });
+
+      setNewComment("");
+      setComments((prev) => [
+  ...prev,
+  {
+    id: crypto.randomUUID(), // placeholder UI (ou supprime si tu reload)
+    post_id: selectedPost.id,
+    user_id: myId,
+    content: newComment.trim(),
+    created_at: new Date().toISOString(),
+    author_pseudo: profile?.pseudo ?? null,
+    author_avatar: profile?.avatar_url ?? null,
+    likes: 0,
+  },
+]);
+    }}
+    style={{
+      marginTop: 8,
+      padding: "6px 14px",
+      borderRadius: 999,
+      background: "rgba(70,100,255,0.9)",
+      border: "none",
+      color: "white",
+      cursor: "pointer",
+      fontSize: 13,
+    }}
+  >
+    Post comment
+  </button>
+</div>
+
+{/* COMMENTS LIST */}
+<div style={{ marginTop: 20 }}>
+  {loadingComments ? (
+    <p style={{ opacity: 0.6 }}>Loading comments...</p>
+  ) : comments.length === 0 ? (
+    <p style={{ opacity: 0.6 }}>No comments yet.</p>
+  ) : (
+    comments.map((comment) => (
+      <div
+        key={comment.id}
+        style={{
+          display: "flex",
+          gap: 10,
+          marginBottom: 14,
+        }}
+      >
+        <img
+          src={
+            comment.author_avatar ||
+            "https://via.placeholder.com/32/333333/FFFFFF?text=?"
+          }
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            objectFit: "cover",
+          }}
+        />
+
+        <div>
+          <div style={{ fontSize: 13 }}>
+            <b>{comment.author_pseudo || "Unknown"}</b>{" "}
+            <span style={{ opacity: 0.85 }}>{comment.content}</span>
+          </div>
+        </div>
+      </div>
+    ))
+  )}
+</div>
+
+
+    </div>
+  </div>
+)}
+
+
 
         <div
           style={{
@@ -681,121 +1042,70 @@
 
 
 
-          {/* POSTS */}
-          <section style={{ marginTop: 40 }}>
-            <h2
+          {/* POSTS GRID (Instagram-like) */}
+<section style={{ marginTop: 40 }}>
+  <h2
+    style={{
+      fontSize: 20,
+      marginBottom: 16,
+      letterSpacing: "0.4px",
+    }}
+  >
+    Posts
+  </h2>
+
+  {loadingPosts ? (
+    <p>Loading...</p>
+  ) : userPosts.length === 0 ? (
+    <p>No posts yet.</p>
+  ) : (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 1fr)",
+        gap: 6,
+      }}
+    >
+      {userPosts.map((post) => (
+        <div
+          key={post.id}
+          onClick={() => setSelectedPost(post)}
+          style={{
+            aspectRatio: "1 / 1",
+            background: "rgba(20,20,30,0.8)",
+            borderRadius: 6,
+            overflow: "hidden",
+            cursor: "pointer",
+            position: "relative",
+          }}
+        >
+          {post.media_type === "image" ? (
+            <img
+              src={post.media_url!}
+              alt=""
               style={{
-                fontSize: 20,
-                marginBottom: 10,
-                letterSpacing: "0.4px",
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                padding: 10,
+                fontSize: 12,
+                color: "rgba(255,255,255,0.85)",
               }}
             >
-              Posts
-            </h2>
+              {post.content.slice(0, 120)}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )}
+</section>
 
-            {loadingPosts ? (
-              <p>Loading...</p>
-            ) : userPosts.length === 0 ? (
-              <p>No posts yet.</p>
-            ) : (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 14,
-                }}
-              >
-                {userPosts.map((post) => (
-                  <article
-                    key={post.id}
-                    style={{
-                      padding: 16,
-                      borderRadius: 14,
-                      border: "1px solid rgba(110,110,155,0.20)",
-                      background:
-                        "linear-gradient(135deg, rgba(14,14,22,0.96), rgba(6,6,12,0.98))",
-                      boxShadow:
-                        "0 0 20px rgba(70,90,255,0.16), inset 0 0 8px rgba(10,10,22,0.45)",
-                      transition: "all 0.22s cubic-bezier(.25,.8,.25,1)",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                      e.currentTarget.style.boxShadow =
-                        "0 0 24px rgba(90,110,255,0.2), inset 0 0 10px rgba(10,10,22,0.6)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "translateY(0px)";
-                      e.currentTarget.style.boxShadow =
-                        "0 0 20px rgba(70,90,255,0.16), inset 0 0 8px rgba(10,10,22,0.45)";
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        marginBottom: 6,
-                        fontSize: 12,
-                        color: "rgba(220,220,235,0.72)",
-                      }}
-                    >
-                      <span>{post.game || "Unspecified game"}</span>
-                      <span>
-                        {new Date(post.created_at).toLocaleString("en-US", {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })}
-                      </span>
-                    </div>
-
-                    <p
-                      style={{
-                        marginBottom: 6,
-                        fontSize: 14,
-                        color: "rgba(240,240,250,0.92)",
-                      }}
-                    >
-                      {post.content}
-                    </p>
-
-                    {post.media_type === "image" && (
-                      <img
-                        src={post.media_url!}
-                        alt="post media"
-                        style={{
-                          width: "100%",
-                          borderRadius: 12,
-                          marginTop: 10,
-                          marginBottom: 10,
-                        }}
-                      />
-                    )}
-
-                    {post.media_type === "video" && (
-                      <video
-                        src={post.media_url!}
-                        controls
-                        style={{
-                          width: "100%",
-                          borderRadius: 12,
-                          marginTop: 10,
-                          marginBottom: 10,
-                        }}
-                      ></video>
-                    )}
-
-                    <p
-                      style={{
-                        fontSize: 12,
-                        color: "rgba(200,200,215,0.75)",
-                      }}
-                    >
-                      👍 {post.likes ?? 0} like(s)
-                    </p>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
         </div>
       </>
     );
