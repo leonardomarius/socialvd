@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import PostCard from "@/components/PostCard";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
@@ -62,7 +62,10 @@ export default function FeedView({
 }) {
 
   const router = useRouter();
-  const searchParams = useSearchParams();
+const searchParams = useSearchParams();
+const pathname = usePathname();
+
+
 
   const [myId, setMyId] = useState<string | null>(null);
   const [pseudo, setPseudo] = useState<string>("");
@@ -168,24 +171,33 @@ useEffect(() => {
   loadSession();
 }, [router]);
 
-// Charger les données seulement quand myId est défini
+// Charger les données (même si myId n'est pas encore prêt)
+// myId sert juste à marquer isLikedByMe, mais les posts doivent apparaître quoi qu'il arrive.
 useEffect(() => {
-  if (myId) {
-    loadAllData();
-  }
-}, [myId, filterGameId]);
+  loadAllData();
+}, [myId, filterGameId, pathname]);
+
+
 
 useEffect(() => {
+  // 1) Forced (ex: page /games/[slug])
   if (forcedGameId) {
     setFilterGameId(forcedGameId);
     return;
   }
 
+  // 2) URL param ?game=
   const gameFromUrl = searchParams.get("game");
   if (gameFromUrl) {
     setFilterGameId(gameFromUrl);
+    return;
   }
-}, [searchParams, forcedGameId]);
+
+  // 3) Retour sur /feed sans param → reset propre
+  if (pathname === "/feed") {
+    setFilterGameId("all");
+  }
+}, [pathname, searchParams, forcedGameId]);
 
 
   // -----------------------------------------------------
