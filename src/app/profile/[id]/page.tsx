@@ -40,7 +40,9 @@ type Comment = {
   author_pseudo: string | null;
   author_avatar: string | null;
   likes: number;
+  parent_id: string | null;
 };
+
 
 
   type GameAccount = {
@@ -91,6 +93,9 @@ type Comment = {
 
   useEffect(() => {
   if (!selectedPost) return;
+  setNewComment("");
+setComments([]);
+
 
 setLocalLikes(selectedPost.likes ?? 0);
 
@@ -98,32 +103,36 @@ setLocalLikes(selectedPost.likes ?? 0);
     setLoadingComments(true);
 
     const { data } = await supabase
-      .from("comments")
-      .select(`
-        id,
-        post_id,
-        user_id,
-        content,
-        created_at,
-        likes,
-        profiles:profiles (
-          pseudo,
-          avatar_url
-        )
-      `)
-      .eq("post_id", selectedPost.id)
-      .order("created_at", { ascending: true });
+  .from("comments")
+  .select(`
+    id,
+    post_id,
+    user_id,
+    content,
+    created_at,
+    parent_id,
+    likes,
+    profiles:profiles (
+      pseudo,
+      avatar_url
+    )
+  `)
+  .eq("post_id", selectedPost.id)
+  .order("created_at", { ascending: true });
+
 
     const formatted = (data || []).map((c: any) => ({
-      id: c.id,
-      post_id: c.post_id,
-      user_id: c.user_id,
-      content: c.content,
-      created_at: c.created_at,
-      likes: c.likes ?? 0,
-      author_pseudo: c.profiles?.pseudo ?? null,
-      author_avatar: c.profiles?.avatar_url ?? null,
-    }));
+  id: c.id,
+  post_id: c.post_id,
+  user_id: c.user_id,
+  content: c.content,
+  created_at: c.created_at,
+  parent_id: c.parent_id,
+  likes: c.likes ?? 0,
+  author_pseudo: c.profiles?.pseudo ?? null,
+  author_avatar: c.profiles?.avatar_url ?? null,
+}));
+
 
     setComments(formatted);
     setLoadingComments(false);
@@ -164,18 +173,64 @@ setLocalLikes(selectedPost.likes ?? 0);
     };
 
     // Posts
-    const loadUserPosts = async () => {
-      setLoadingPosts(true);
+   const loadUserPosts = async () => {
+  setLoadingPosts(true);
 
-      const { data } = await supabase
-        .from("posts")
-        .select("*")
-        .eq("user_id", id)
-        .order("created_at", { ascending: false });
+  let postsQuery = supabase
+    .from("posts")
+    .select(`
+      *,
+      games (
+        id,
+        name,
+        slug
+      ),
+      likes(count)
+    `)
+    .eq("user_id", id)
+    .order("created_at", { ascending: false });
 
-      setUserPosts(data || []);
-      setLoadingPosts(false);
+  const { data: postsData, error } = await postsQuery;
+
+  if (error) {
+    console.error(error);
+    setLoadingPosts(false);
+    return;
+  }
+
+  // récupérer les likes du user connecté
+  let myLikesMap: Record<string, boolean> = {};
+  if (myId) {
+    const { data: myLikes } = await supabase
+      .from("likes")
+      .select("post_id")
+      .eq("user_id", myId);
+
+    myLikesMap =
+      myLikes?.reduce((acc: any, row: any) => {
+        acc[row.post_id] = true;
+        return acc;
+      }, {}) || {};
+  }
+
+  const formattedPosts = (postsData || []).map((p: any) => {
+    const likesArray = p.likes || [];
+    const likesCount =
+      Array.isArray(likesArray) && likesArray[0]?.count
+        ? likesArray[0].count
+        : 0;
+
+    return {
+      ...p,
+      likes: likesCount,
+      isLikedByMe: !!myLikesMap[p.id],
     };
+  });
+
+  setUserPosts(formattedPosts);
+  setLoadingPosts(false);
+};
+
 
     // Game accounts
     const loadGameAccounts = async () => {
@@ -251,35 +306,61 @@ const handleToggleLike = async () => {
 
   setIsLiking(true);
 
-  // Toggle like in DB
-  const { error } = await supabase.rpc("toggle_like", {
-    p_post_id: selectedPost.id,
-    p_user_id: myId,
-  });
+  const currentlyLiked = !!(selectedPost as any).isLikedByMe;
 
-  if (error) {
-    console.error("Like error:", error.message);
-    setIsLiking(false);
-    return;
+  if (currentlyLiked) {
+    const { error } = await supabase
+      .from("likes")
+      .delete()
+      .eq("post_id", selectedPost.id)
+      .eq("user_id", myId);
+
+    if (error) {
+      console.error("Error unliking:", error);
+      setIsLiking(false);
+      return;
+    }
+  } else {
+    const { error } = await supabase.from("likes").insert({
+      post_id: selectedPost.id,
+      user_id: myId,
+    });
+
+    if (error) {
+      console.error("Error liking:", error);
+      setIsLiking(false);
+      return;
+    }
   }
 
-  // 🔁 Refetch likes from DB (source of truth)
-  const { data: freshPost, error: fetchError } = await supabase
-    .from("posts")
-    .select("likes")
-    .eq("id", selectedPost.id)
-    .single();
-
-  if (!fetchError && freshPost) {
-  setLocalLikes(freshPost.likes ?? 0);
-  setSelectedPost((prev) =>
-    prev ? { ...prev, likes: freshPost.likes ?? 0 } : prev
+  // 🔁 UPDATE LOCAL — USER POSTS
+  setUserPosts((prev: Post[]) =>
+    prev.map((p: Post) =>
+      p.id !== selectedPost.id
+        ? p
+        : {
+            ...p,
+            likes: Math.max(0, p.likes + (currentlyLiked ? -1 : 1)),
+            isLikedByMe: !currentlyLiked,
+          }
+    )
   );
-}
 
+  // 🔁 UPDATE LOCAL — SELECTED POST (MODAL)
+  setSelectedPost((prev) =>
+    prev
+      ? {
+          ...prev,
+          likes: Math.max(0, prev.likes + (currentlyLiked ? -1 : 1)),
+          isLikedByMe: !currentlyLiked,
+        }
+      : prev
+  );
 
+  setLocalLikes((prev) => Math.max(0, prev + (currentlyLiked ? -1 : 1)));
   setIsLiking(false);
 };
+
 
 
 
@@ -597,29 +678,61 @@ const handleToggleLike = async () => {
   <button
     disabled={!newComment.trim()}
     onClick={async () => {
-      if (!myId || !selectedPost || !newComment.trim()) return;
+  if (!myId || !selectedPost || !newComment.trim()) return;
 
-      await supabase.from("comments").insert({
-        post_id: selectedPost.id,
-        user_id: myId,
-        content: newComment.trim(),
-      });
+  const { error } = await supabase.from("comments").insert({
+  post_id: selectedPost.id,
+  user_id: myId,
+  content: newComment.trim(),
+  parent_id: null,
+});
 
-      setNewComment("");
-      setComments((prev) => [
-  ...prev,
-  {
-    id: crypto.randomUUID(), // placeholder UI (ou supprime si tu reload)
-    post_id: selectedPost.id,
-    user_id: myId,
-    content: newComment.trim(),
-    created_at: new Date().toISOString(),
-    author_pseudo: profile?.pseudo ?? null,
-    author_avatar: profile?.avatar_url ?? null,
-    likes: 0,
-  },
-]);
-    }}
+
+
+  if (error) {
+    console.error("Insert comment error:", error);
+    return;
+  }
+
+  setNewComment("");
+
+  // 🔥 SOURCE DE VÉRITÉ : REFETCH DB
+  setLoadingComments(true);
+
+  const { data } = await supabase
+    .from("comments")
+    .select(`
+      id,
+      post_id,
+      user_id,
+      content,
+      created_at,
+      parent_id,
+      likes,
+      profiles:profiles (
+        pseudo,
+        avatar_url
+      )
+    `)
+    .eq("post_id", selectedPost.id)
+    .order("created_at", { ascending: true });
+
+  const formatted = (data || []).map((c: any) => ({
+    id: c.id,
+    post_id: c.post_id,
+    user_id: c.user_id,
+    content: c.content,
+    created_at: c.created_at,
+    parent_id: c.parent_id,
+    likes: c.likes ?? 0,
+    author_pseudo: c.profiles?.pseudo ?? null,
+    author_avatar: c.profiles?.avatar_url ?? null,
+  }));
+
+  setComments(formatted);
+  setLoadingComments(false);
+}}
+
     style={{
       marginTop: 8,
       padding: "6px 14px",
@@ -643,37 +756,39 @@ const handleToggleLike = async () => {
     <p style={{ opacity: 0.6 }}>No comments yet.</p>
   ) : (
     comments.map((comment) => (
-      <div
-        key={comment.id}
-        style={{
-          display: "flex",
-          gap: 10,
-          marginBottom: 14,
-        }}
-      >
-        <img
-          src={
-            comment.author_avatar ||
-            "https://via.placeholder.com/32/333333/FFFFFF?text=?"
-          }
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            objectFit: "cover",
-          }}
-        />
+  <div
+    key={comment.id}
+    style={{
+      display: "flex",
+      gap: 10,
+      marginBottom: 14,
+      marginLeft: comment.parent_id ? 32 : 0, // 🔥 indentation des réponses
+    }}
+  >
+    <img
+      src={
+        comment.author_avatar ||
+        "https://via.placeholder.com/32/333333/FFFFFF?text=?"
+      }
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        objectFit: "cover",
+      }}
+    />
 
-        <div>
-          <div style={{ fontSize: 13 }}>
-            <b>{comment.author_pseudo || "Unknown"}</b>{" "}
-            <span style={{ opacity: 0.85 }}>{comment.content}</span>
-          </div>
-        </div>
+    <div>
+      <div style={{ fontSize: 13 }}>
+        <b>{comment.author_pseudo || "Unknown"}</b>{" "}
+        <span style={{ opacity: 0.85 }}>{comment.content}</span>
       </div>
-    ))
-  )}
+    </div>
+  </div>
+))
+)}
 </div>
+
 
 
     </div>
@@ -1067,41 +1182,49 @@ const handleToggleLike = async () => {
       }}
     >
       {userPosts.map((post) => (
-        <div
-          key={post.id}
-          onClick={() => setSelectedPost(post)}
-          style={{
-            aspectRatio: "1 / 1",
-            background: "rgba(20,20,30,0.8)",
-            borderRadius: 6,
-            overflow: "hidden",
-            cursor: "pointer",
-            position: "relative",
-          }}
-        >
-          {post.media_type === "image" ? (
-            <img
-              src={post.media_url!}
-              alt=""
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                padding: 10,
-                fontSize: 12,
-                color: "rgba(255,255,255,0.85)",
-              }}
-            >
-              {post.content.slice(0, 120)}
-            </div>
-          )}
-        </div>
-      ))}
+  <div
+    key={post.id}
+    onClick={() => setSelectedPost(post)}
+    style={{
+      aspectRatio: "1 / 1",
+      background: "rgba(20,20,30,0.8)",
+      borderRadius: 6,
+      overflow: "hidden",
+      cursor: "pointer",
+      position: "relative",
+    }}
+  >
+    <div
+      className="profile-post-media-wrapper"
+      onMouseEnter={(e) => {
+        const video = e.currentTarget.querySelector("video");
+        if (video) video.play();
+      }}
+      onMouseLeave={(e) => {
+        const video = e.currentTarget.querySelector("video");
+        if (video) {
+          video.pause();
+          video.currentTime = 0;
+        }
+      }}
+    >
+      {post.media_type === "image" && post.media_url && (
+        <img src={post.media_url} alt="" />
+      )}
+
+      {post.media_type === "video" && post.media_url && (
+        <video
+          src={post.media_url}
+          muted
+          loop
+          playsInline
+          preload="metadata"
+        />
+      )}
+    </div>
+  </div>
+))}
+
     </div>
   )}
 </section>

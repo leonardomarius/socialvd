@@ -84,20 +84,19 @@ export default function SignupPage() {
     }
 
     // -----------------------------
-    // 2) Création du profil associé
-    // -----------------------------
-    const { error: profileError } = await supabase.from("profiles").insert({
-      id: user.id,
-      pseudo: pseudo || email.split("@")[0],
-      bio: trimmedMindset,
-      avatar_url: null,
-    });
+// 2) Mise à jour du mindset (OBLIGATOIRE)
+// -----------------------------
+const { error: mindsetError } = await supabase
+  .from("profiles")
+  .update({ bio: trimmedMindset })
+  .eq("id", user.id);
 
-    if (profileError) {
-      setErrorMsg(profileError.message);
-      setLoading(false);
-      return;
-    }
+if (mindsetError) {
+  setErrorMsg("Unable to save your mindset. Please try again.");
+  setLoading(false);
+  return;
+}
+
 
     // -----------------------------
     // 3) Mettre à jour la session locale

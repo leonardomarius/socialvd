@@ -47,12 +47,14 @@ export type Comment = {
 
 type Props = {
   post: Post;
-  comments: Comment[];
-  myId: string | null;
-  pseudo: string;
-  games: { id: string; name: string; slug: string }[];
+  comments?: Comment[];
+  myId?: string | null;
+  pseudo?: string;
+  games?: { id: string; name: string; slug: string }[];
   onPostDeleted?: (postId: string) => void;
+  variant?: "feed" | "grid";
 };
+
 
 /* =====================
    THREAD TYPES
@@ -66,13 +68,14 @@ type CommentNode = Comment & {
    HELPERS
 ===================== */
 
-function buildCommentTree(all: Comment[]): CommentNode[] {
+function buildCommentTree(all: Comment[] = []) {
   const map: Record<string, CommentNode> = {};
   const roots: CommentNode[] = [];
 
   all.forEach((c) => {
     map[c.id] = { ...c, replies: [] };
   });
+
 
   all.forEach((c) => {
     if (c.parent_id && map[c.parent_id]) {
@@ -91,12 +94,14 @@ function buildCommentTree(all: Comment[]): CommentNode[] {
 
 export default function PostCard({
   post,
-  comments,
-  myId,
-  pseudo,
-  games,
+  comments = [],
+  myId = null,
+  pseudo = "",
+  games = [],
   onPostDeleted,
+  variant = "feed",
 }: Props) {
+
   const [openMenu, setOpenMenu] = useState(false);
   const [openComments, setOpenComments] = useState(false);
 
@@ -336,31 +341,39 @@ export default function PostCard({
       {/* Content */}
       <p className="post-content">{post.content}</p>
 
-      {post.media_type === "image" && post.media_url && (
-        <img src={post.media_url} className="post-media" />
-      )}
+      {/* MEDIA */}
+{post.media_url && (
+  <div
+    className={`post-media-wrapper ${variant}`}
+    onMouseEnter={(e) => {
+      const video = e.currentTarget.querySelector("video");
+      if (video) video.play();
+    }}
+    onMouseLeave={(e) => {
+      const video = e.currentTarget.querySelector("video");
+      if (video) {
+        video.pause();
+        video.currentTime = 0;
+      }
+    }}
+  >
+    {post.media_type === "image" && (
+      <img src={post.media_url} className="post-media" />
+    )}
 
-      {post.media_type === "video" && post.media_url && (
-        <video src={post.media_url} controls className="post-media" />
-      )}
+    {post.media_type === "video" && (
+      <video
+        src={post.media_url}
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        className="post-media"
+      />
+    )}
+  </div>
+)}
 
-      {/* Actions */}
-      <div className="post-actions">
-        <button
-          className={`like-button ${isLiked ? "liked" : ""}`}
-          onClick={toggleLike}
-        >
-          👍 {likesCount}
-        </button>
-
-        <button
-          className="icon-text-inline"
-          onClick={() => setOpenComments(!openComments)}
-        >
-          <ChatBubbleLeftIcon className="icon-18 subtle" />
-          {localComments.length}
-        </button>
-      </div>
 
       {/* Comments */}
       {openComments && (
