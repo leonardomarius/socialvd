@@ -16,21 +16,92 @@
 }
 
 /* ======================================
-   🌌 FOND GLOBAL (Feed / pages classiques)
-   — conserve ton image space-bg (important)
+   🎮 FOND RETRO GAMING / AURORES BORÉALES
+   — CSS pur, performance-friendly
 ====================================== */
 body {
   color: white;
+  position: relative;
+  min-height: 100vh;
 
-  /* Fond spatial */
-  background-image: url("/fond1.jpg");
-  background-size: cover;
-  background-position: center;
+  /* Base sombre charbon/bleu */
+  background: #0a0d14;
+  
+  /* Overlay pour profondeur */
+  background-image: 
+    /* Aurore boréale cyan/violet - couche 1 */
+    radial-gradient(ellipse 120% 60% at 20% 10%, rgba(6, 230, 230, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse 100% 50% at 80% 30%, rgba(138, 43, 226, 0.10) 0%, transparent 50%),
+    /* Aurore boréale bleu glacier - couche 2 */
+    radial-gradient(ellipse 140% 70% at 50% 5%, rgba(64, 224, 208, 0.08) 0%, transparent 60%),
+    /* Nébuleuse profonde */
+    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.4) 0%, transparent 70%),
+    /* Grain CRT subtil */
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.03) 0px,
+      transparent 1px,
+      transparent 2px,
+      rgba(0, 0, 0, 0.03) 3px
+    );
+  
+  background-size: 
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    2px 2px;
+  
   background-attachment: fixed;
+  background-position: center;
   background-repeat: no-repeat;
 
-  /* Effet de cohérence globale */
-  filter: brightness(0.90) contrast(1.05);
+  /* Animation subtile des aurores */
+  animation: auroraShift 20s ease-in-out infinite alternate;
+}
+
+@keyframes auroraShift {
+  0% {
+    background-position: 
+      0% 0%,
+      100% 0%,
+      50% 0%,
+      50% 50%,
+      0 0;
+  }
+  100% {
+    background-position: 
+      10% 5%,
+      90% 10%,
+      60% 3%,
+      50% 50%,
+      0 0;
+  }
+}
+
+/* Overlay de profondeur supplémentaire */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: 
+    /* Lueur néon discrète */
+    radial-gradient(circle at 30% 20%, rgba(6, 230, 230, 0.06) 0%, transparent 40%),
+    radial-gradient(circle at 70% 80%, rgba(138, 43, 226, 0.05) 0%, transparent 40%);
+  pointer-events: none;
+  animation: auroraGlow 15s ease-in-out infinite alternate;
+}
+
+@keyframes auroraGlow {
+  0% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
 }
 
 /* ======================================
@@ -41,49 +112,107 @@ p, span, a, button, input, textarea {
 }
 
 /* ======================================
-   BOUTONS GÉNÉRAUX
+   🎮 BOUTONS UNIFIÉS — STYLE PRO GAMER
 ====================================== */
-/* Boutons globaux - n'affecte que .btn */
+/* Base commune pour tous les boutons */
 .btn {
-  background: linear-gradient(135deg, #0f4cff, #1a73e8);
-  padding: 10px 16px;
-  border: none;
-  border-radius: 8px;
-  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-size: 0.875rem;
   font-weight: 500;
+  font-family: "Space Grotesk", sans-serif;
   cursor: pointer;
-  color: white;
-  transition: 0.22s ease;
-  box-shadow: 0 4px 12px rgba(0, 60, 255, 0.25);
-  backdrop-filter: blur(4px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
+  outline: none;
+  user-select: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-.btn:hover {
-  background: linear-gradient(135deg, #0d3ed1, #145bb5);
+/* État de base - glassmorphism subtil */
+.btn {
+  background: rgba(15, 23, 42, 0.4);
+  border-color: rgba(100, 116, 139, 0.2);
+  color: #e2e8f0;
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Hover - glow cyan/violet discret */
+.btn:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(6, 230, 230, 0.4);
+  color: #ffffff;
+  box-shadow: 
+    0 2px 8px rgba(6, 230, 230, 0.15),
+    0 0 12px rgba(6, 230, 230, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(0, 60, 255, 0.35);
+}
+
+/* Active */
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 
+    0 1px 3px rgba(6, 230, 230, 0.2),
+    inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Focus visible mais élégant */
+.btn:focus-visible {
+  outline: 2px solid rgba(6, 230, 230, 0.5);
+  outline-offset: 2px;
+}
+
+/* Disabled */
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* ======================================
-   INPUTS & TEXTAREA
+   INPUTS & TEXTAREA — STYLE RETRO GAMING
 ====================================== */
 input,
 textarea {
-  background: rgba(15, 17, 25, 0.72);
-  border: 1px solid rgba(110, 110, 110, 0.45);
-  color: white;
-  padding: 10px 12px;
-  border-radius: 8px;
-  transition: 0.2s;
-  font-size: 15px;
-  backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(100, 116, 139, 0.25);
+  color: #e2e8f0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 0.9rem;
+  font-family: "Space Grotesk", sans-serif;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.2),
+    0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(148, 163, 184, 0.6);
 }
 
 input:focus,
 textarea:focus {
-  border-color: #4d8aff;
-  box-shadow: 0 0 0 2px rgba(90, 140, 255, 0.3);
-  background: rgba(20, 22, 30, 0.85);
+  border-color: rgba(6, 230, 230, 0.5);
+  background: rgba(15, 23, 42, 0.7);
+  box-shadow: 
+    0 0 0 3px rgba(6, 230, 230, 0.1),
+    inset 0 1px 2px rgba(0, 0, 0, 0.2),
+    0 0 12px rgba(6, 230, 230, 0.08);
   outline: none;
 }
 
@@ -292,25 +421,34 @@ a.game-link {
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 4px 12px;
   margin-left: 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(100, 116, 139, 0.25);
   cursor: pointer;
-  transition:
-    background 0.2s ease,
-    box-shadow 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #cbd5e1;
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 a.game-link:hover {
-  background: rgba(120, 140, 255, 0.25) !important;
-  border-color: rgba(120, 140, 255, 0.9) !important;
-  box-shadow: 0 0 18px rgba(120, 140, 255, 0.75) !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(6, 230, 230, 0.5) !important;
+  color: #06e6e6 !important;
+  box-shadow: 
+    0 2px 8px rgba(6, 230, 230, 0.15),
+    0 0 12px rgba(6, 230, 230, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  transform: translateY(-1px);
 }
 
 a.game-link:active {
-  transform: scale(0.96);
+  transform: translateY(0) scale(0.98);
 }

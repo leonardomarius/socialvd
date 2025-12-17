@@ -462,45 +462,54 @@ if (commentsError) {
   // Add a comment + Notification
   // -----------------------------------------------------
   const handleAddComment = async (postId: string, parentId?: string) => {
-
-    if (!myId) return;
-
-    const content = newComments[postId];
-    if (!content) return;
-
-    const { error } = await supabase.from("comments").insert({
-      post_id: postId,
-parent_id: parentId ?? null,
-content,
-author_pseudo: pseudo,
-user_id: myId,
-
-    });
-
-    if (error) {
-      console.error(error);
-      showNotification("Error adding comment", "error");
+    if (!myId) {
+      console.error("handleAddComment: myId is null");
       return;
     }
 
-    // 🔍 Get post author
-    const post = posts.find((p) => p.id === postId);
-
-    // 🛑 Do not notify yourself
-    if (post && post.user_id !== myId) {
-      await supabase.from("notifications").insert({
-        user_id: post.user_id,
-        from_user_id: myId,
-        type: "comment",
-        post_id: postId,
-        message: `${pseudo} commented on your post`,
-      });
+    const content = newComments[postId];
+    if (!content || !content.trim()) {
+      console.error("handleAddComment: content is empty");
+      return;
     }
 
-        setNewComments((prev) => ({ ...prev, [postId]: "" }));
-    setReplyTo((prev) => ({ ...prev, [postId]: null }));
-    showNotification("Comment added");
-    loadAllData();
+    try {
+      const { error } = await supabase.from("comments").insert({
+        post_id: postId,
+        parent_id: parentId ?? null,
+        content: content.trim(),
+        author_pseudo: pseudo,
+        user_id: myId,
+      });
+
+      if (error) {
+        console.error("Error adding comment:", error);
+        showNotification("Error adding comment", "error");
+        return;
+      }
+
+      // 🔍 Get post author
+      const post = posts.find((p) => p.id === postId);
+
+      // 🛑 Do not notify yourself
+      if (post && post.user_id !== myId) {
+        await supabase.from("notifications").insert({
+          user_id: post.user_id,
+          from_user_id: myId,
+          type: "comment",
+          post_id: postId,
+          message: `${pseudo} commented on your post`,
+        });
+      }
+
+      setNewComments((prev) => ({ ...prev, [postId]: "" }));
+      setReplyTo((prev) => ({ ...prev, [postId]: null }));
+      showNotification("Comment added");
+      await loadAllData();
+    } catch (err) {
+      console.error("Exception in handleAddComment:", err);
+      showNotification("Error adding comment", "error");
+    }
   };
 
 
@@ -641,40 +650,20 @@ const handleToggleCommentLike = async (commentId: string) => {
   // LIKE / UNLIKE post
   // -----------------------------------------------------
   const handleToggleLike = async (postId: string) => {
-    if (!myId) return;
-
-    const targetPost = posts.find((p) => p.id === postId);
-    const currentlyLiked = !!targetPost?.isLikedByMe;
-
-    if (currentlyLiked) {
-      // UNLIKE : on supprime uniquement le like de ce user
-      const { error } = await supabase
-        .from("likes")
-        .delete()
-        .eq("post_id", postId)
-        .eq("user_id", myId);
-
-      if (error) {
-        console.error("Error unliking:", error);
-        showNotification("Error while unliking", "error");
-        return;
-      }
-    } else {
-      // LIKE : on insère le like
-      const { error } = await supabase.from("likes").insert({
-        post_id: postId,
-        user_id: myId,
-      });
-
-      if (error) {
-        // si jamais unique_violation (déjà liké), on ignore
-        console.error("Error liking:", error);
-        showNotification("Error while liking", "error");
-        return;
-      }
+    if (!myId) {
+      console.error("handleToggleLike: myId is null");
+      return;
     }
 
-    // Mise à jour optimiste locale
+    const targetPost = posts.find((p) => p.id === postId);
+    if (!targetPost) {
+      console.error("handleToggleLike: post not found", postId);
+      return;
+    }
+
+    const currentlyLiked = !!targetPost?.isLikedByMe;
+
+    // Mise à jour optimiste locale IMMÉDIATE
     setPosts((prev) =>
       prev.map((p) => {
         if (p.id !== postId) return p;
@@ -687,6 +676,71 @@ const handleToggleCommentLike = async (commentId: string) => {
         };
       })
     );
+
+    try {
+      if (currentlyLiked) {
+        // UNLIKE : on supprime uniquement le like de ce user
+        const { error } = await supabase
+          .from("likes")
+          .delete()
+          .eq("post_id", postId)
+          .eq("user_id", myId);
+
+        if (error) {
+          console.error("Error unliking:", error);
+          // Rollback optimiste
+          setPosts((prev) =>
+            prev.map((p) => {
+              if (p.id !== postId) return p;
+              return {
+                ...p,
+                likes_count: targetPost.likes_count ?? 0,
+                isLikedByMe: currentlyLiked,
+              };
+            })
+          );
+          showNotification("Error while unliking", "error");
+          return;
+        }
+      } else {
+        // LIKE : on insère le like
+        const { error } = await supabase.from("likes").insert({
+          post_id: postId,
+          user_id: myId,
+        });
+
+        if (error) {
+          console.error("Error liking:", error);
+          // Rollback optimiste
+          setPosts((prev) =>
+            prev.map((p) => {
+              if (p.id !== postId) return p;
+              return {
+                ...p,
+                likes_count: targetPost.likes_count ?? 0,
+                isLikedByMe: currentlyLiked,
+              };
+            })
+          );
+          showNotification("Error while liking", "error");
+          return;
+        }
+      }
+    } catch (err) {
+      console.error("Exception in handleToggleLike:", err);
+      // Rollback optimiste
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          return {
+            ...p,
+            likes_count: targetPost.likes_count ?? 0,
+            isLikedByMe: currentlyLiked,
+          };
+        })
+      );
+      showNotification("Error while toggling like", "error");
+    }
   };
 
 // ---------------------
@@ -1013,7 +1067,12 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
                   className={`like-button ${
                     post.isLikedByMe ? "liked" : ""
                   }`}
-                  onClick={() => handleToggleLike(post.id)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleToggleLike(post.id);
+                  }}
+                  type="button"
                 >
                   <svg
                     width="18"
@@ -1043,9 +1102,12 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
               {/* Comment toggle button */}
 <button
   className="comment-toggle-btn"
-  onClick={() =>
-    setOpenComments(prev => ({ ...prev, [post.id]: !prev[post.id] }))
-  }
+  onClick={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpenComments(prev => ({ ...prev, [post.id]: !prev[post.id] }));
+  }}
+  type="button"
 >
   {openComments[post.id] ? "Hide comments" : `Show comments (${postComments.length})`}
 </button>
@@ -1069,9 +1131,12 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
       />
       <button
         className="btn ghost-btn"
-        onClick={() =>
-          handleAddComment(post.id, replyTo[post.id] ?? undefined)
-        }
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleAddComment(post.id, replyTo[post.id] ?? undefined);
+        }}
+        type="button"
       >
         Send
       </button>
@@ -1091,34 +1156,45 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           padding: 26px;
           max-width: 720px;
           margin: 0 auto;
-          color: #e5e7eb;
+          color: #e2e8f0;
         }
 
         .feed-title {
-          margin-bottom: 24px;
-          font-size: 1.6rem;
-          font-weight: 600;
-          letter-spacing: 0.02em;
-          color: #e5e7eb;
+          margin-bottom: 28px;
+          font-size: 1.75rem;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          color: #f1f5f9;
+          text-shadow: 0 0 20px rgba(6, 230, 230, 0.15);
         }
 
         .card {
-          background: #1b1f26;
-          border-radius: 8px;
-          border: 1px solid rgba(156, 163, 175, 0.15);
-          padding: 18px 22px;
-          margin-bottom: 26px;
-          transition: all 0.12s ease;
+          background: rgba(15, 23, 42, 0.35);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border-radius: 12px;
+          border: 1px solid rgba(100, 116, 139, 0.15);
+          padding: 20px 24px;
+          margin-bottom: 24px;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
           position: relative;
           isolation: isolate;
+          box-shadow: 
+            0 4px 6px rgba(0, 0, 0, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         .card:hover {
-          border-color: rgba(156, 163, 175, 0.2);
+          border-color: rgba(6, 230, 230, 0.25);
+          box-shadow: 
+            0 8px 16px rgba(0, 0, 0, 0.3),
+            0 0 24px rgba(6, 230, 230, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          transform: translateY(-2px);
         }
 
         .card-create {
-          background: #1b1f26;
+          background: rgba(15, 23, 42, 0.4);
         }
 
         .card-title {
@@ -1132,25 +1208,34 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         .input,
         .textarea {
           width: 100%;
-          background: #14171c;
-          border-radius: 6px;
-          border: 1px solid rgba(156, 163, 175, 0.2);
-          color: #e5e7eb;
-          padding: 10px 13px;
-          font-size: 0.92rem;
+          background: rgba(15, 23, 42, 0.5);
+          border-radius: 8px;
+          border: 1px solid rgba(100, 116, 139, 0.25);
+          color: #e2e8f0;
+          padding: 10px 14px;
+          font-size: 0.9rem;
           outline: none;
-          transition: all 0.12s ease;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          box-shadow: 
+            inset 0 1px 2px rgba(0, 0, 0, 0.2),
+            0 1px 0 rgba(255, 255, 255, 0.03);
         }
 
         .input::placeholder,
         .textarea::placeholder {
-          color: #9ca3af;
+          color: rgba(148, 163, 184, 0.6);
         }
 
         .input:focus,
         .textarea:focus {
-          border-color: rgba(6, 182, 212, 0.5);
-          background: #1b1f26;
+          border-color: rgba(6, 230, 230, 0.5);
+          background: rgba(15, 23, 42, 0.7);
+          box-shadow: 
+            0 0 0 3px rgba(6, 230, 230, 0.1),
+            inset 0 1px 2px rgba(0, 0, 0, 0.2),
+            0 0 12px rgba(6, 230, 230, 0.08);
         }
 
         .textarea {
@@ -1161,21 +1246,26 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 10px 12px;
+          padding: 10px 14px;
           margin: 12px 0;
-          border-radius: 6px;
-          border: 1px dashed rgba(156, 163, 175, 0.3);
-          background: #14171c;
-          color: #9ca3af;
-          font-size: 0.85rem;
+          border-radius: 8px;
+          border: 1px dashed rgba(100, 116, 139, 0.3);
+          background: rgba(15, 23, 42, 0.4);
+          color: #94a3b8;
+          font-size: 0.875rem;
           cursor: pointer;
-          transition: all 0.12s ease;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
         }
 
         .file-label:hover {
-          border-color: rgba(6, 182, 212, 0.4);
-          background: #1b1f26;
-          color: #e5e7eb;
+          border-color: rgba(6, 230, 230, 0.5);
+          background: rgba(15, 23, 42, 0.6);
+          color: #e2e8f0;
+          box-shadow: 
+            0 0 12px rgba(6, 230, 230, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         .file-label input {
@@ -1185,55 +1275,94 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         .btn {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
-          padding: 8px 20px;
+          padding: 8px 16px;
           border-radius: 6px;
-          border: 1px solid transparent;
-          font-size: 0.88rem;
+          border: 1px solid;
+          font-size: 0.875rem;
+          font-weight: 500;
           cursor: pointer;
-          transition: all 0.12s ease;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          position: relative;
+          z-index: 10;
+          pointer-events: auto;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          text-decoration: none;
+          outline: none;
+          user-select: none;
         }
 
         .primary-btn {
-          background: #1b1f26;
-          border-color: rgba(6, 182, 212, 0.3);
-          color: #e5e7eb;
-          font-weight: 500;
-          position: relative;
-          z-index: 10;
-          pointer-events: auto;
+          background: rgba(15, 23, 42, 0.4);
+          border-color: rgba(6, 230, 230, 0.3);
+          color: #e2e8f0;
+          box-shadow: 
+            0 1px 2px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         .primary-btn:hover {
-          background: #1f2937;
-          border-color: rgba(6, 182, 212, 0.5);
-          color: #06b6d4;
+          background: rgba(15, 23, 42, 0.6);
+          border-color: rgba(6, 230, 230, 0.5);
+          color: #ffffff;
+          box-shadow: 
+            0 2px 8px rgba(6, 230, 230, 0.15),
+            0 0 12px rgba(6, 230, 230, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+          transform: translateY(-1px);
+        }
+
+        .primary-btn:active {
+          transform: translateY(0);
+          box-shadow: 
+            0 1px 3px rgba(6, 230, 230, 0.2),
+            inset 0 1px 2px rgba(0, 0, 0, 0.2);
         }
 
         .ghost-btn {
-          background: #1b1f26;
-          border-color: rgba(156, 163, 175, 0.2);
-          color: #9ca3af;
-          position: relative;
-          z-index: 10;
-          pointer-events: auto;
+          background: rgba(15, 23, 42, 0.4);
+          border-color: rgba(100, 116, 139, 0.2);
+          color: #94a3b8;
+          box-shadow: 
+            0 1px 2px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         .ghost-btn:hover {
-          background: #1f2937;
-          border-color: rgba(156, 163, 175, 0.3);
-          color: #e5e7eb;
+          background: rgba(15, 23, 42, 0.6);
+          border-color: rgba(6, 230, 230, 0.4);
+          color: #e2e8f0;
+          box-shadow: 
+            0 2px 8px rgba(6, 230, 230, 0.15),
+            0 0 12px rgba(6, 230, 230, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+          transform: translateY(-1px);
+        }
+
+        .ghost-btn:active {
+          transform: translateY(0);
         }
 
         .danger-btn {
-          background: #1b1f26;
+          background: rgba(15, 23, 42, 0.4);
           border-color: rgba(239, 68, 68, 0.3);
-          color: #ef4444;
+          color: #f87171;
+          box-shadow: 
+            0 1px 2px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         .danger-btn:hover {
-          background: #1f2937;
+          background: rgba(15, 23, 42, 0.6);
           border-color: rgba(239, 68, 68, 0.5);
+          color: #fca5a5;
+          box-shadow: 
+            0 2px 8px rgba(239, 68, 68, 0.15),
+            0 0 12px rgba(239, 68, 68, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+          transform: translateY(-1px);
         }
 
         .post-header {
@@ -1261,13 +1390,14 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           font-size: 0.95rem;
           font-weight: 600;
           text-decoration: none;
-          color: #e5e7eb;
-          transition: color 0.12s ease;
+          color: #e2e8f0;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .post-author:hover {
           text-decoration: none !important;
-          color: #06b6d4;
+          color: #06e6e6;
+          text-shadow: 0 0 8px rgba(6, 230, 230, 0.3);
         }
 
         .post-game {
@@ -1279,8 +1409,8 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         .post-content {
           margin-top: 12px;
           font-size: 0.95rem;
-          line-height: 1.55;
-          color: #e5e7eb;
+          line-height: 1.6;
+          color: #e2e8f0;
         }
 
         .post-edit-block {
@@ -1386,12 +1516,16 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           right: 0;
           top: 34px;
           min-width: 155px;
-          background: #1b1f26;
+          background: rgba(15, 23, 42, 0.9);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
           border-radius: 8px;
-          border: 1px solid rgba(156, 163, 175, 0.2);
+          border: 1px solid rgba(100, 116, 139, 0.2);
           padding: 6px 0;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-          animation: fadeInScale 0.12s ease-out;
+          box-shadow: 
+            0 8px 16px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+          animation: fadeInScale 0.15s cubic-bezier(0.4, 0, 0.2, 1);
           transform-origin: top right;
           z-index: 25;
         }
@@ -1411,40 +1545,47 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         }
 
         .options-menu-item:hover {
-          background: #1f2937;
+          background: rgba(15, 23, 42, 0.6);
+          border-left: 2px solid rgba(6, 230, 230, 0.4);
         }
 
         .options-menu-item.danger {
-          color: #ef4444;
+          color: #f87171;
         }
 
         .options-menu-item.danger:hover {
-          background: #1f2937;
-          color: #f87171;
+          background: rgba(239, 68, 68, 0.1);
+          color: #fca5a5;
+          border-left: 2px solid rgba(239, 68, 68, 0.4);
         }
 
         .notification {
           margin-bottom: 16px;
-          padding: 9px 16px;
-          border-radius: 999px;
-          animation: fadeInUp 0.2s ease-out;
-          border: 1px solid transparent;
-          font-size: 0.85rem;
+          padding: 10px 18px;
+          border-radius: 8px;
+          animation: fadeInUp 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          border: 1px solid;
+          font-size: 0.875rem;
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          box-shadow: 
+            0 4px 6px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         .notif-success {
-          background: #1b1f26;
-          border-color: rgba(6, 182, 212, 0.3);
-          color: #06b6d4;
+          background: rgba(15, 23, 42, 0.6);
+          border-color: rgba(6, 230, 230, 0.4);
+          color: #06e6e6;
         }
 
         .notif-error {
-          background: #1b1f26;
-          border-color: rgba(239, 68, 68, 0.3);
-          color: #ef4444;
+          background: rgba(15, 23, 42, 0.6);
+          border-color: rgba(239, 68, 68, 0.4);
+          color: #f87171;
         }
 
         .modal-backdrop {
@@ -1495,28 +1636,47 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           gap: 6px;
           padding: 8px 16px;
           border-radius: 6px;
-          background: #1b1f26;
-          border: 1px solid rgba(6, 182, 212, 0.3);
-          color: #e5e7eb;
-          font-size: 0.88rem;
+          background: rgba(15, 23, 42, 0.4);
+          border: 1px solid rgba(6, 230, 230, 0.3);
+          color: #e2e8f0;
+          font-size: 0.875rem;
           font-weight: 500;
           cursor: pointer;
-          transition: all 0.12s ease;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           position: relative;
           z-index: 30;
           pointer-events: auto;
           isolation: isolate;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          box-shadow: 
+            0 1px 2px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         .like-button:hover {
-          background: #1f2937;
-          border-color: rgba(6, 182, 212, 0.5);
-          color: #06b6d4;
+          background: rgba(15, 23, 42, 0.6);
+          border-color: rgba(6, 230, 230, 0.5);
+          color: #06e6e6;
+          box-shadow: 
+            0 2px 8px rgba(6, 230, 230, 0.15),
+            0 0 12px rgba(6, 230, 230, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+          transform: translateY(-1px);
+        }
+
+        .like-button:active {
+          transform: translateY(0);
         }
 
         .like-button.liked {
-          border-color: rgba(6, 182, 212, 0.5);
-          color: #06b6d4;
+          border-color: rgba(6, 230, 230, 0.6);
+          color: #06e6e6;
+          background: rgba(6, 230, 230, 0.08);
+          box-shadow: 
+            0 2px 8px rgba(6, 230, 230, 0.2),
+            0 0 16px rgba(6, 230, 230, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
 
         @keyframes fadeInScale {
@@ -1592,12 +1752,17 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
 .glass-comment {
   padding: 12px 16px;
-  background: #14171c;
-  border: 1px solid rgba(156, 163, 175, 0.15);
-  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(100, 116, 139, 0.15);
+  border-radius: 8px;
   flex: 1;
   position: relative;
   isolation: isolate;
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .comment-header {
@@ -1608,16 +1773,17 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
   margin-bottom: 8px;
 }
 
-.comment-author {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: #e5e7eb;
-  transition: color 0.12s ease;
-}
+        .comment-author {
+          font-weight: 600;
+          font-size: 0.9rem;
+          color: #e2e8f0;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
 
-.comment-author:hover {
-  color: #06b6d4;
-}
+        .comment-author:hover {
+          color: #06e6e6;
+          text-shadow: 0 0 6px rgba(6, 230, 230, 0.25);
+        }
 
 .comment-separator {
   margin: 0 4px;
@@ -1625,12 +1791,12 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
   color: #9ca3af;
 }
 
-.comment-text {
-  font-size: 0.88rem;
-  color: #e5e7eb;
-  line-height: 1.5;
-  word-wrap: break-word;
-}
+        .comment-text {
+          font-size: 0.88rem;
+          color: #e2e8f0;
+          line-height: 1.55;
+          word-wrap: break-word;
+        }
 
 .comment-actions {
   margin-top: 8px;
@@ -1644,73 +1810,117 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 .comment-action {
   all: unset;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   font-weight: 500;
   padding: 6px 12px;
   border-radius: 6px;
-  background: #1b1f26;
-  border: 1px solid rgba(6, 182, 212, 0.3);
-  color: #9ca3af;
-  transition: all 0.12s ease;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(6, 230, 230, 0.3);
+  color: #94a3b8;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   z-index: 30;
   pointer-events: auto;
   display: inline-block;
   isolation: isolate;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .comment-action:hover {
-  background: #1f2937;
-  border-color: rgba(6, 182, 212, 0.5);
-  color: #06b6d4;
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(6, 230, 230, 0.5);
+  color: #06e6e6;
+  box-shadow: 
+    0 2px 8px rgba(6, 230, 230, 0.15),
+    0 0 12px rgba(6, 230, 230, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.comment-action:active {
+  transform: translateY(0);
 }
 
 .comment-action.danger {
-  color: #ef4444;
-}
-
-.comment-action.danger:hover {
+  border-color: rgba(239, 68, 68, 0.3);
   color: #f87171;
 }
 
+.comment-action.danger:hover {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  box-shadow: 
+    0 2px 8px rgba(239, 68, 68, 0.15),
+    0 0 12px rgba(239, 68, 68, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
 .comment-action.liked {
-  border-color: rgba(6, 182, 212, 0.5);
-  color: #06b6d4;
+  border-color: rgba(6, 230, 230, 0.6);
+  color: #06e6e6;
+  background: rgba(6, 230, 230, 0.08);
+  box-shadow: 
+    0 2px 8px rgba(6, 230, 230, 0.2),
+    0 0 16px rgba(6, 230, 230, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .comment-toggle-btn {
   all: unset;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   font-weight: 500;
-  color: #9ca3af;
+  color: #94a3b8;
   padding: 8px 16px;
   border-radius: 6px;
-  background: #1b1f26;
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(6, 230, 230, 0.3);
   margin-top: 12px;
-  transition: all 0.12s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   z-index: 30;
   pointer-events: auto;
   display: inline-block;
   isolation: isolate;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .comment-toggle-btn:hover {
-  background: #1f2937;
-  border-color: rgba(6, 182, 212, 0.5);
-  color: #06b6d4;
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(6, 230, 230, 0.5);
+  color: #06e6e6;
+  box-shadow: 
+    0 2px 8px rgba(6, 230, 230, 0.15),
+    0 0 12px rgba(6, 230, 230, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.comment-toggle-btn:active {
+  transform: translateY(0);
 }
 
 .glass-card {
   margin-top: 12px;
   padding: 18px;
-  border-radius: 8px;
-  background: #14171c;
-  border: 1px solid rgba(156, 163, 175, 0.15);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(100, 116, 139, 0.15);
   position: relative;
   isolation: isolate;
+  box-shadow: 
+    0 4px 6px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .clickable-author {
