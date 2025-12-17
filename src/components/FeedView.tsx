@@ -734,17 +734,16 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
       style={{ paddingLeft: depth * 15 }}
     >
       <div className="comment-body glass-comment">
-        <div className="comment-line">
+        <div className="comment-header">
           <Link
             href={`/profile/${comment.user_id}`}
             className="comment-author clickable-author"
           >
             {comment.author_pseudo}
           </Link>
-
-          <span className="comment-separator">:</span>
-
-
+        </div>
+        
+        <div className="comment-content">
           <span className="comment-text">{comment.content}</span>
         </div>
 
@@ -772,10 +771,10 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           )}
 
           <button
-            className="comment-action"
+            className={`comment-action ${comment.isLikedByMe ? "liked" : ""}`}
             onClick={() => handleToggleCommentLike(comment.id)}
           >
-            ❤️ {comment.likes_count ?? 0}
+            Like {comment.likes_count ?? 0}
           </button>
         </div>
 
@@ -1020,8 +1019,8 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
                     width="18"
                     height="18"
                     viewBox="0 0 24 24"
-                    fill={post.isLikedByMe ? "#ff6b81" : "none"}
-                    stroke="#ffffff"
+                    fill={post.isLikedByMe ? "#06b6d4" : "none"}
+                    stroke={post.isLikedByMe ? "#06b6d4" : "#e5e7eb"}
                     strokeWidth="1.8"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -1092,75 +1091,66 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           padding: 26px;
           max-width: 720px;
           margin: 0 auto;
-          color: #f4f5ff;
+          color: #e5e7eb;
         }
 
         .feed-title {
           margin-bottom: 24px;
           font-size: 1.6rem;
           font-weight: 600;
-          letter-spacing: 0.04em;
-          text-shadow: 0 0 4px rgba(140, 160, 255, 0.2);
+          letter-spacing: 0.02em;
+          color: #e5e7eb;
         }
 
         .card {
-          background: rgba(10, 10, 18, 0.65);
-          border-radius: 18px;
-          border: 1px solid rgba(95, 115, 200, 0.18);
+          background: #1b1f26;
+          border-radius: 8px;
+          border: 1px solid rgba(156, 163, 175, 0.15);
           padding: 18px 22px;
           margin-bottom: 26px;
-          backdrop-filter: blur(16px);
-          box-shadow: 0 0 18px rgba(40, 80, 255, 0.12);
-          transition: 0.22s ease;
+          transition: all 0.12s ease;
+          position: relative;
+          isolation: isolate;
         }
 
         .card:hover {
-          border-color: rgba(130, 150, 255, 0.26);
-          box-shadow: 0 0 26px rgba(90, 120, 255, 0.18);
-          transform: translateY(-2px);
+          border-color: rgba(156, 163, 175, 0.2);
         }
 
         .card-create {
-          background:
-            radial-gradient(
-              circle at top left,
-              rgba(120, 140, 255, 0.22),
-              transparent 55%
-            ),
-            rgba(10, 10, 18, 0.75);
+          background: #1b1f26;
         }
 
         .card-title {
           margin-bottom: 14px;
           font-size: 1rem;
           font-weight: 600;
-          letter-spacing: 0.03em;
+          letter-spacing: 0.02em;
+          color: #e5e7eb;
         }
 
         .input,
         .textarea {
           width: 100%;
-          background: rgba(18, 20, 32, 0.92);
-          border-radius: 12px;
-          border: 1px solid rgba(80, 90, 130, 0.7);
-          color: #f4f6ff;
+          background: #14171c;
+          border-radius: 6px;
+          border: 1px solid rgba(156, 163, 175, 0.2);
+          color: #e5e7eb;
           padding: 10px 13px;
           font-size: 0.92rem;
           outline: none;
-          transition: 0.18s ease;
+          transition: all 0.12s ease;
         }
 
         .input::placeholder,
         .textarea::placeholder {
-          color: #7a7f90;
+          color: #9ca3af;
         }
 
         .input:focus,
         .textarea:focus {
-          border-color: rgba(150, 170, 255, 0.95);
-          background: rgba(20, 22, 36, 0.94);
-          box-shadow: 0 0 0 1px rgba(150, 170, 255, 0.3);
-          transform: translateY(-1px);
+          border-color: rgba(6, 182, 212, 0.5);
+          background: #1b1f26;
         }
 
         .textarea {
@@ -1173,19 +1163,19 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           gap: 8px;
           padding: 10px 12px;
           margin: 12px 0;
-          border-radius: 12px;
-          border: 1px dashed rgba(110, 120, 170, 0.7);
-          background: rgba(18, 20, 34, 0.95);
-          color: #d6d9ff;
+          border-radius: 6px;
+          border: 1px dashed rgba(156, 163, 175, 0.3);
+          background: #14171c;
+          color: #9ca3af;
           font-size: 0.85rem;
           cursor: pointer;
-          transition: 0.18s ease;
+          transition: all 0.12s ease;
         }
 
         .file-label:hover {
-          border-color: rgba(160, 180, 255, 0.95);
-          background: rgba(24, 26, 46, 0.98);
-          transform: translateY(-1px);
+          border-color: rgba(6, 182, 212, 0.4);
+          background: #1b1f26;
+          color: #e5e7eb;
         }
 
         .file-label input {
@@ -1197,51 +1187,53 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           align-items: center;
           gap: 6px;
           padding: 8px 20px;
-          border-radius: 999px;
+          border-radius: 6px;
           border: 1px solid transparent;
           font-size: 0.88rem;
           cursor: pointer;
-          transition: 0.16s ease;
+          transition: all 0.12s ease;
         }
 
         .primary-btn {
-          background: linear-gradient(
-            135deg,
-            rgba(130, 150, 255, 0.97),
-            rgba(100, 170, 255, 0.97)
-          );
-          color: #050513;
-          font-weight: 600;
-          box-shadow: 0 10px 24px rgba(80, 120, 255, 0.45);
+          background: #1b1f26;
+          border-color: rgba(6, 182, 212, 0.3);
+          color: #e5e7eb;
+          font-weight: 500;
+          position: relative;
+          z-index: 10;
+          pointer-events: auto;
         }
 
         .primary-btn:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 14px 28px rgba(80, 120, 255, 0.55);
+          background: #1f2937;
+          border-color: rgba(6, 182, 212, 0.5);
+          color: #06b6d4;
         }
 
         .ghost-btn {
-          background: rgba(15, 16, 26, 0.92);
-          border-color: rgba(90, 100, 140, 0.85);
-          color: #e0e2ff;
+          background: #1b1f26;
+          border-color: rgba(156, 163, 175, 0.2);
+          color: #9ca3af;
+          position: relative;
+          z-index: 10;
+          pointer-events: auto;
         }
 
         .ghost-btn:hover {
-          background: rgba(26, 28, 46, 0.96);
-          border-color: rgba(150, 160, 255, 0.95);
+          background: #1f2937;
+          border-color: rgba(156, 163, 175, 0.3);
+          color: #e5e7eb;
         }
 
         .danger-btn {
-          background: rgba(50, 14, 22, 0.98);
-          border-color: rgba(220, 80, 110, 0.8);
-          color: #ffdbe6;
+          background: #1b1f26;
+          border-color: rgba(239, 68, 68, 0.3);
+          color: #ef4444;
         }
 
         .danger-btn:hover {
-          background: rgba(70, 18, 30, 0.98);
-          border-color: rgba(250, 110, 140, 0.95);
-          box-shadow: 0 10px 22px rgba(255, 80, 110, 0.55);
-          transform: translateY(-1px);
+          background: #1f2937;
+          border-color: rgba(239, 68, 68, 0.5);
         }
 
         .post-header {
@@ -1262,33 +1254,33 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           height: 46px;
           object-fit: cover;
           border-radius: 999px;
-          border: 1px solid rgba(130, 140, 200, 0.85);
-          box-shadow: 0 0 8px rgba(45, 70, 130, 0.4);
+          border: 1px solid rgba(156, 163, 175, 0.2);
         }
 
         .post-author {
           font-size: 0.95rem;
           font-weight: 600;
           text-decoration: none;
-          color: #eff1ff;
+          color: #e5e7eb;
+          transition: color 0.12s ease;
         }
 
         .post-author:hover {
           text-decoration: none !important;
+          color: #06b6d4;
         }
 
         .post-game {
           margin-top: 1px;
           font-size: 0.78rem;
-          opacity: 0.75;
-          color: #b8baf2;
+          color: #9ca3af;
         }
 
         .post-content {
           margin-top: 12px;
           font-size: 0.95rem;
           line-height: 1.55;
-          color: #e7e8ff;
+          color: #e5e7eb;
         }
 
         .post-edit-block {
@@ -1307,9 +1299,8 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         .post-media {
           width: 100%;
           margin-top: 12px;
-          border-radius: 14px;
-          border: 1px solid rgba(100, 110, 170, 0.75);
-          box-shadow: 0 12px 26px rgba(0, 0, 0, 0.55);
+          border-radius: 8px;
+          border: 1px solid rgba(156, 163, 175, 0.1);
         }
 
         .post-actions {
@@ -1317,6 +1308,9 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           display: flex;
           align-items: center;
           justify-content: space-between;
+          position: relative;
+          z-index: 20;
+          isolation: isolate;
         }
 
         .icon-button {
@@ -1329,8 +1323,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         }
 
         .icon-button:hover {
-          background: rgba(40, 40, 70, 0.6);
-          transform: translateY(-1px);
+          background: #1f2937;
         }
 
         .icon-button.small {
@@ -1342,16 +1335,16 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           align-items: center;
           gap: 6px;
           font-size: 0.82rem;
-          color: #a8a9cc;
+          color: #9ca3af;
         }
 
         .subtle {
-          opacity: 0.75;
+          opacity: 0.7;
         }
 
         .comment-count {
           font-size: 0.8rem;
-          color: #b9bdf4;
+          color: #9ca3af;
         }
 
         .comments-block {
@@ -1393,14 +1386,13 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           right: 0;
           top: 34px;
           min-width: 155px;
-          background: rgba(14, 14, 26, 0.96);
-          border-radius: 14px;
-          border: 1px solid rgba(90, 100, 150, 0.9);
+          background: #1b1f26;
+          border-radius: 8px;
+          border: 1px solid rgba(156, 163, 175, 0.2);
           padding: 6px 0;
-          box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
-          animation: fadeInScale 0.15s ease-out;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+          animation: fadeInScale 0.12s ease-out;
           transform-origin: top right;
-          backdrop-filter: blur(16px);
           z-index: 25;
         }
 
@@ -1409,26 +1401,26 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           padding: 8px 12px;
           background: transparent;
           border: none;
-          color: #e8e8ff;
+          color: #e5e7eb;
           display: flex;
           align-items: center;
           gap: 8px;
           font-size: 0.85rem;
           cursor: pointer;
-          transition: background 0.15s ease, color 0.15s ease;
+          transition: all 0.12s ease;
         }
 
         .options-menu-item:hover {
-          background: rgba(44, 44, 70, 0.88);
+          background: #1f2937;
         }
 
         .options-menu-item.danger {
-          color: #ffb4b4;
+          color: #ef4444;
         }
 
         .options-menu-item.danger:hover {
-          background: rgba(80, 24, 36, 0.92);
-          color: #ffe5ed;
+          background: #1f2937;
+          color: #f87171;
         }
 
         .notification {
@@ -1444,68 +1436,50 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         }
 
         .notif-success {
-          background: rgba(16, 48, 32, 0.96);
-          border-color: rgba(50, 160, 110, 0.9);
-          color: #d6ffe9;
+          background: #1b1f26;
+          border-color: rgba(6, 182, 212, 0.3);
+          color: #06b6d4;
         }
 
         .notif-error {
-          background: rgba(55, 20, 28, 0.96);
-          border-color: rgba(210, 80, 120, 0.9);
-          color: #ffe2eb;
+          background: #1b1f26;
+          border-color: rgba(239, 68, 68, 0.3);
+          color: #ef4444;
         }
 
         .modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(8px);
-
-  /* 🔥 Toujours au-dessus de tout */
-  z-index: 9999;
-
-  animation: fadeIn 0.18s ease-out;
-}
-
-.modal-card {
-  background: rgba(10, 10, 18, 0.98);
-  border-radius: 18px;
-  padding: 20px;
-  max-width: 360px;
-  width: 90%;
-  border: 1px solid rgba(80, 80, 130, 0.8);
-
-  /* 🔥 Force la carte au-dessus du backdrop */
-  z-index: 10000;
-
-  animation: scaleIn 0.18s ease-out;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
-}
-
+          position: fixed;
+          inset: 0;
+          background: rgba(11, 15, 20, 0.8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+          animation: fadeIn 0.12s ease-out;
+        }
 
         .modal-card {
-          background: rgba(10, 10, 18, 0.98);
-          border-radius: 18px;
+          background: #1b1f26;
+          border-radius: 8px;
           padding: 20px;
           max-width: 360px;
           width: 90%;
-          border: 1px solid rgba(80, 80, 130, 0.8);
-          animation: scaleIn 0.18s ease-out;
-          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+          border: 1px solid rgba(156, 163, 175, 0.2);
+          z-index: 10000;
+          animation: scaleIn 0.12s ease-out;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
         .modal-card h3 {
           margin: 0 0 10px 0;
           font-size: 1.05rem;
           font-weight: 600;
+          color: #e5e7eb;
         }
 
         .modal-text {
           font-size: 0.86rem;
-          color: #c6c6dd;
+          color: #9ca3af;
           margin-bottom: 16px;
         }
 
@@ -1515,31 +1489,34 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           gap: 8px;
         }
 
-        /* 🔥 Styles pour le bouton Like */
         .like-button {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          padding: 7px 14px;
-          border-radius: 999px;
-          background: rgba(20, 22, 34, 0.92);
-          border: 1px solid rgba(95, 115, 180, 0.65);
-          color: #ffffff;
-          font-size: 0.85rem;
+          padding: 8px 16px;
+          border-radius: 6px;
+          background: #1b1f26;
+          border: 1px solid rgba(6, 182, 212, 0.3);
+          color: #e5e7eb;
+          font-size: 0.88rem;
+          font-weight: 500;
           cursor: pointer;
-          transition: 0.18s ease;
+          transition: all 0.12s ease;
+          position: relative;
+          z-index: 30;
+          pointer-events: auto;
+          isolation: isolate;
         }
 
         .like-button:hover {
-          background: rgba(30, 32, 48, 0.96);
-          border-color: rgba(120, 140, 255, 0.95);
-          box-shadow: 0 0 14px rgba(130, 150, 255, 0.28);
-          transform: translateY(-1px);
+          background: #1f2937;
+          border-color: rgba(6, 182, 212, 0.5);
+          color: #06b6d4;
         }
 
         .like-button.liked {
-          border-color: rgba(255, 120, 150, 0.95);
-          box-shadow: 0 0 16px rgba(255, 120, 150, 0.45);
+          border-color: rgba(6, 182, 212, 0.5);
+          color: #06b6d4;
         }
 
         @keyframes fadeInScale {
@@ -1600,9 +1577,11 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 .comment-wrapper {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 20px;
-  padding-left: calc(26px * var(--depth));
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-left: calc(24px * var(--depth));
+  position: relative;
+  isolation: isolate;
 }
 
 
@@ -1611,147 +1590,137 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 .depth-2 { --depth: 2; }
 .depth-3 { --depth: 3; }
 
-/* Bulle de commentaire façon Instagram / verre */
 .glass-comment {
-  padding: 10px 14px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 12px;
-  backdrop-filter: blur(14px);
+  padding: 12px 16px;
+  background: #14171c;
+  border: 1px solid rgba(156, 163, 175, 0.15);
+  border-radius: 6px;
   flex: 1;
+  position: relative;
+  isolation: isolate;
 }
 
-/* Ligne auteur + texte */
-.comment-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 0.85rem;
+.comment-header {
+  margin-bottom: 6px;
+}
+
+.comment-content {
+  margin-bottom: 8px;
 }
 
 .comment-author {
   font-weight: 600;
-  opacity: 0.75;
-color: #c7cae0;   /* gris bleuté, plus sobre */
-transition: 0.2s ease;
+  font-size: 0.9rem;
+  color: #e5e7eb;
+  transition: color 0.12s ease;
 }
 
 .comment-author:hover {
-  opacity: 1;
-  color: #e5e7ff;
+  color: #06b6d4;
 }
 
 .comment-separator {
-  margin: 0 100px;
-  opacity: 0.55;
+  margin: 0 4px;
+  opacity: 0.5;
+  color: #9ca3af;
 }
-
-
 
 .comment-text {
   font-size: 0.88rem;
-  color: #f1f2ff;
-  line-height: 1.45;
-  opacity: 0.9;
+  color: #e5e7eb;
+  line-height: 1.5;
+  word-wrap: break-word;
 }
-
-
-/* Actions */
 
 .comment-actions {
-  margin-top: 6px;
+  margin-top: 8px;
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  position: relative;
+  z-index: 30;
+  isolation: isolate;
 }
-
-.comment-action {
-  font-weight: 500;
-  color: #ebecff;
-}
-
 
 .comment-action {
   all: unset;
   cursor: pointer;
-  font-size: 0.76rem;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  backdrop-filter: blur(6px);
-  transition: 0.2s ease;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: #1b1f26;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: #9ca3af;
+  transition: all 0.12s ease;
+  position: relative;
+  z-index: 30;
+  pointer-events: auto;
+  display: inline-block;
+  isolation: isolate;
 }
 
 .comment-action:hover {
-  background: rgba(255,255,255,0.15);
+  background: #1f2937;
+  border-color: rgba(6, 182, 212, 0.5);
+  color: #06b6d4;
 }
 
 .comment-action.danger {
-  color: #ff9b9b;
+  color: #ef4444;
+}
+
+.comment-action.danger:hover {
+  color: #f87171;
+}
+
+.comment-action.liked {
+  border-color: rgba(6, 182, 212, 0.5);
+  color: #06b6d4;
 }
 
 .comment-toggle-btn {
   all: unset;
   cursor: pointer;
-  font-size: 0.86rem;
-  color: #cfd3ff;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  backdrop-filter: blur(8px);
-  margin-top: 10px;
-  transition: 0.2s;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #9ca3af;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: #1b1f26;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  margin-top: 12px;
+  transition: all 0.12s ease;
+  position: relative;
+  z-index: 30;
+  pointer-events: auto;
+  display: inline-block;
+  isolation: isolate;
 }
 
 .comment-toggle-btn:hover {
-  background: rgba(255,255,255,0.12);
+  background: #1f2937;
+  border-color: rgba(6, 182, 212, 0.5);
+  color: #06b6d4;
 }
 
 .glass-card {
   margin-top: 12px;
-  padding: 16px;
-  border-radius: 14px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.12);
-  backdrop-filter: blur(20px);
-}
-
-
-.comment-toggle-btn {
-  all: unset;
-  cursor: pointer;
-  font-size: 0.86rem;
-  color: #cfd3ff;
-  padding: 6px 10px;
+  padding: 18px;
   border-radius: 8px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  backdrop-filter: blur(8px);
-  margin-top: 10px;
-  transition: 0.2s;
+  background: #14171c;
+  border: 1px solid rgba(156, 163, 175, 0.15);
+  position: relative;
+  isolation: isolate;
 }
-
-.comment-toggle-btn:hover {
-  background: rgba(255,255,255,0.12);
-}
-
-.glass-card {
-  margin-top: 12px;
-  padding: 16px;
-  border-radius: 14px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.12);
-  backdrop-filter: blur(20px);
-}
-
 
 .clickable-author {
-  color: #91a5ff;
+  color: #e5e7eb;
   cursor: pointer;
+  transition: color 0.12s ease;
 }
 
 .clickable-author:hover {
+  color: #06b6d4;
   text-decoration: underline;
 }
 
