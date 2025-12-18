@@ -803,7 +803,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
         <div className="comment-actions">
           <button
-            className="comment-action"
+            className="btn ghost-btn"
             onClick={() => {
               setNewComments(prev => ({
                 ...prev,
@@ -811,22 +811,25 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
               }));
               setReplyTo(prev => ({ ...prev, [post.id]: comment.id }));
             }}
+            type="button"
           >
             Reply
           </button>
 
           {canDelete && (
             <button
-              className="comment-action danger"
+              className="btn danger-btn"
               onClick={() => handleDeleteComment(comment.id)}
+              type="button"
             >
               Delete
             </button>
           )}
 
           <button
-            className={`comment-action ${comment.isLikedByMe ? "liked" : ""}`}
+            className={`btn ghost-btn ${comment.isLikedByMe ? "liked" : ""}`}
             onClick={() => handleToggleCommentLike(comment.id)}
+            type="button"
           >
             Like {comment.likes_count ?? 0}
           </button>
@@ -953,23 +956,23 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
                   </Link>
 
                   <div style={{ display: "flex", alignItems: "center" }}>
-  <Link
-    href={`/profile/${post.user_id}`}
-    className="post-author username-display"
-  >
-    {post.author_pseudo}
-  </Link>
+                    <Link
+                      href={`/profile/${post.user_id}`}
+                      className="post-author username-display"
+                    >
+                      {post.author_pseudo}
+                    </Link>
 
-  {post.games && (
-    <Link
-      href={`/games/${post.games.slug}`}
-      className="game-link"
-      style={{ marginLeft: "10px" }}
-    >
-      {post.games.name}
-    </Link>
-  )}
-</div>
+                    {post.games && (
+                      <Link
+                        href={`/games/${post.games.slug}`}
+                        className="game-link"
+                        style={{ marginLeft: "10px" }}
+                      >
+                        {post.games.name}
+                      </Link>
+                    )}
+                  </div>
 
                 </div>
 
@@ -1049,15 +1052,25 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
               {/* Media */}
               {post.media_type === "image" && post.media_url && (
-                <img src={post.media_url} className="post-media" />
+                <div className="post-media-wrapper">
+                  <img 
+                    src={post.media_url} 
+                    className="post-media post-media-image"
+                    alt="Post content"
+                    loading="lazy"
+                  />
+                </div>
               )}
 
               {post.media_type === "video" && post.media_url && (
-                <video
-                  src={post.media_url}
-                  controls
-                  className="post-media"
-                ></video>
+                <div className="post-media-wrapper">
+                  <video
+                    src={post.media_url}
+                    controls
+                    className="post-media post-media-video"
+                    preload="metadata"
+                  ></video>
+                </div>
               )}
 
               {/* Actions */}
@@ -1078,8 +1091,8 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
                     width="18"
                     height="18"
                     viewBox="0 0 24 24"
-                    fill={post.isLikedByMe ? "#06b6d4" : "none"}
-                    stroke={post.isLikedByMe ? "#06b6d4" : "#e5e7eb"}
+                    fill={post.isLikedByMe ? "#facc15" : "none"}
+                    stroke={post.isLikedByMe ? "#facc15" : "#ffffff"}
                     strokeWidth="1.8"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -1101,13 +1114,14 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
               {/* Comment toggle button */}
 <button
-  className="comment-toggle-btn"
+  className="btn ghost-btn"
   onClick={(e) => {
     e.preventDefault();
     e.stopPropagation();
     setOpenComments(prev => ({ ...prev, [post.id]: !prev[post.id] }));
   }}
   type="button"
+  style={{ marginTop: "12px" }}
 >
   {openComments[post.id] ? "Hide comments" : `Show comments (${postComments.length})`}
 </button>
@@ -1153,48 +1167,98 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
       {/* STYLES */}
       <style jsx>{`
         .feed-container {
-          padding: 26px;
+          padding: 20px 24px;
           max-width: 720px;
           margin: 0 auto;
-          color: #e2e8f0;
+          color: #ffffff;
         }
 
         .feed-title {
-          margin-bottom: 28px;
+          margin-bottom: 20px;
+          margin-top: 0;
           font-size: 1.75rem;
           font-weight: 700;
           letter-spacing: -0.02em;
-          color: #f1f5f9;
-          text-shadow: 0 0 20px rgba(6, 230, 230, 0.15);
+          color: #ffffff;
+          text-shadow: 0 0 20px rgba(250, 204, 21, 0.2);
         }
 
         .card {
-          background: rgba(15, 23, 42, 0.35);
+          background: rgba(30, 30, 30, 0.85);
           backdrop-filter: blur(12px);
           -webkit-backdrop-filter: blur(12px);
           border-radius: 12px;
-          border: 1px solid rgba(100, 116, 139, 0.15);
-          padding: 20px 24px;
-          margin-bottom: 24px;
+          border: 1px solid rgba(100, 100, 100, 0.2);
+          padding: 18px 22px;
+          margin-bottom: 20px;
           transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
           position: relative;
           isolation: isolate;
           box-shadow: 
-            0 4px 6px rgba(0, 0, 0, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            0 4px 6px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          overflow: hidden;
         }
 
         .card:hover {
-          border-color: rgba(6, 230, 230, 0.25);
+          border-color: rgba(250, 204, 21, 0.3);
           box-shadow: 
-            0 8px 16px rgba(0, 0, 0, 0.3),
-            0 0 24px rgba(6, 230, 230, 0.08),
-            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            0 8px 16px rgba(0, 0, 0, 0.5),
+            0 0 24px rgba(250, 204, 21, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
           transform: translateY(-2px);
         }
 
         .card-create {
-          background: rgba(15, 23, 42, 0.4);
+          background: rgba(30, 30, 30, 0.9);
+          margin-bottom: 20px;
+        }
+
+        .post-media-wrapper {
+          width: 100%;
+          margin-top: 16px;
+          margin-bottom: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          border-radius: 8px;
+          background: rgba(20, 20, 20, 0.5);
+        }
+
+        .post-media-image {
+          width: 100%;
+          max-width: 100%;
+          height: auto;
+          max-height: 600px;
+          object-fit: contain;
+          object-position: center;
+          display: block;
+        }
+
+        .post-media-video {
+          width: 100%;
+          max-width: 100%;
+          height: auto;
+          max-height: 600px;
+          min-height: 200px;
+          object-fit: contain;
+          object-position: center;
+          display: block;
+        }
+
+        @media (max-width: 768px) {
+          .post-media-image,
+          .post-media-video {
+            max-height: 400px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .post-media-image,
+          .post-media-video {
+            max-height: 300px;
+          }
         }
 
         .card-title {
@@ -1202,16 +1266,16 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           font-size: 1rem;
           font-weight: 600;
           letter-spacing: 0.02em;
-          color: #e5e7eb;
+          color: #ffffff;
         }
 
         .input,
         .textarea {
           width: 100%;
-          background: rgba(15, 23, 42, 0.5);
+          background: rgba(30, 30, 30, 0.8);
           border-radius: 8px;
-          border: 1px solid rgba(100, 116, 139, 0.25);
-          color: #e2e8f0;
+          border: 1px solid rgba(100, 100, 100, 0.3);
+          color: #ffffff;
           padding: 10px 14px;
           font-size: 0.9rem;
           outline: none;
@@ -1219,23 +1283,23 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
           box-shadow: 
-            inset 0 1px 2px rgba(0, 0, 0, 0.2),
-            0 1px 0 rgba(255, 255, 255, 0.03);
+            inset 0 1px 2px rgba(0, 0, 0, 0.3),
+            0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         .input::placeholder,
         .textarea::placeholder {
-          color: rgba(148, 163, 184, 0.6);
+          color: rgba(180, 180, 180, 0.6);
         }
 
         .input:focus,
         .textarea:focus {
-          border-color: rgba(6, 230, 230, 0.5);
-          background: rgba(15, 23, 42, 0.7);
+          border-color: rgba(250, 204, 21, 0.6);
+          background: rgba(35, 35, 35, 0.9);
           box-shadow: 
-            0 0 0 3px rgba(6, 230, 230, 0.1),
-            inset 0 1px 2px rgba(0, 0, 0, 0.2),
-            0 0 12px rgba(6, 230, 230, 0.08);
+            0 0 0 3px rgba(250, 204, 21, 0.15),
+            inset 0 1px 2px rgba(0, 0, 0, 0.3),
+            0 0 16px rgba(250, 204, 21, 0.12);
         }
 
         .textarea {
@@ -1249,9 +1313,9 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           padding: 10px 14px;
           margin: 12px 0;
           border-radius: 8px;
-          border: 1px dashed rgba(100, 116, 139, 0.3);
-          background: rgba(15, 23, 42, 0.4);
-          color: #94a3b8;
+          border: 1px dashed rgba(100, 100, 100, 0.4);
+          background: rgba(30, 30, 30, 0.8);
+          color: #ffffff;
           font-size: 0.875rem;
           cursor: pointer;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1260,12 +1324,12 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         }
 
         .file-label:hover {
-          border-color: rgba(6, 230, 230, 0.5);
-          background: rgba(15, 23, 42, 0.6);
-          color: #e2e8f0;
+          border-color: rgba(250, 204, 21, 0.5);
+          background: rgba(40, 40, 40, 0.9);
+          color: #ffffff;
           box-shadow: 
-            0 0 12px rgba(6, 230, 230, 0.1),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            0 0 12px rgba(250, 204, 21, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
         }
 
         .file-label input {
@@ -1295,49 +1359,49 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         }
 
         .primary-btn {
-          background: rgba(15, 23, 42, 0.4);
-          border-color: rgba(6, 230, 230, 0.3);
-          color: #e2e8f0;
+          background: rgba(30, 30, 30, 0.8);
+          border-color: rgba(250, 204, 21, 0.4);
+          color: #ffffff;
           box-shadow: 
-            0 1px 2px rgba(0, 0, 0, 0.3),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
         }
 
         .primary-btn:hover {
-          background: rgba(15, 23, 42, 0.6);
-          border-color: rgba(6, 230, 230, 0.5);
+          background: rgba(40, 40, 40, 0.9);
+          border-color: rgba(250, 204, 21, 0.6);
           color: #ffffff;
           box-shadow: 
-            0 2px 8px rgba(6, 230, 230, 0.15),
-            0 0 12px rgba(6, 230, 230, 0.08),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            0 2px 8px rgba(250, 204, 21, 0.2),
+            0 0 16px rgba(250, 204, 21, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
           transform: translateY(-1px);
         }
 
         .primary-btn:active {
           transform: translateY(0);
           box-shadow: 
-            0 1px 3px rgba(6, 230, 230, 0.2),
-            inset 0 1px 2px rgba(0, 0, 0, 0.2);
+            0 1px 3px rgba(250, 204, 21, 0.3),
+            inset 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
         .ghost-btn {
-          background: rgba(15, 23, 42, 0.4);
-          border-color: rgba(100, 116, 139, 0.2);
-          color: #94a3b8;
+          background: rgba(30, 30, 30, 0.8);
+          border-color: rgba(100, 100, 100, 0.3);
+          color: #ffffff;
           box-shadow: 
-            0 1px 2px rgba(0, 0, 0, 0.3),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
         }
 
         .ghost-btn:hover {
-          background: rgba(15, 23, 42, 0.6);
-          border-color: rgba(6, 230, 230, 0.4);
-          color: #e2e8f0;
+          background: rgba(40, 40, 40, 0.9);
+          border-color: rgba(250, 204, 21, 0.5);
+          color: #ffffff;
           box-shadow: 
-            0 2px 8px rgba(6, 230, 230, 0.15),
-            0 0 12px rgba(6, 230, 230, 0.08),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            0 2px 8px rgba(250, 204, 21, 0.2),
+            0 0 16px rgba(250, 204, 21, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
           transform: translateY(-1px);
         }
 
@@ -1345,24 +1409,40 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           transform: translateY(0);
         }
 
+        .ghost-btn.liked,
+        .primary-btn.liked,
+        .btn.liked {
+          border-color: rgba(250, 204, 21, 0.7);
+          color: #facc15;
+          background: rgba(250, 204, 21, 0.1);
+          box-shadow: 
+            0 2px 8px rgba(250, 204, 21, 0.25),
+            0 0 20px rgba(250, 204, 21, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        }
+
         .danger-btn {
-          background: rgba(15, 23, 42, 0.4);
+          background: rgba(30, 30, 30, 0.8);
           border-color: rgba(239, 68, 68, 0.3);
           color: #f87171;
           box-shadow: 
-            0 1px 2px rgba(0, 0, 0, 0.3),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
         }
 
         .danger-btn:hover {
-          background: rgba(15, 23, 42, 0.6);
+          background: rgba(40, 40, 40, 0.9);
           border-color: rgba(239, 68, 68, 0.5);
           color: #fca5a5;
           box-shadow: 
-            0 2px 8px rgba(239, 68, 68, 0.15),
-            0 0 12px rgba(239, 68, 68, 0.08),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            0 2px 8px rgba(239, 68, 68, 0.2),
+            0 0 16px rgba(239, 68, 68, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
           transform: translateY(-1px);
+        }
+
+        .danger-btn:active {
+          transform: translateY(0);
         }
 
         .post-header {
@@ -1370,6 +1450,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           justify-content: space-between;
           align-items: center;
           gap: 10px;
+          margin-bottom: 0;
         }
 
         .post-user {
@@ -1390,14 +1471,14 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           font-size: 0.95rem;
           font-weight: 600;
           text-decoration: none;
-          color: #e2e8f0;
+          color: #ffffff;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .post-author:hover {
           text-decoration: none !important;
-          color: #06e6e6;
-          text-shadow: 0 0 8px rgba(6, 230, 230, 0.3);
+          color: #facc15;
+          text-shadow: 0 0 8px rgba(250, 204, 21, 0.4);
         }
 
         .post-game {
@@ -1407,10 +1488,11 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         }
 
         .post-content {
-          margin-top: 12px;
+          margin-top: 14px;
+          margin-bottom: 0;
           font-size: 0.95rem;
           line-height: 1.6;
-          color: #e2e8f0;
+          color: #ffffff;
         }
 
         .post-edit-block {
@@ -1428,13 +1510,26 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
         .post-media {
           width: 100%;
-          margin-top: 12px;
+          max-width: 100%;
+          height: auto;
+          max-height: 600px;
+          margin-top: 16px;
           border-radius: 8px;
-          border: 1px solid rgba(156, 163, 175, 0.1);
+          border: 1px solid rgba(100, 100, 100, 0.2);
+          object-fit: contain;
+          object-position: center;
+          display: block;
+          background: rgba(20, 20, 20, 0.5);
+        }
+
+        .post-media[src=""],
+        .post-media:not([src]) {
+          display: none;
         }
 
         .post-actions {
-          margin-top: 14px;
+          margin-top: 16px;
+          margin-bottom: 0;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -1465,7 +1560,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           align-items: center;
           gap: 6px;
           font-size: 0.82rem;
-          color: #9ca3af;
+          color: #ffffff;
         }
 
         .subtle {
@@ -1474,7 +1569,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
         .comment-count {
           font-size: 0.8rem;
-          color: #9ca3af;
+          color: #ffffff;
         }
 
         .comments-block {
@@ -1516,15 +1611,15 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           right: 0;
           top: 34px;
           min-width: 155px;
-          background: rgba(15, 23, 42, 0.9);
+          background: rgba(30, 30, 30, 0.95);
           backdrop-filter: blur(12px);
           -webkit-backdrop-filter: blur(12px);
           border-radius: 8px;
-          border: 1px solid rgba(100, 116, 139, 0.2);
+          border: 1px solid rgba(100, 100, 100, 0.3);
           padding: 6px 0;
           box-shadow: 
-            0 8px 16px rgba(0, 0, 0, 0.4),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            0 8px 16px rgba(0, 0, 0, 0.5),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
           animation: fadeInScale 0.15s cubic-bezier(0.4, 0, 0.2, 1);
           transform-origin: top right;
           z-index: 25;
@@ -1535,7 +1630,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           padding: 8px 12px;
           background: transparent;
           border: none;
-          color: #e5e7eb;
+          color: #ffffff;
           display: flex;
           align-items: center;
           gap: 8px;
@@ -1545,8 +1640,8 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         }
 
         .options-menu-item:hover {
-          background: rgba(15, 23, 42, 0.6);
-          border-left: 2px solid rgba(6, 230, 230, 0.4);
+          background: rgba(40, 40, 40, 0.8);
+          border-left: 2px solid rgba(250, 204, 21, 0.5);
         }
 
         .options-menu-item.danger {
@@ -1577,9 +1672,9 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         }
 
         .notif-success {
-          background: rgba(15, 23, 42, 0.6);
-          border-color: rgba(6, 230, 230, 0.4);
-          color: #06e6e6;
+          background: rgba(30, 30, 30, 0.9);
+          border-color: rgba(250, 204, 21, 0.5);
+          color: #facc15;
         }
 
         .notif-error {
@@ -1636,9 +1731,9 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           gap: 6px;
           padding: 8px 16px;
           border-radius: 6px;
-          background: rgba(15, 23, 42, 0.4);
-          border: 1px solid rgba(6, 230, 230, 0.3);
-          color: #e2e8f0;
+          background: rgba(30, 30, 30, 0.8);
+          border: 1px solid rgba(100, 100, 100, 0.3);
+          color: #ffffff;
           font-size: 0.875rem;
           font-weight: 500;
           cursor: pointer;
@@ -1650,18 +1745,18 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
           box-shadow: 
-            0 1px 2px rgba(0, 0, 0, 0.3),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
         }
 
         .like-button:hover {
-          background: rgba(15, 23, 42, 0.6);
-          border-color: rgba(6, 230, 230, 0.5);
-          color: #06e6e6;
+          background: rgba(40, 40, 40, 0.9);
+          border-color: rgba(250, 204, 21, 0.5);
+          color: #facc15;
           box-shadow: 
-            0 2px 8px rgba(6, 230, 230, 0.15),
-            0 0 12px rgba(6, 230, 230, 0.08),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            0 2px 8px rgba(250, 204, 21, 0.2),
+            0 0 16px rgba(250, 204, 21, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
           transform: translateY(-1px);
         }
 
@@ -1670,13 +1765,13 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         }
 
         .like-button.liked {
-          border-color: rgba(6, 230, 230, 0.6);
-          color: #06e6e6;
-          background: rgba(6, 230, 230, 0.08);
+          border-color: rgba(250, 204, 21, 0.7);
+          color: #facc15;
+          background: rgba(250, 204, 21, 0.1);
           box-shadow: 
-            0 2px 8px rgba(6, 230, 230, 0.2),
-            0 0 16px rgba(6, 230, 230, 0.12),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            0 2px 8px rgba(250, 204, 21, 0.25),
+            0 0 20px rgba(250, 204, 21, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
         }
 
         @keyframes fadeInScale {
@@ -1752,17 +1847,17 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
 .glass-comment {
   padding: 12px 16px;
-  background: rgba(15, 23, 42, 0.3);
+  background: rgba(30, 30, 30, 0.7);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(100, 116, 139, 0.15);
+  border: 1px solid rgba(100, 100, 100, 0.2);
   border-radius: 8px;
   flex: 1;
   position: relative;
   isolation: isolate;
   box-shadow: 
-    0 2px 4px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .comment-header {
@@ -1773,30 +1868,30 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
   margin-bottom: 8px;
 }
 
-        .comment-author {
-          font-weight: 600;
-          font-size: 0.9rem;
-          color: #e2e8f0;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+.comment-author {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #ffffff;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
-        .comment-author:hover {
-          color: #06e6e6;
-          text-shadow: 0 0 6px rgba(6, 230, 230, 0.25);
-        }
+.comment-author:hover {
+  color: #facc15;
+  text-shadow: 0 0 6px rgba(250, 204, 21, 0.3);
+}
 
 .comment-separator {
   margin: 0 4px;
   opacity: 0.5;
-  color: #9ca3af;
+  color: #ffffff;
 }
 
-        .comment-text {
-          font-size: 0.88rem;
-          color: #e2e8f0;
-          line-height: 1.55;
-          word-wrap: break-word;
-        }
+.comment-text {
+  font-size: 0.88rem;
+  color: #ffffff;
+  line-height: 1.55;
+  word-wrap: break-word;
+}
 
 .comment-actions {
   margin-top: 8px;
@@ -1807,120 +1902,21 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
   isolation: isolate;
 }
 
-.comment-action {
-  all: unset;
-  cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 500;
-  padding: 6px 12px;
-  border-radius: 6px;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(6, 230, 230, 0.3);
-  color: #94a3b8;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  z-index: 30;
-  pointer-events: auto;
-  display: inline-block;
-  isolation: isolate;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.comment-action:hover {
-  background: rgba(15, 23, 42, 0.6);
-  border-color: rgba(6, 230, 230, 0.5);
-  color: #06e6e6;
-  box-shadow: 
-    0 2px 8px rgba(6, 230, 230, 0.15),
-    0 0 12px rgba(6, 230, 230, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
-}
-
-.comment-action:active {
-  transform: translateY(0);
-}
-
-.comment-action.danger {
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #f87171;
-}
-
-.comment-action.danger:hover {
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #fca5a5;
-  box-shadow: 
-    0 2px 8px rgba(239, 68, 68, 0.15),
-    0 0 12px rgba(239, 68, 68, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.comment-action.liked {
-  border-color: rgba(6, 230, 230, 0.6);
-  color: #06e6e6;
-  background: rgba(6, 230, 230, 0.08);
-  box-shadow: 
-    0 2px 8px rgba(6, 230, 230, 0.2),
-    0 0 16px rgba(6, 230, 230, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.comment-toggle-btn {
-  all: unset;
-  cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #94a3b8;
-  padding: 8px 16px;
-  border-radius: 6px;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(6, 230, 230, 0.3);
-  margin-top: 12px;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  z-index: 30;
-  pointer-events: auto;
-  display: inline-block;
-  isolation: isolate;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.comment-toggle-btn:hover {
-  background: rgba(15, 23, 42, 0.6);
-  border-color: rgba(6, 230, 230, 0.5);
-  color: #06e6e6;
-  box-shadow: 
-    0 2px 8px rgba(6, 230, 230, 0.15),
-    0 0 12px rgba(6, 230, 230, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
-}
-
-.comment-toggle-btn:active {
-  transform: translateY(0);
-}
+/* Les boutons de commentaires utilisent maintenant les classes .btn standard */
 
 .glass-card {
   margin-top: 12px;
   padding: 18px;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.35);
+  background: rgba(30, 30, 30, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(100, 116, 139, 0.15);
+  border: 1px solid rgba(100, 100, 100, 0.2);
   position: relative;
   isolation: isolate;
   box-shadow: 
-    0 4px 6px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    0 4px 6px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .clickable-author {

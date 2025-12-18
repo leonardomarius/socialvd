@@ -68,6 +68,72 @@ type CommentNode = Comment & {
    HELPERS
 ===================== */
 
+function formatPostDate(dateString: string): string {
+  const now = new Date();
+  const postDate = new Date(dateString);
+  const diffMs = now.getTime() - postDate.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHours = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  // Just now (moins de 1 minute)
+  if (diffSec < 60) {
+    return "Just now";
+  }
+
+  // Minutes ago (moins de 1 heure)
+  if (diffMin < 60) {
+    return `${diffMin} min ago`;
+  }
+
+  // Hours ago (moins de 24 heures)
+  if (diffHours < 24) {
+    return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
+  }
+
+  // Yesterday
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (
+    postDate.getDate() === yesterday.getDate() &&
+    postDate.getMonth() === yesterday.getMonth() &&
+    postDate.getFullYear() === yesterday.getFullYear()
+  ) {
+    const hours = postDate.getHours().toString().padStart(2, "0");
+    const minutes = postDate.getMinutes().toString().padStart(2, "0");
+    return `Yesterday at ${hours}:${minutes}`;
+  }
+
+  // Date complète (plus de 24h)
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const day = postDate.getDate();
+  const month = months[postDate.getMonth()];
+  const year = postDate.getFullYear();
+  const hours = postDate.getHours().toString().padStart(2, "0");
+  const minutes = postDate.getMinutes().toString().padStart(2, "0");
+
+  // Si c'est la même année, on n'affiche pas l'année
+  if (postDate.getFullYear() === now.getFullYear()) {
+    return `${day} ${month} at ${hours}:${minutes}`;
+  }
+
+  return `${day} ${month} ${year} at ${hours}:${minutes}`;
+}
+
 function buildCommentTree(all: Comment[] = []) {
   const map: Record<string, CommentNode> = {};
   const roots: CommentNode[] = [];
@@ -249,26 +315,29 @@ export default function PostCard({
 
           <div className="comment-actions">
             <button
-              className="comment-action"
+              className="btn ghost-btn btn-small"
               onClick={() => {
                 setReplyTo(c.id);
                 setNewComment(`@${c.author_pseudo} `);
               }}
+              type="button"
             >
               Reply
             </button>
 
             <button
-              className="comment-action"
+              className={`btn ghost-btn btn-small ${c.isLikedByMe ? "liked" : ""}`}
               onClick={() => toggleCommentLike(c)}
+              type="button"
             >
               ❤️ {c.likes_count ?? 0}
             </button>
 
             {canDelete && (
               <button
-                className="comment-action danger"
+                className="btn danger-btn btn-small"
                 onClick={() => deleteComment(c.id)}
+                type="button"
               >
                 Delete
               </button>
@@ -302,23 +371,28 @@ export default function PostCard({
             />
           </Link>
 
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <Link
-              href={`/profile/${post.user_id}`}
-              className="post-author"
-            >
-              {post.author_pseudo}
-            </Link>
-
-            {post.games && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <div style={{ display: "flex", alignItems: "center" }}>
               <Link
-                href={`/games/${post.games.slug}`}
-                className="game-link"
-                style={{ marginLeft: 10 }}
+                href={`/profile/${post.user_id}`}
+                className="post-author"
               >
-                {post.games.name}
+                {post.author_pseudo}
               </Link>
-            )}
+
+              {post.games && (
+                <Link
+                  href={`/games/${post.games.slug}`}
+                  className="game-link"
+                  style={{ marginLeft: 10 }}
+                >
+                  {post.games.name}
+                </Link>
+              )}
+            </div>
+            <span className="post-date">
+              {formatPostDate(post.created_at)}
+            </span>
           </div>
         </div>
 
@@ -387,7 +461,7 @@ export default function PostCard({
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Comment..."
             />
-            <button className="btn ghost-btn" onClick={addComment}>
+            <button className="btn ghost-btn btn-small" onClick={addComment} type="button">
               Send
             </button>
           </div>

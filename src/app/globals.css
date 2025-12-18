@@ -16,92 +16,37 @@
 }
 
 /* ======================================
-   🎮 FOND RETRO GAMING / AURORES BORÉALES
+   🎮 FOND GRIS FONCÉ — STYLE PREMIUM
    — CSS pur, performance-friendly
 ====================================== */
 body {
-  color: white;
+  color: #ffffff;
   position: relative;
   min-height: 100vh;
 
-  /* Base sombre charbon/bleu */
-  background: #0a0d14;
+  /* Base gris foncé */
+  background: #1a1a1a;
   
-  /* Overlay pour profondeur */
+  /* Overlay pour profondeur subtile */
   background-image: 
-    /* Aurore boréale cyan/violet - couche 1 */
-    radial-gradient(ellipse 120% 60% at 20% 10%, rgba(6, 230, 230, 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse 100% 50% at 80% 30%, rgba(138, 43, 226, 0.10) 0%, transparent 50%),
-    /* Aurore boréale bleu glacier - couche 2 */
-    radial-gradient(ellipse 140% 70% at 50% 5%, rgba(64, 224, 208, 0.08) 0%, transparent 60%),
-    /* Nébuleuse profonde */
-    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.4) 0%, transparent 70%),
-    /* Grain CRT subtil */
+    /* Lueur jaune très discrète (accent uniquement) */
+    radial-gradient(ellipse 140% 60% at 50% 0%, rgba(250, 204, 21, 0.03) 0%, transparent 60%),
+    /* Grain subtil */
     repeating-linear-gradient(
       0deg,
-      rgba(0, 0, 0, 0.03) 0px,
+      rgba(0, 0, 0, 0.02) 0px,
       transparent 1px,
       transparent 2px,
-      rgba(0, 0, 0, 0.03) 3px
+      rgba(0, 0, 0, 0.02) 3px
     );
   
   background-size: 
-    100% 100%,
-    100% 100%,
-    100% 100%,
     100% 100%,
     2px 2px;
   
   background-attachment: fixed;
   background-position: center;
   background-repeat: no-repeat;
-
-  /* Animation subtile des aurores */
-  animation: auroraShift 20s ease-in-out infinite alternate;
-}
-
-@keyframes auroraShift {
-  0% {
-    background-position: 
-      0% 0%,
-      100% 0%,
-      50% 0%,
-      50% 50%,
-      0 0;
-  }
-  100% {
-    background-position: 
-      10% 5%,
-      90% 10%,
-      60% 3%,
-      50% 50%,
-      0 0;
-  }
-}
-
-/* Overlay de profondeur supplémentaire */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background: 
-    /* Lueur néon discrète */
-    radial-gradient(circle at 30% 20%, rgba(6, 230, 230, 0.06) 0%, transparent 40%),
-    radial-gradient(circle at 70% 80%, rgba(138, 43, 226, 0.05) 0%, transparent 40%);
-  pointer-events: none;
-  animation: auroraGlow 15s ease-in-out infinite alternate;
-}
-
-@keyframes auroraGlow {
-  0% {
-    opacity: 0.6;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
 }
 
 /* ======================================
@@ -137,25 +82,25 @@ p, span, a, button, input, textarea {
   -webkit-backdrop-filter: blur(8px);
 }
 
-/* État de base - glassmorphism subtil */
+/* État de base - gris foncé premium */
 .btn {
-  background: rgba(15, 23, 42, 0.4);
-  border-color: rgba(100, 116, 139, 0.2);
-  color: #e2e8f0;
-  box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-/* Hover - glow cyan/violet discret */
-.btn:hover:not(:disabled) {
-  background: rgba(15, 23, 42, 0.6);
-  border-color: rgba(6, 230, 230, 0.4);
+  background: rgba(30, 30, 30, 0.8);
+  border-color: rgba(100, 100, 100, 0.3);
   color: #ffffff;
   box-shadow: 
-    0 2px 8px rgba(6, 230, 230, 0.15),
-    0 0 12px rgba(6, 230, 230, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 1px 3px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Hover - accent jaune */
+.btn:hover:not(:disabled) {
+  background: rgba(40, 40, 40, 0.9);
+  border-color: rgba(250, 204, 21, 0.5);
+  color: #ffffff;
+  box-shadow: 
+    0 2px 8px rgba(250, 204, 21, 0.2),
+    0 0 16px rgba(250, 204, 21, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transform: translateY(-1px);
 }
 
@@ -163,13 +108,13 @@ p, span, a, button, input, textarea {
 .btn:active:not(:disabled) {
   transform: translateY(0);
   box-shadow: 
-    0 1px 3px rgba(6, 230, 230, 0.2),
-    inset 0 1px 2px rgba(0, 0, 0, 0.2);
+    0 1px 3px rgba(250, 204, 21, 0.3),
+    inset 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-/* Focus visible mais élégant */
+/* Focus visible mais élégant - jaune */
 .btn:focus-visible {
-  outline: 2px solid rgba(6, 230, 230, 0.5);
+  outline: 2px solid rgba(250, 204, 21, 0.6);
   outline-offset: 2px;
 }
 
@@ -180,14 +125,20 @@ p, span, a, button, input, textarea {
   pointer-events: none;
 }
 
+/* Variante small pour boutons de commentaires */
+.btn-small {
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+}
+
 /* ======================================
    INPUTS & TEXTAREA — STYLE RETRO GAMING
 ====================================== */
 input,
 textarea {
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(100, 116, 139, 0.25);
-  color: #e2e8f0;
+  background: rgba(30, 30, 30, 0.8);
+  border: 1px solid rgba(100, 100, 100, 0.3);
+  color: #ffffff;
   padding: 10px 14px;
   border-radius: 6px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -196,23 +147,23 @@ textarea {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: 
-    inset 0 1px 2px rgba(0, 0, 0, 0.2),
-    0 1px 0 rgba(255, 255, 255, 0.03);
+    inset 0 1px 2px rgba(0, 0, 0, 0.3),
+    0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: rgba(148, 163, 184, 0.6);
+  color: rgba(180, 180, 180, 0.6);
 }
 
 input:focus,
 textarea:focus {
-  border-color: rgba(6, 230, 230, 0.5);
-  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(250, 204, 21, 0.6);
+  background: rgba(35, 35, 35, 0.9);
   box-shadow: 
-    0 0 0 3px rgba(6, 230, 230, 0.1),
-    inset 0 1px 2px rgba(0, 0, 0, 0.2),
-    0 0 12px rgba(6, 230, 230, 0.08);
+    0 0 0 3px rgba(250, 204, 21, 0.15),
+    inset 0 1px 2px rgba(0, 0, 0, 0.3),
+    0 0 16px rgba(250, 204, 21, 0.12);
   outline: none;
 }
 
@@ -221,7 +172,16 @@ textarea:focus {
 ====================================== */
 img {
   max-width: 100%;
+  height: auto;
   border-radius: 6px;
+  display: block;
+}
+
+video {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  display: block;
 }
 
 /* ======================================
@@ -348,6 +308,14 @@ img {
   letter-spacing: 0.3px;
 }
 
+/* Date de publication des posts */
+.post-date {
+  font-size: 0.75rem;
+  color: rgba(180, 180, 180, 0.7);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
 /* Désactive le soulignement par défaut de tous les liens */
 a {
   text-decoration: none;
@@ -424,31 +392,58 @@ a.game-link {
   padding: 4px 12px;
   margin-left: 10px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(100, 116, 139, 0.25);
+  background: rgba(30, 30, 30, 0.8);
+  border: 1px solid rgba(100, 100, 100, 0.3);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   font-size: 0.8rem;
   font-weight: 500;
-  color: #cbd5e1;
+  color: #ffffff;
   box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 a.game-link:hover {
-  background: rgba(15, 23, 42, 0.6) !important;
-  border-color: rgba(6, 230, 230, 0.5) !important;
-  color: #06e6e6 !important;
+  background: rgba(40, 40, 40, 0.9) !important;
+  border-color: rgba(250, 204, 21, 0.5) !important;
+  color: #facc15 !important;
   box-shadow: 
-    0 2px 8px rgba(6, 230, 230, 0.15),
-    0 0 12px rgba(6, 230, 230, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    0 2px 8px rgba(250, 204, 21, 0.2),
+    0 0 12px rgba(250, 204, 21, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
   transform: translateY(-1px);
 }
 
 a.game-link:active {
   transform: translateY(0) scale(0.98);
+}
+
+/* ======================================
+   MODAL BACKDROP — POUR PAGE PROFIL
+====================================== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.12s ease-out;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

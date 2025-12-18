@@ -1,17 +1,87 @@
   "use client";
 
-  import { useEffect, useState } from "react";
+  import { useEffect, useState, useRef } from "react";
   import { useParams, useRouter } from "next/navigation";
   import { supabase } from "@/lib/supabase";
   import Image from "next/image";
   import EditProfileForm from "@/components/EditProfileForm";
   import Link from "next/link";
   import MateButton from "@/components/MateButton";
+  import { XMarkIcon } from "@heroicons/react/24/outline";
 
   // 🔥 AJOUT — IMPORT
   import MateSessionButton from "@/components/MateSessionButton";
   import ProfilePerformances from "@/components/ProfilePerformances";
   import AddPerformanceForm from "@/components/AddPerformanceForm";
+
+  // ---------------------
+  // FORMATAGE DATE POST
+  // ---------------------
+  function formatPostDate(dateString: string): string {
+    const now = new Date();
+    const postDate = new Date(dateString);
+    const diffMs = now.getTime() - postDate.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHours = Math.floor(diffMin / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    // Just now (moins de 1 minute)
+    if (diffSec < 60) {
+      return "Just now";
+    }
+
+    // Minutes ago (moins de 1 heure)
+    if (diffMin < 60) {
+      return `${diffMin} min ago`;
+    }
+
+    // Hours ago (moins de 24 heures)
+    if (diffHours < 24) {
+      return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
+    }
+
+    // Yesterday
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (
+      postDate.getDate() === yesterday.getDate() &&
+      postDate.getMonth() === yesterday.getMonth() &&
+      postDate.getFullYear() === yesterday.getFullYear()
+    ) {
+      const hours = postDate.getHours().toString().padStart(2, "0");
+      const minutes = postDate.getMinutes().toString().padStart(2, "0");
+      return `Yesterday at ${hours}:${minutes}`;
+    }
+
+    // Date complète (plus de 24h)
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    const day = postDate.getDate();
+    const month = months[postDate.getMonth()];
+    const year = postDate.getFullYear();
+    const hours = postDate.getHours().toString().padStart(2, "0");
+    const minutes = postDate.getMinutes().toString().padStart(2, "0");
+
+    // Si c'est la même année, on n'affiche pas l'année
+    if (postDate.getFullYear() === now.getFullYear()) {
+      return `${day} ${month} at ${hours}:${minutes}`;
+    }
+
+    return `${day} ${month} ${year} at ${hours}:${minutes}`;
+  }
 
   type Profile = {
     id: string;
@@ -73,6 +143,8 @@ type Comment = {
     const [newComment, setNewComment] = useState("");
     const [isLiking, setIsLiking] = useState(false);
     const [localLikes, setLocalLikes] = useState<number>(0);
+    const [replyTo, setReplyTo] = useState<string | null>(null);
+    const commentInputRef = useRef<HTMLTextAreaElement | null>(null);
 
 
     const [followersCount, setFollowersCount] = useState(0);
@@ -90,6 +162,33 @@ type Comment = {
     const [savingEdit, setSavingEdit] = useState(false);
   // UI toggle for Game Accounts card
   const [showAccountsCard, setShowAccountsCard] = useState(false);
+
+  // Blocage du scroll quand la modal est ouverte
+  useEffect(() => {
+    if (selectedPost) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selectedPost]);
+
+  // Gestion de la touche ESC pour fermer la modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedPost) {
+        setSelectedPost(null);
+      }
+    };
+    if (selectedPost) {
+      document.addEventListener("keydown", handleEscape);
+    }
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [selectedPost]);
 
   useEffect(() => {
   if (!selectedPost) return;
@@ -301,7 +400,7 @@ const handleToggleFollow = async () => {
 
     // Follow toggle
     
-const handleToggleLike = async () => {
+  const handleToggleLike = async () => {
   if (!myId || !selectedPost || isLiking) return;
 
   setIsLiking(true);
@@ -360,6 +459,61 @@ const handleToggleLike = async () => {
   setLocalLikes((prev) => Math.max(0, prev + (currentlyLiked ? -1 : 1)));
   setIsLiking(false);
 };
+
+  const handleAddComment = async () => {
+    if (!myId || !selectedPost || !newComment.trim()) return;
+
+    const { error } = await supabase.from("comments").insert({
+      post_id: selectedPost.id,
+      user_id: myId,
+      content: newComment.trim(),
+      parent_id: replyTo,
+    });
+
+    if (error) {
+      console.error("Insert comment error:", error);
+      return;
+    }
+
+    setNewComment("");
+    setReplyTo(null);
+
+    // 🔥 SOURCE DE VÉRITÉ : REFETCH DB
+    setLoadingComments(true);
+
+    const { data } = await supabase
+      .from("comments")
+      .select(`
+        id,
+        post_id,
+        user_id,
+        content,
+        created_at,
+        parent_id,
+        likes,
+        profiles:profiles (
+          pseudo,
+          avatar_url
+        )
+      `)
+      .eq("post_id", selectedPost.id)
+      .order("created_at", { ascending: true });
+
+    const formatted = (data || []).map((c: any) => ({
+      id: c.id,
+      post_id: c.post_id,
+      user_id: c.user_id,
+      content: c.content,
+      created_at: c.created_at,
+      parent_id: c.parent_id,
+      likes: c.likes ?? 0,
+      author_pseudo: c.profiles?.pseudo ?? null,
+      author_avatar: c.profiles?.avatar_url ?? null,
+    }));
+
+    setComments(formatted);
+    setLoadingComments(false);
+  };
 
 
 
@@ -504,293 +658,249 @@ const handleToggleLike = async () => {
 
     return (
       <>
-        <div className="profile-background"></div>
 
 {selectedPost && (
   <div
     onClick={() => setSelectedPost(null)}
-    style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.75)",
-      zIndex: 9999,
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-    }}
+    className="modal-backdrop"
+    style={{ overflow: "hidden" }}
   >
     <div
       onClick={(e) => e.stopPropagation()}
+      className="card"
       style={{
         width: "680px",
+        maxWidth: "90vw",
         maxHeight: "90vh",
+        height: "auto",
         overflowY: "auto",
-        borderRadius: 16,
-        padding: 20,
-        background:
-          "linear-gradient(135deg, rgba(14,14,22,0.98), rgba(6,6,12,0.98))",
-        border: "1px solid rgba(110,110,155,0.25)",
+        overflowX: "hidden",
+        margin: "auto",
+        position: "relative",
+        zIndex: 10000,
+        display: "flex",
+        flexDirection: "column",
       }}
     >
-      <div style={{ marginBottom: 14 }}>
-  <div
-    style={{
-      display: "flex",
-      justifyContent: "space-between",
-      fontSize: 12,
-      color: "rgba(220,220,235,0.75)",
-      marginBottom: 6,
-    }}
-  >
-    <span>{selectedPost.game || "Unspecified game"}</span>
-    <span>
-      {new Date(selectedPost.created_at).toLocaleString("en-US", {
-        dateStyle: "short",
-        timeStyle: "short",
-      })}
-    </span>
-  </div>
+      {/* Close Button */}
+      <button
+        onClick={() => setSelectedPost(null)}
+        type="button"
+        style={{
+          position: "absolute",
+          top: "12px",
+          right: "12px",
+          background: "rgba(30, 30, 30, 0.9)",
+          border: "1px solid rgba(100, 100, 100, 0.3)",
+          borderRadius: "50%",
+          width: "32px",
+          height: "32px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          color: "#ffffff",
+          zIndex: 10001,
+          transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "rgba(40, 40, 40, 0.95)";
+          e.currentTarget.style.borderColor = "rgba(250, 204, 21, 0.5)";
+          e.currentTarget.style.color = "#facc15";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "rgba(30, 30, 30, 0.9)";
+          e.currentTarget.style.borderColor = "rgba(100, 100, 100, 0.3)";
+          e.currentTarget.style.color = "#ffffff";
+        }}
+      >
+        <XMarkIcon style={{ width: "18px", height: "18px" }} />
+      </button>
 
+      {/* Header */}
+      <div className="post-header">
+        <div className="post-user">
+          <Link href={`/profile/${selectedPost.user_id}`}>
+            <img
+              src={
+                profile.avatar_url ||
+                "https://via.placeholder.com/40/333333/FFFFFF?text=?"
+              }
+              className="avatar"
+            />
+          </Link>
 
-  <p
-    style={{
-      fontSize: 15,
-      color: "rgba(245,245,255,0.95)",
-      marginBottom: 10,
-      lineHeight: 1.45,
-    }}
-  >
-    {selectedPost.content}
-  </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <Link
+                href={`/profile/${selectedPost.user_id}`}
+                className="post-author username-display"
+              >
+                {profile.pseudo}
+              </Link>
 
-  {selectedPost.media_type === "image" && (
-    <img
-      src={selectedPost.media_url!}
-      alt="post media"
-      style={{
-        width: "100%",
-        borderRadius: 14,
-        marginTop: 10,
-      }}
-    />
-  )}
-
-  {selectedPost.media_type === "video" && (
-    <video
-      src={selectedPost.media_url!}
-      controls
-      style={{
-        width: "100%",
-        borderRadius: 14,
-        marginTop: 10,
-      }}
-    />
-  )}
-</div>
-
-
-
-<div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 18,
-    marginTop: 18,
-    paddingTop: 12,
-    borderTop: "1px solid rgba(255,255,255,0.08)",
-  }}
->
-  {/* LIKE */}
-  <button
-  onClick={handleToggleLike}
-  disabled={isLiking}
-  style={{
-    background: "transparent",
-    border: "none",
-    color: "rgba(230,230,255,0.9)",
-    fontSize: 15,
-    cursor: isLiking ? "not-allowed" : "pointer",
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    opacity: isLiking ? 0.6 : 1,
-  }}
->
-  👍{" "}
-  <span style={{ fontSize: 13 }}>
-    {localLikes}
-  </span>
-</button>
-
-
-  {/* COMMENT */}
-  <button
-    style={{
-      background: "transparent",
-      border: "none",
-      color: "rgba(230,230,255,0.9)",
-      fontSize: 15,
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      gap: 6,
-    }}
-  >
-    💬 <span style={{ fontSize: 13 }}>Comment</span>
-  </button>
-
-  {/* DELETE (owner only) */}
-  {myId === selectedPost.user_id && (
-    <button
-      style={{
-        marginLeft: "auto",
-        background: "transparent",
-        border: "none",
-        color: "rgba(255,120,120,0.9)",
-        fontSize: 14,
-        cursor: "pointer",
-      }}
-    >
-      🗑 Delete
-    </button>
-  )}
-</div>
-
-{/* ADD COMMENT */}
-<div style={{ marginTop: 16 }}>
-  <textarea
-    value={newComment}
-    onChange={(e) => setNewComment(e.target.value)}
-    placeholder="Write a comment..."
-    style={{
-      width: "100%",
-      minHeight: 60,
-      background: "rgba(20,20,30,0.8)",
-      border: "1px solid rgba(255,255,255,0.12)",
-      borderRadius: 10,
-      padding: 10,
-      color: "white",
-      resize: "none",
-      fontSize: 14,
-    }}
-  />
-
-  <button
-    disabled={!newComment.trim()}
-    onClick={async () => {
-  if (!myId || !selectedPost || !newComment.trim()) return;
-
-  const { error } = await supabase.from("comments").insert({
-  post_id: selectedPost.id,
-  user_id: myId,
-  content: newComment.trim(),
-  parent_id: null,
-});
-
-
-
-  if (error) {
-    console.error("Insert comment error:", error);
-    return;
-  }
-
-  setNewComment("");
-
-  // 🔥 SOURCE DE VÉRITÉ : REFETCH DB
-  setLoadingComments(true);
-
-  const { data } = await supabase
-    .from("comments")
-    .select(`
-      id,
-      post_id,
-      user_id,
-      content,
-      created_at,
-      parent_id,
-      likes,
-      profiles:profiles (
-        pseudo,
-        avatar_url
-      )
-    `)
-    .eq("post_id", selectedPost.id)
-    .order("created_at", { ascending: true });
-
-  const formatted = (data || []).map((c: any) => ({
-    id: c.id,
-    post_id: c.post_id,
-    user_id: c.user_id,
-    content: c.content,
-    created_at: c.created_at,
-    parent_id: c.parent_id,
-    likes: c.likes ?? 0,
-    author_pseudo: c.profiles?.pseudo ?? null,
-    author_avatar: c.profiles?.avatar_url ?? null,
-  }));
-
-  setComments(formatted);
-  setLoadingComments(false);
-}}
-
-    style={{
-      marginTop: 8,
-      padding: "6px 14px",
-      borderRadius: 999,
-      background: "rgba(70,100,255,0.9)",
-      border: "none",
-      color: "white",
-      cursor: "pointer",
-      fontSize: 13,
-    }}
-  >
-    Post comment
-  </button>
-</div>
-
-{/* COMMENTS LIST */}
-<div style={{ marginTop: 20 }}>
-  {loadingComments ? (
-    <p style={{ opacity: 0.6 }}>Loading comments...</p>
-  ) : comments.length === 0 ? (
-    <p style={{ opacity: 0.6 }}>No comments yet.</p>
-  ) : (
-    comments.map((comment) => (
-  <div
-    key={comment.id}
-    style={{
-      display: "flex",
-      gap: 10,
-      marginBottom: 14,
-      marginLeft: comment.parent_id ? 32 : 0, // 🔥 indentation des réponses
-    }}
-  >
-    <img
-      src={
-        comment.author_avatar ||
-        "https://via.placeholder.com/32/333333/FFFFFF?text=?"
-      }
-      style={{
-        width: 32,
-        height: 32,
-        borderRadius: "50%",
-        objectFit: "cover",
-      }}
-    />
-
-    <div>
-      <div style={{ fontSize: 13 }}>
-        <b>{comment.author_pseudo || "Unknown"}</b>{" "}
-        <span style={{ opacity: 0.85 }}>{comment.content}</span>
+              {selectedPost.game && (
+                <span className="game-link" style={{ marginLeft: "10px" }}>
+                  {selectedPost.game}
+                </span>
+              )}
+            </div>
+            <span className="post-date">
+              {formatPostDate(selectedPost.created_at)}
+            </span>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-))
-)}
-</div>
 
+      {/* Content */}
+      <p className="post-content">{selectedPost.content}</p>
 
+      {/* Media */}
+      {selectedPost.media_type === "image" && selectedPost.media_url && (
+        <div className="post-media-wrapper">
+          <img
+            src={selectedPost.media_url}
+            className="post-media post-media-image"
+            alt="Post content"
+            loading="lazy"
+          />
+        </div>
+      )}
 
+      {selectedPost.media_type === "video" && selectedPost.media_url && (
+        <div className="post-media-wrapper">
+          <video
+            src={selectedPost.media_url}
+            controls
+            className="post-media post-media-video"
+            preload="metadata"
+          ></video>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="post-actions">
+        <button
+          className={`like-button ${(selectedPost as any).isLikedByMe ? "liked" : ""}`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleToggleLike();
+          }}
+          type="button"
+          disabled={isLiking}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill={(selectedPost as any).isLikedByMe ? "#facc15" : "none"}
+            stroke={(selectedPost as any).isLikedByMe ? "#facc15" : "#ffffff"}
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M14 9V5a3 3 0 0 0-6 0v4" />
+            <path d="M5 15V11a2 2 0 0 1 2-2h11l-1 8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2" />
+          </svg>
+          <span>{localLikes}</span>
+        </button>
+      </div>
+
+      {/* Comments Section */}
+      <div className="glass-card" style={{ marginTop: "16px" }}>
+        {loadingComments ? (
+          <p style={{ opacity: 0.6, color: "#ffffff" }}>Loading comments...</p>
+        ) : comments.length === 0 ? (
+          <p style={{ opacity: 0.6, color: "#ffffff" }}>No comments yet.</p>
+        ) : (
+          comments.map((comment) => {
+            const canDelete = comment.user_id === myId;
+            const isReply = !!comment.parent_id;
+
+            return (
+              <div
+                key={comment.id}
+                className="glass-comment"
+                style={{ marginLeft: isReply ? "32px" : "0", marginBottom: "12px" }}
+              >
+                <div className="comment-header">
+                  <Link
+                    href={`/profile/${comment.user_id}`}
+                    className="comment-author clickable-author"
+                  >
+                    {comment.author_pseudo || "Unknown"}
+                  </Link>
+                </div>
+
+                <div className="comment-content">
+                  <span className="comment-text">{comment.content}</span>
+                </div>
+
+                <div className="comment-actions">
+                  <button
+                    className="btn ghost-btn btn-small"
+                    onClick={() => {
+                      setReplyTo(comment.id);
+                      setNewComment(`@${comment.author_pseudo} `);
+                      setTimeout(() => {
+                        if (commentInputRef.current) {
+                          commentInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+                          commentInputRef.current.focus();
+                        }
+                      }, 100);
+                    }}
+                    type="button"
+                  >
+                    Reply
+                  </button>
+
+                  {canDelete && (
+                    <button
+                      className="btn danger-btn btn-small"
+                      onClick={async () => {
+                        await supabase
+                          .from("comments")
+                          .delete()
+                          .eq("id", comment.id);
+                        setComments((prev) => prev.filter((c) => c.id !== comment.id));
+                      }}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+
+        {/* Add Comment */}
+        <div className="comment-input-row" style={{ marginTop: "16px" }}>
+          <textarea
+            ref={commentInputRef}
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            placeholder="Write a comment..."
+            className="textarea"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleAddComment();
+              }
+            }}
+          />
+          <button
+            className="btn ghost-btn btn-small"
+            onClick={handleAddComment}
+            disabled={!newComment.trim()}
+            type="button"
+          >
+            Send
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 )}
@@ -1197,19 +1307,27 @@ const handleToggleLike = async () => {
     <div
       className="profile-post-media-wrapper"
       onMouseEnter={(e) => {
-        const video = e.currentTarget.querySelector("video");
-        if (video) video.play();
+        const video = e.currentTarget.querySelector("video") as HTMLVideoElement;
+        if (video) {
+          video.play().catch(() => {
+            // Ignore play() errors (autoplay restrictions, etc.)
+          });
+        }
       }}
       onMouseLeave={(e) => {
-        const video = e.currentTarget.querySelector("video");
+        const video = e.currentTarget.querySelector("video") as HTMLVideoElement;
         if (video) {
-          video.pause();
-          video.currentTime = 0;
+          try {
+            video.pause();
+            video.currentTime = 0;
+          } catch (err) {
+            // Ignore pause() errors
+          }
         }
       }}
     >
       {post.media_type === "image" && post.media_url && (
-        <img src={post.media_url} alt="" />
+        <img src={post.media_url} alt="" style={{ pointerEvents: "none" }} />
       )}
 
       {post.media_type === "video" && post.media_url && (
@@ -1219,6 +1337,15 @@ const handleToggleLike = async () => {
           loop
           playsInline
           preload="metadata"
+          style={{ pointerEvents: "none" }}
+          onPlay={(e) => {
+            // Prevent play errors from bubbling
+            e.stopPropagation();
+          }}
+          onPause={(e) => {
+            // Prevent pause errors from bubbling
+            e.stopPropagation();
+          }}
         />
       )}
     </div>
