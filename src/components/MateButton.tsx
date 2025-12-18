@@ -148,13 +148,8 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
   if (status === "mate") {
     return (
       <button
-        style={{
-          padding: "8px 16px",
-          background: "#198754",
-          color: "white",
-          borderRadius: 6,
-          border: "none",
-        }}
+        className="btn social-btn active"
+        type="button"
       >
         🔥 You are mates
       </button>
@@ -165,13 +160,8 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
     return (
       <button
         onClick={cancelRequest}
-        style={{
-          padding: "8px 16px",
-          background: "orange",
-          color: "black",
-          borderRadius: 6,
-          border: "none",
-        }}
+        className="btn social-btn"
+        type="button"
       >
         Request sent (cancel)
       </button>
@@ -182,13 +172,8 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
     return (
       <button
         onClick={acceptRequest}
-        style={{
-          padding: "8px 16px",
-          background: "yellow",
-          color: "black",
-          borderRadius: 6,
-          border: "none",
-        }}
+        className="btn social-btn active"
+        type="button"
       >
         Accept request 🤝
       </button>
@@ -198,13 +183,8 @@ export default function MateButton({ myId, otherId }: { myId: string; otherId: s
   return (
     <button
       onClick={sendRequest}
-      style={{
-        padding: "8px 16px",
-        background: "#0070f3",
-        color: "white",
-        borderRadius: 6,
-        border: "none",
-      }}
+      className="btn social-btn"
+      type="button"
     >
       Become mates 🤝
     </button>

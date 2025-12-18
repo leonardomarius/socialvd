@@ -145,6 +145,7 @@ type Comment = {
     const [localLikes, setLocalLikes] = useState<number>(0);
     const [replyTo, setReplyTo] = useState<string | null>(null);
     const commentInputRef = useRef<HTMLTextAreaElement | null>(null);
+    const [showComments, setShowComments] = useState(false);
 
 
     const [followersCount, setFollowersCount] = useState(0);
@@ -191,9 +192,13 @@ type Comment = {
   }, [selectedPost]);
 
   useEffect(() => {
-  if (!selectedPost) return;
+  if (!selectedPost) {
+    setShowComments(false);
+    return;
+  }
   setNewComment("");
 setComments([]);
+setShowComments(false);
 
 
 setLocalLikes(selectedPost.likes ?? 0);
@@ -658,30 +663,139 @@ const handleToggleFollow = async () => {
 
     return (
       <>
+      <style>{`
+        .ghost-btn {
+          background: rgba(30, 30, 30, 0.8);
+          border-color: rgba(100, 100, 100, 0.3);
+          color: #ffffff;
+          box-shadow: 
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
 
+        .ghost-btn:hover {
+          background: rgba(40, 40, 40, 0.9);
+          border-color: rgba(250, 204, 21, 0.5);
+          color: #ffffff;
+          box-shadow: 
+            0 2px 8px rgba(250, 204, 21, 0.2),
+            0 0 16px rgba(250, 204, 21, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
+          transform: translateY(-1px);
+        }
+
+        .ghost-btn:active {
+          transform: translateY(0);
+        }
+
+        .danger-btn {
+          background: rgba(30, 30, 30, 0.8);
+          border-color: rgba(239, 68, 68, 0.3);
+          color: #f87171;
+          box-shadow: 
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .danger-btn:hover {
+          background: rgba(40, 40, 40, 0.9);
+          border-color: rgba(239, 68, 68, 0.5);
+          color: #fca5a5;
+          box-shadow: 
+            0 2px 8px rgba(239, 68, 68, 0.2),
+            0 0 16px rgba(239, 68, 68, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
+          transform: translateY(-1px);
+        }
+
+        .danger-btn:active {
+          transform: translateY(0);
+        }
+
+        /* Boutons sociaux avec accent jaune */
+        .social-btn {
+          background: rgba(30, 30, 30, 0.8);
+          border-color: rgba(250, 204, 21, 0.25);
+          color: #ffffff;
+          box-shadow: 
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 0 8px rgba(250, 204, 21, 0.08);
+        }
+
+        .social-btn:hover {
+          background: rgba(40, 40, 40, 0.9);
+          border-color: rgba(250, 204, 21, 0.6);
+          color: #ffffff;
+          box-shadow: 
+            0 2px 8px rgba(250, 204, 21, 0.3),
+            0 0 20px rgba(250, 204, 21, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
+          transform: translateY(-1px);
+        }
+
+        .social-btn:active {
+          transform: translateY(0);
+          box-shadow: 
+            0 1px 3px rgba(250, 204, 21, 0.4),
+            inset 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        /* État actif (Following / Mate) */
+        .social-btn.active {
+          background: rgba(250, 204, 21, 0.12);
+          border-color: rgba(250, 204, 21, 0.6);
+          color: #facc15;
+          box-shadow: 
+            0 2px 8px rgba(250, 204, 21, 0.25),
+            0 0 16px rgba(250, 204, 21, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .social-btn.active:hover {
+          background: rgba(250, 204, 21, 0.18);
+          border-color: rgba(250, 204, 21, 0.75);
+          color: #fde047;
+          box-shadow: 
+            0 3px 12px rgba(250, 204, 21, 0.35),
+            0 0 24px rgba(250, 204, 21, 0.18),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        }
+      `}</style>
+ 
 {selectedPost && (
-  <div
-    onClick={() => setSelectedPost(null)}
-    className="modal-backdrop"
-    style={{ overflow: "hidden" }}
-  >
+  <>
+    <style dangerouslySetInnerHTML={{__html: `
+      .profile-modal-card::-webkit-scrollbar {
+        display: none;
+      }
+      .profile-modal-card {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+    `}} />
     <div
-      onClick={(e) => e.stopPropagation()}
-      className="card"
-      style={{
-        width: "680px",
-        maxWidth: "90vw",
-        maxHeight: "90vh",
-        height: "auto",
-        overflowY: "auto",
-        overflowX: "hidden",
-        margin: "auto",
-        position: "relative",
-        zIndex: 10000,
-        display: "flex",
-        flexDirection: "column",
-      }}
+      onClick={() => setSelectedPost(null)}
+      className="modal-backdrop"
+      style={{ overflow: "hidden" }}
     >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="card profile-modal-card"
+        style={{
+          width: "680px",
+          maxWidth: "90vw",
+          maxHeight: "85vh",
+          height: "auto",
+          overflowY: "auto",
+          overflowX: "hidden",
+          margin: "auto",
+          position: "relative",
+          zIndex: 10000,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
       {/* Close Button */}
       <button
         onClick={() => setSelectedPost(null)}
@@ -724,9 +838,16 @@ const handleToggleFollow = async () => {
             <img
               src={
                 profile.avatar_url ||
-                "https://via.placeholder.com/40/333333/FFFFFF?text=?"
+                "https://via.placeholder.com/44/333333/FFFFFF?text=?"
               }
               className="avatar"
+              style={{
+                width: "44px",
+                height: "44px",
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "1px solid rgba(100, 100, 100, 0.3)",
+              }}
             />
           </Link>
 
@@ -753,33 +874,79 @@ const handleToggleFollow = async () => {
       </div>
 
       {/* Content */}
-      <p className="post-content">{selectedPost.content}</p>
+      <p className="post-content" style={{ marginTop: "14px", marginBottom: "0" }}>{selectedPost.content}</p>
 
       {/* Media */}
       {selectedPost.media_type === "image" && selectedPost.media_url && (
-        <div className="post-media-wrapper">
+        <div className="post-media-wrapper" style={{ 
+          width: "100%",
+          marginTop: "16px",
+          marginBottom: "0",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "65vh",
+          maxHeight: "65vh",
+        }}>
           <img
             src={selectedPost.media_url}
             className="post-media post-media-image"
             alt="Post content"
             loading="lazy"
+            style={{
+              width: "100%",
+              height: "100%",
+              maxHeight: "65vh",
+              objectFit: "contain",
+              objectPosition: "center",
+            }}
           />
         </div>
       )}
 
       {selectedPost.media_type === "video" && selectedPost.media_url && (
-        <div className="post-media-wrapper">
+        <div className="post-media-wrapper" style={{ 
+          width: "100%",
+          marginTop: "16px",
+          marginBottom: "0",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "65vh",
+          maxHeight: "65vh",
+        }}>
           <video
             src={selectedPost.media_url}
             controls
+            autoPlay
+            muted
+            playsInline
             className="post-media post-media-video"
-            preload="metadata"
+            preload="auto"
+            style={{
+              width: "100%",
+              height: "100%",
+              maxHeight: "65vh",
+              objectFit: "contain",
+              objectPosition: "center",
+            }}
+            onLoadedData={(e) => {
+              // Tentative de play() explicite pour garantir l'autoplay
+              const video = e.currentTarget;
+              video.play().catch(() => {
+                // Ignore les erreurs d'autoplay (restrictions navigateur)
+              });
+            }}
+            onError={(e) => {
+              // Gérer les erreurs de chargement silencieusement
+              e.stopPropagation();
+            }}
           ></video>
         </div>
       )}
 
       {/* Actions */}
-      <div className="post-actions">
+      <div className="post-actions" style={{ marginTop: "16px", marginBottom: "0" }}>
         <button
           className={`like-button ${(selectedPost as any).isLikedByMe ? "liked" : ""}`}
           onClick={(e) => {
@@ -791,23 +958,43 @@ const handleToggleFollow = async () => {
           disabled={isLiking}
         >
           <svg
-            width="18"
-            height="18"
+            width="20"
+            height="20"
             viewBox="0 0 24 24"
             fill={(selectedPost as any).isLikedByMe ? "#facc15" : "none"}
             stroke={(selectedPost as any).isLikedByMe ? "#facc15" : "#ffffff"}
-            strokeWidth="1.8"
+            strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
           >
             <path d="M14 9V5a3 3 0 0 0-6 0v4" />
             <path d="M5 15V11a2 2 0 0 1 2-2h11l-1 8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2" />
           </svg>
-          <span>{localLikes}</span>
+          <span style={{ 
+            fontSize: "0.95rem",
+            fontWeight: "600",
+            letterSpacing: "0.02em"
+          }}>
+            {localLikes}
+          </span>
+        </button>
+
+        <button
+          className="btn ghost-btn"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowComments(!showComments);
+          }}
+          type="button"
+          style={{ marginLeft: "12px" }}
+        >
+          {showComments ? "Hide comments" : `Comments (${comments.length})`}
         </button>
       </div>
 
       {/* Comments Section */}
+      {showComments && (
       <div className="glass-card" style={{ marginTop: "16px" }}>
         {loadingComments ? (
           <p style={{ opacity: 0.6, color: "#ffffff" }}>Loading comments...</p>
@@ -901,8 +1088,10 @@ const handleToggleFollow = async () => {
           </button>
         </div>
       </div>
+      )}
     </div>
   </div>
+  </>
 )}
 
 
@@ -936,25 +1125,29 @@ const handleToggleFollow = async () => {
               <Image
                 src={profile.avatar_url}
                 alt="avatar"
-                width={120}
-                height={120}
+                width={80}
+                height={80}
                 style={{
+                  width: "80px",
+                  height: "80px",
                   borderRadius: "50%",
                   objectFit: "cover",
+                  aspectRatio: "1/1",
                   border: "2px solid rgba(110,110,155,0.7)",
-                  boxShadow: "0 0 22px rgba(90,110,255,0.65)",
+                  boxShadow: "0 0 18px rgba(90,110,255,0.55)",
                 }}
               />
             ) : (
               <div
                 style={{
-                  width: 120,
-                  height: 120,
+                  width: "80px",
+                  height: "80px",
                   borderRadius: "50%",
+                  aspectRatio: "1/1",
                   background:
                     "radial-gradient(circle at 30% 0%, rgba(90,110,255,0.35), transparent 55%), #111",
                   border: "2px solid rgba(110,110,155,0.5)",
-                  boxShadow: "0 0 22px rgba(90,110,255,0.4)",
+                  boxShadow: "0 0 18px rgba(90,110,255,0.4)",
                 }}
               ></div>
             )}
@@ -1036,32 +1229,16 @@ const handleToggleFollow = async () => {
                   <>
                     <button
                       onClick={handleToggleFollow}
-                      style={{
-                        padding: "8px 18px",
-                        background: isFollowing
-                          ? "rgba(176,0,32,0.9)"
-                          : "rgba(70,100,255,0.9)",
-                        color: "white",
-                        borderRadius: 999,
-                        cursor: "pointer",
-                        border: "1px solid rgba(255,255,255,0.18)",
-                        fontSize: 13,
-                      }}
+                      className={`btn social-btn ${isFollowing ? "active" : ""}`}
+                      type="button"
                     >
-                      {isFollowing ? "Unfollow" : "Follow"}
+                      {isFollowing ? "Following" : "Follow"}
                     </button>
 
                     <button
                       onClick={handleStartConversation}
-                      style={{
-                        padding: "8px 18px",
-                        background: "rgba(0,112,243,0.9)",
-                        color: "white",
-                        borderRadius: 999,
-                        cursor: "pointer",
-                        border: "1px solid rgba(255,255,255,0.18)",
-                        fontSize: 13,
-                      }}
+                      className="btn"
+                      type="button"
                     >
                       Message
                     </button>
@@ -1077,15 +1254,8 @@ const handleToggleFollow = async () => {
                 {myId === id && (
                   <button
                     onClick={() => setShowEdit(!showEdit)}
-                    style={{
-                      padding: "8px 18px",
-                      background: "rgba(0,112,243,0.9)",
-                      color: "white",
-                      borderRadius: 999,
-                      cursor: "pointer",
-                      border: "1px solid rgba(255,255,255,0.18)",
-                      fontSize: 13,
-                    }}
+                    className="btn"
+                    type="button"
                   >
                     {showEdit ? "Close" : "Edit my profile"}
                   </button>
@@ -1105,88 +1275,25 @@ const handleToggleFollow = async () => {
   >
     <Link
       href={`/profile/${id}/performances`}
-      style={{
-        padding: "8px 16px",
-        borderRadius: 12,
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.14)",
-        color: "#dbe9ff",
-        fontSize: "0.82rem",
-        textDecoration: "none",
-        textAlign: "center",
-        transition: "all 0.25s ease",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.boxShadow =
-          "0 0 12px rgba(80,150,255,0.55), inset 0 0 4px rgba(90,140,255,0.4)";
-        e.currentTarget.style.background = "rgba(255,255,255,0.08)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0px)";
-        e.currentTarget.style.boxShadow = "none";
-        e.currentTarget.style.background = "rgba(255,255,255,0.04)";
-      }}
+      className="btn ghost-btn"
     >
       Performances
     </Link>
 
     <Link
       href={`/profile/${id}/events`}
-      style={{
-        padding: "8px 16px",
-        borderRadius: 12,
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.14)",
-        color: "#dbe9ff",
-        fontSize: "0.82rem",
-        textDecoration: "none",
-        textAlign: "center",
-        transition: "all 0.25s ease",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.boxShadow =
-          "0 0 12px rgba(80,150,255,0.55), inset 0 0 4px rgba(90,140,255,0.4)";
-        e.currentTarget.style.background = "rgba(255,255,255,0.08)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0px)";
-        e.currentTarget.style.boxShadow = "none";
-        e.currentTarget.style.background = "rgba(255,255,255,0.04)";
-      }}
+      className="btn ghost-btn"
     >
       Events
     </Link>
 
     <button
-    onClick={() => setShowAccountsCard(!showAccountsCard)}
-    style={{
-      padding: "8px 16px",
-      borderRadius: 12,
-      background: "rgba(255,255,255,0.04)",
-      border: "1px solid rgba(255,255,255,0.14)",
-      color: "#dbe9ff",
-      fontSize: "0.82rem",
-      textDecoration: "none",
-      textAlign: "center",
-      transition: "all 0.25s ease",
-      cursor: "pointer",
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.transform = "translateY(-2px)";
-      e.currentTarget.style.boxShadow =
-        "0 0 12px rgba(80,150,255,0.55), inset 0 0 4px rgba(90,140,255,0.4)";
-      e.currentTarget.style.background = "rgba(255,255,255,0.08)";
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.transform = "translateY(0px)";
-      e.currentTarget.style.boxShadow = "none";
-      e.currentTarget.style.background = "rgba(255,255,255,0.04)";
-    }}
-  >
-    Game Accounts
-  </button>
+      onClick={() => setShowAccountsCard(!showAccountsCard)}
+      className="btn ghost-btn"
+      type="button"
+    >
+      Game Accounts
+    </button>
 
   </div>
 
