@@ -58,6 +58,7 @@ export default function NavbarSearch({ myId, pseudo }: NavbarSearchProps) {
       {isOpen && (
         <SearchOverlay
           query={query}
+          onQueryChange={setQuery}
           onClose={handleClose}
           myId={myId}
           pseudo={pseudo}

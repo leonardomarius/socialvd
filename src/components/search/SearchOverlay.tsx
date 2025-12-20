@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import SearchUsersList from "./SearchUsersList";
 import SearchPostsCarousel from "./SearchPostsCarousel";
 import PostModal from "./PostModal";
@@ -28,6 +29,7 @@ type Post = {
 
 type SearchOverlayProps = {
   query: string;
+  onQueryChange: (newQuery: string) => void;
   onClose: () => void;
   myId: string | null;
   pseudo: string;
@@ -35,6 +37,7 @@ type SearchOverlayProps = {
 
 export default function SearchOverlay({
   query,
+  onQueryChange,
   onClose,
   myId,
   pseudo,
@@ -45,6 +48,14 @@ export default function SearchOverlay({
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input when overlay opens
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
 
   // Handle click outside
   useEffect(() => {
@@ -152,6 +163,10 @@ export default function SearchOverlay({
     setSelectedPost(null);
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onQueryChange(e.target.value);
+  };
+
   return (
     <>
       <div className="search-overlay-backdrop" onClick={onClose}>
@@ -160,6 +175,23 @@ export default function SearchOverlay({
           className="search-overlay-card"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Search Input Header */}
+          <div className="search-overlay-header">
+            <div className="search-overlay-input-container">
+              <MagnifyingGlassIcon className="search-overlay-icon" width={14} height={14} />
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Search users, posts..."
+                value={query}
+                onChange={handleInputChange}
+                className="search-overlay-input"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+
+          {/* Results Section */}
           {loading && (
             <div className="search-loading">
               <p>Searching...</p>
@@ -256,6 +288,54 @@ export default function SearchOverlay({
 
         .search-overlay-card::-webkit-scrollbar-thumb:hover {
           background: rgba(250, 204, 21, 0.5);
+        }
+
+        .search-overlay-header {
+          margin-bottom: 24px;
+          padding-bottom: 20px;
+          border-bottom: 1px solid rgba(100, 100, 100, 0.2);
+        }
+
+        .search-overlay-input-container {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+
+        .search-overlay-icon {
+          position: absolute;
+          left: 14px;
+          width: 14px;
+          height: 14px;
+          color: rgba(180, 180, 180, 0.6);
+          pointer-events: none;
+          z-index: 1;
+          top: 50%;
+          transform: translateY(-50%);
+        }
+
+        .search-overlay-input {
+          width: 100%;
+          padding: 12px 16px 12px 44px;
+          background: rgba(30, 30, 30, 0.8);
+          border: 1px solid rgba(100, 100, 100, 0.3);
+          border-radius: 8px;
+          color: #ffffff;
+          font-size: 0.9rem;
+          font-family: "Space Grotesk", sans-serif;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          outline: none;
+        }
+
+        .search-overlay-input::placeholder {
+          color: rgba(180, 180, 180, 0.6);
+        }
+
+        .search-overlay-input:focus {
+          border-color: rgba(250, 204, 21, 0.5);
+          background: rgba(35, 35, 35, 0.9);
+          box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.15),
+            0 0 16px rgba(250, 204, 21, 0.1);
         }
 
         .search-loading {
