@@ -5,6 +5,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, usePathname } from "next/navigation";
 import { BellIcon } from "@heroicons/react/24/outline";
+import NavbarSearch from "@/components/search/NavbarSearch";
 
 
 
@@ -64,6 +65,7 @@ export default function Navbar() {
   // --- AUTH / NOTIFS ---
   const [logged, setLogged] = useState<boolean | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
+  const [pseudo, setPseudo] = useState<string>("");
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [messagesUnreadCount, setMessagesUnreadCount] = useState(0);
@@ -80,11 +82,23 @@ useEffect(() => {
     if (!user) {
       setLogged(false);
       setMyId(null);
+      setPseudo("");
       return;
     }
 
     setLogged(true);
     setMyId(user.id);
+
+    // Load pseudo
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("pseudo")
+      .eq("id", user.id)
+      .single();
+
+    if (profile) {
+      setPseudo(profile.pseudo || "");
+    }
 
     await Promise.all([
       loadNotifications(user.id),
@@ -288,6 +302,9 @@ useEffect(() => {
           <div className="nav-right">
             {logged && (
               <>
+                {/* Search */}
+                <NavbarSearch myId={myId} pseudo={pseudo} />
+
                 {/* Notification Bell */}
                 <div className="notif-wrapper" ref={notifRef}>
                   <button
