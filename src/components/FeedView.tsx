@@ -81,7 +81,13 @@ const pathname = usePathname();
 >([]);
 
 const [selectedGameId, setSelectedGameId] = useState<string>("");
-const [mediaFile, setMediaFile] = useState<File | null>(null);
+const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
+const [mediaValidationError, setMediaValidationError] = useState<string | null>(null);
+const [mediaDimensions, setMediaDimensions] = useState<{ width: number; height: number }[]>([]);
+const [currentPreviewIndex, setCurrentPreviewIndex] = useState(0);
+const [showPreviewInfo, setShowPreviewInfo] = useState<Record<number, boolean>>({});
+const [postCarouselIndices, setPostCarouselIndices] = useState<Record<string, number>>({});
 const [filterGameId, setFilterGameId] = useState<string>(
   forcedGameId ?? "all"
 );
@@ -104,9 +110,25 @@ useEffect(() => {
   };
 }, []);
 
+  // Cleanup des object URLs
+  useEffect(() => {
+    return () => {
+      mediaPreviews.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [mediaPreviews]);
 
   // Notifications
   const [notification, setNotification] = useState<Notification | null>(null);
+
+  // Effacer le message d'erreur de jeu quand un jeu est sélectionné
+  useEffect(() => {
+    if (selectedGameId && selectedGameId.trim()) {
+      // Si une notification d'erreur de jeu est affichée, l'effacer
+      if (notification?.type === "error" && notification?.message === "Please select a game before publishing your post.") {
+        setNotification(null);
+      }
+    }
+  }, [selectedGameId, notification]);
 
 const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
 
@@ -372,38 +394,211 @@ if (commentsError) {
 
 
   // -----------------------------------------------------
-  // Upload media
+  // Validate media dimensions and aspect ratio
+  // -----------------------------------------------------
+  const validateMedia = (file: File): Promise<{
+    isValid: boolean;
+    errorMessage: string | null;
+    width: number;
+    height: number;
+  }> => {
+    return new Promise((resolve) => {
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+
+      if (!isImage && !isVideo) {
+        resolve({
+          isValid: false,
+          errorMessage: "Format non supporté. Utilisez une image ou une vidéo.",
+          width: 0,
+          height: 0,
+        });
+        return;
+      }
+
+      if (isImage) {
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+
+        img.onload = () => {
+          URL.revokeObjectURL(objectUrl);
+          const width = img.width;
+          const height = img.height;
+
+          // Vérifier dimensions minimales (720px minimum)
+          if (width < 720 || height < 720) {
+            resolve({
+              isValid: false,
+              errorMessage: "Dimensions insuffisantes",
+              width,
+              height,
+            });
+            return;
+          }
+
+          // Calculer le ratio
+          const ratio = width / height;
+
+          // Rejeter les formats ultra-verticaux (ratio < 0.75)
+          // Rejeter les formats ultra-larges (ratio > 2.2)
+          if (ratio < 0.75 || ratio > 2.2) {
+            resolve({
+              isValid: false,
+              errorMessage: "Ratio non autorisé",
+              width,
+              height,
+            });
+            return;
+          }
+
+          resolve({
+            isValid: true,
+            errorMessage: null,
+            width,
+            height,
+          });
+        };
+
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          resolve({
+            isValid: false,
+            errorMessage: "Impossible de charger l'image. Vérifiez le format du fichier.",
+            width: 0,
+            height: 0,
+          });
+        };
+
+        img.src = objectUrl;
+      } else if (isVideo) {
+        const video = document.createElement("video");
+        const objectUrl = URL.createObjectURL(file);
+
+        video.onloadedmetadata = () => {
+          URL.revokeObjectURL(objectUrl);
+          const width = video.videoWidth;
+          const height = video.videoHeight;
+
+          // Vérifier dimensions minimales (720px minimum)
+          if (width < 720 || height < 720) {
+            resolve({
+              isValid: false,
+              errorMessage: "Dimensions insuffisantes",
+              width,
+              height,
+            });
+            return;
+          }
+
+          // Calculer le ratio
+          const ratio = width / height;
+
+          // Rejeter les formats ultra-verticaux (ratio < 0.75)
+          // Rejeter les formats ultra-larges (ratio > 2.2)
+          if (ratio < 0.75 || ratio > 2.2) {
+            resolve({
+              isValid: false,
+              errorMessage: "Ratio non autorisé",
+              width,
+              height,
+            });
+            return;
+          }
+
+          resolve({
+            isValid: true,
+            errorMessage: null,
+            width,
+            height,
+          });
+        };
+
+        video.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          resolve({
+            isValid: false,
+            errorMessage: "Impossible de charger la vidéo. Vérifiez le format du fichier.",
+            width: 0,
+            height: 0,
+          });
+        };
+
+        video.src = objectUrl;
+        video.load();
+      }
+    });
+  };
+
+  // -----------------------------------------------------
+  // Upload media (supports multiple photos) - VERSION BEST-EFFORT
   // -----------------------------------------------------
   const uploadMedia = async (): Promise<{
-    url: string | null;
+    urls: string[];
     type: string | null;
+    skippedCount: number;
   }> => {
-    if (!mediaFile) return { url: null, type: null };
-
-    const ext = mediaFile.name.split(".").pop();
-    const path = `${Date.now()}.${ext}`;
-
-    const { error } = await supabase.storage
-      .from("posts-media")
-      .upload(path, mediaFile);
-
-    if (error) {
-      console.error(error);
-      showNotification("Erreur lors de l'upload du fichier", "error");
-      return { url: null, type: null };
+    // Si aucun fichier, retourner vide (post sans média)
+    if (mediaFiles.length === 0) {
+      return { urls: [], type: null, skippedCount: 0 };
     }
 
-    const url = supabase.storage
-      .from("posts-media")
-      .getPublicUrl(path).data.publicUrl;
+    const uploadedUrls: string[] = [];
+    const baseTimestamp = Date.now();
+    let skippedCount = 0;
 
-    const type = mediaFile.type.startsWith("image/")
+    // Uploader chaque fichier individuellement - continuer même si un échoue
+    for (let i = 0; i < mediaFiles.length; i++) {
+      const file = mediaFiles[i];
+      const ext = file.name.split(".").pop() || "bin";
+      // Utiliser un timestamp unique par fichier pour éviter les conflits
+      const path = `${baseTimestamp}-${i}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
+
+      try {
+        const { error } = await supabase.storage
+          .from("posts-media")
+          .upload(path, file);
+
+        if (error) {
+          console.error(`Upload error for file ${i + 1}:`, error);
+          skippedCount++;
+          // Continuer avec les autres fichiers au lieu de tout abandonner
+          continue;
+        }
+
+        const { data } = supabase.storage
+          .from("posts-media")
+          .getPublicUrl(path);
+
+        if (!data?.publicUrl) {
+          console.error(`Failed to get public URL for file ${i + 1}`);
+          skippedCount++;
+          // Nettoyer le fichier uploadé mais sans URL
+          try {
+            await supabase.storage.from("posts-media").remove([path]);
+          } catch (cleanupErr) {
+            console.error("Cleanup error:", cleanupErr);
+          }
+          continue;
+        }
+
+        uploadedUrls.push(data.publicUrl);
+      } catch (err) {
+        console.error(`Exception during upload for file ${i + 1}:`, err);
+        skippedCount++;
+        // Continuer avec les autres fichiers
+        continue;
+      }
+    }
+
+    // Déterminer le type (tous les fichiers doivent être du même type)
+    const type = mediaFiles[0].type.startsWith("image/")
       ? "image"
-      : mediaFile.type.startsWith("video/")
+      : mediaFiles[0].type.startsWith("video/")
       ? "video"
       : null;
 
-    return { url, type };
+    console.log(`Successfully uploaded ${uploadedUrls.length} file(s), skipped ${skippedCount}, type: ${type}`);
+    return { urls: uploadedUrls, type, skippedCount };
   };
 
   // -----------------------------------------------------
@@ -427,35 +622,175 @@ if (commentsError) {
   };
 
   // -----------------------------------------------------
-  // Create a post
+  // Create a post - VERSION CORRIGÉE ET COHÉRENTE
   // -----------------------------------------------------
   const handleCreatePost = async () => {
-  if (!myId || !newPost.trim() || !selectedGameId) return;
-
-    const { url, type } = await uploadMedia();
-
-    const { error } = await supabase.from("posts").insert({
-  user_id: myId,
-  content: newPost,
-  game_id: selectedGameId,
-  author_pseudo: pseudo,
-  media_url: url,
-  media_type: type,
-});
-
-
-    if (error) {
-      console.error(error);
-      showNotification("Error creating post", "error");
+    // ============================================
+    // VALIDATION INITIALE
+    // ============================================
+    if (!myId) {
+      showNotification("Vous devez être connecté pour publier", "error");
       return;
     }
 
-    setNewPost("");
-    setSelectedGameId("");
-    setMediaFile(null);
+    const hasText = newPost.trim().length > 0;
+    const hasMedia = mediaFiles.length > 0;
 
-    showNotification("Post published!");
-    loadAllData();
+    if (!hasText && !hasMedia) {
+      showNotification("Le post doit contenir du texte ou au moins un média (photo/vidéo)", "error");
+      return;
+    }
+
+    // Validation: un jeu doit être sélectionné
+    if (!selectedGameId || !selectedGameId.trim()) {
+      showNotification("Please select a game before publishing your post.", "error");
+      return;
+    }
+
+    // Note: mediaValidationError n'est défini que si TOUS les fichiers sont invalides
+    // Si certains sont valides, ils sont gardés et mediaValidationError n'est pas défini
+    if (hasMedia && mediaValidationError && mediaFiles.length > 0) {
+      // Vérifier si on a au moins un fichier valide (dimensions définies = fichiers validés)
+      if (mediaDimensions.length === 0) {
+        // Aucun fichier valide, bloquer
+        showNotification("Veuillez corriger les erreurs de validation avant de publier", "error");
+        return;
+      }
+      // Sinon, on a des fichiers valides, continuer (les invalides ont déjà été filtrés)
+    }
+
+    // ============================================
+    // UPLOAD DES MÉDIAS (BEST-EFFORT)
+    // ============================================
+    let uploadedUrls: string[] = [];
+    let mediaType: string | null = null;
+    let skippedCount = 0;
+
+    if (hasMedia) {
+      const uploadResult = await uploadMedia();
+      uploadedUrls = uploadResult.urls;
+      mediaType = uploadResult.type;
+      skippedCount = uploadResult.skippedCount;
+
+      // Vérification de cohérence pour vidéo
+      if (mediaType === "video" && uploadedUrls.length > 1) {
+        console.error("Inconsistency: video type but multiple URLs");
+        showNotification("Erreur: une vidéo ne peut pas avoir plusieurs URLs", "error");
+        return;
+      }
+
+      // Bloquer seulement si TOUTES les photos ont échoué ET pas de texte
+      if (uploadedUrls.length === 0 && !hasText) {
+        if (skippedCount > 0) {
+          showNotification("All files failed to upload. Please try again or add text content.", "error");
+        } else {
+          showNotification("Erreur lors de l'upload des médias. Le post n'a pas été créé.", "error");
+        }
+        return;
+      }
+
+      // Afficher un avertissement si certaines photos ont été ignorées
+      if (skippedCount > 0 && uploadedUrls.length > 0) {
+        const skippedMessage = skippedCount === 1
+          ? "1 file was skipped because it was invalid or failed to upload."
+          : `${skippedCount} files were skipped because they were invalid or failed to upload.`;
+        // Afficher comme notification d'avertissement (non-bloquante)
+        showNotification(skippedMessage, "error");
+      }
+    }
+
+    // ============================================
+    // CONSTRUCTION DU PAYLOAD SUPABASE
+    // ============================================
+    const authorPseudo = pseudo || "Utilisateur";
+    const postContent = newPost.trim() || ""; // Toujours une string, jamais null
+
+    // Construction du payload - TOUS les champs explicitement définis (null si non utilisé)
+    const postData: {
+      user_id: string;
+      content: string;
+      author_pseudo: string;
+      game_id: string | null;
+      media_url: string | null;
+      media_type: string | null;
+    } = {
+      user_id: myId,
+      content: postContent,
+      author_pseudo: authorPseudo,
+      game_id: (selectedGameId && selectedGameId.trim()) ? selectedGameId : null,
+      media_url: null,
+      media_type: null,
+    };
+
+    // Ajouter les médias de manière cohérente (même si certains ont été ignorés)
+    if (hasMedia && uploadedUrls.length > 0 && mediaType) {
+      // Format: string simple si 1 média, JSON array si plusieurs photos
+      if (uploadedUrls.length === 1) {
+        postData.media_url = uploadedUrls[0];
+      } else {
+        // Plusieurs photos: JSON array stringifié
+        postData.media_url = JSON.stringify(uploadedUrls);
+      }
+      postData.media_type = mediaType;
+    } else if (hasMedia && uploadedUrls.length === 0) {
+      // Si on avait des médias mais aucun n'a été uploadé avec succès
+      // Et qu'on a du texte, on peut quand même publier sans média
+      // (déjà géré par la validation ci-dessus qui bloque si pas de texte)
+    }
+
+    // Validation finale - s'assurer qu'aucun champ n'est undefined
+    const cleanPostData: Record<string, any> = {};
+    for (const [key, value] of Object.entries(postData)) {
+      // Convertir undefined en null explicitement
+      cleanPostData[key] = value === undefined ? null : value;
+    }
+
+    console.log("Post data to insert:", JSON.stringify(cleanPostData, null, 2));
+
+    // ============================================
+    // INSERTION DANS SUPABASE
+    // ============================================
+    try {
+      const { data, error } = await supabase.from("posts").insert(cleanPostData);
+
+      if (error) {
+        console.error("Supabase insert error:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          fullError: error,
+        });
+        
+        const errorMessage = error.message || error.details || error.hint || error.code || "Erreur inconnue lors de la création du post";
+        showNotification(`Erreur: ${errorMessage}`, "error");
+        return;
+      }
+
+      console.log("Post created successfully:", data);
+
+      // ============================================
+      // RESET DU FORMULAIRE
+      // ============================================
+      setNewPost("");
+      setSelectedGameId("");
+      mediaPreviews.forEach(url => URL.revokeObjectURL(url));
+      setMediaFiles([]);
+      setMediaPreviews([]);
+      setMediaValidationError(null);
+      setMediaDimensions([]);
+      setCurrentPreviewIndex(0);
+      setShowPreviewInfo({});
+      
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) fileInput.value = "";
+
+      showNotification("Post published!");
+      await loadAllData();
+    } catch (err) {
+      console.error("Exception in handleCreatePost:", err);
+      showNotification("Erreur inattendue lors de la création du post", "error");
+    }
   };
 
   // -----------------------------------------------------
@@ -614,7 +949,7 @@ const handleToggleCommentLike = async (commentId: string) => {
   setEditingPostId(null);
   setEditContent("");
   setSelectedGameId("");
-  setMediaFile(null);
+  // Note: mediaFiles n'est pas réinitialisé ici car on ne modifie pas les médias lors de l'édition
 };
 
 
@@ -921,13 +1256,346 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           />
 
           <label className="file-label">
-            <span>Add an image / video</span>
+            <span>
+              {mediaFiles.length === 0 
+                ? "Add photos / video (max 7 photos)"
+                : `Add more photos (${mediaFiles.length}/7 selected)`
+              }
+            </span>
             <input
               type="file"
               accept="image/*,video/*"
-              onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+              multiple
+              onChange={async (e) => {
+                const newFiles = Array.from(e.target.files || []);
+                if (newFiles.length === 0) {
+                  return;
+                }
+
+                // Calculer le total avec les fichiers existants
+                const totalFiles = mediaFiles.length + newFiles.length;
+
+                // Vérifier la limite de 7 photos au total
+                if (totalFiles > 7) {
+                  setMediaValidationError(`Maximum 7 photos allowed. You already have ${mediaFiles.length} photo(s).`);
+                  // Reset file input
+                  e.target.value = "";
+                  return;
+                }
+
+                // Vérifier le type des fichiers existants
+                const existingHasImage = mediaFiles.some(f => f.type.startsWith("image/"));
+                const existingHasVideo = mediaFiles.some(f => f.type.startsWith("video/"));
+
+                // Vérifier le type des nouveaux fichiers
+                const newHasImage = newFiles.some(f => f.type.startsWith("image/"));
+                const newHasVideo = newFiles.some(f => f.type.startsWith("video/"));
+
+                // Si on a déjà une vidéo, on ne peut pas ajouter d'autres fichiers
+                if (existingHasVideo) {
+                  setMediaValidationError("Cannot add more files when a video is already selected.");
+                  e.target.value = "";
+                  return;
+                }
+
+                // Si on essaie d'ajouter une vidéo alors qu'on a déjà des photos
+                if (existingHasImage && newHasVideo) {
+                  setMediaValidationError("Cannot mix photos and videos. Use only photos or only one video.");
+                  e.target.value = "";
+                  return;
+                }
+
+                // Si on essaie d'ajouter des photos alors qu'on a déjà une vidéo (déjà vérifié ci-dessus, mais sécurité)
+                if (existingHasVideo && newHasImage) {
+                  setMediaValidationError("Cannot add photos when a video is already selected.");
+                  e.target.value = "";
+                  return;
+                }
+
+                // Vérifier qu'on ne mélange pas photos et vidéos dans les nouveaux fichiers
+                if (newHasImage && newHasVideo) {
+                  setMediaValidationError("Cannot mix photos and videos. Use only photos or only one video.");
+                  e.target.value = "";
+                  return;
+                }
+
+                // Si c'est une vidéo, elle doit être seule (pas de fichiers existants)
+                if (newHasVideo && (mediaFiles.length > 0 || newFiles.length > 1)) {
+                  setMediaValidationError("Only one video allowed per post, and it must be the only media.");
+                  e.target.value = "";
+                  return;
+                }
+
+                // Valider chaque fichier individuellement - garder seulement les valides
+                const validFiles: File[] = [];
+                const validPreviews: string[] = [];
+                const validDimensions: { width: number; height: number }[] = [];
+                const invalidCount: number[] = [];
+
+                for (let i = 0; i < newFiles.length; i++) {
+                  const file = newFiles[i];
+                  const validation = await validateMedia(file);
+                  
+                  if (validation.isValid) {
+                    validFiles.push(file);
+                    validPreviews.push(URL.createObjectURL(file));
+                    validDimensions.push({ width: validation.width, height: validation.height });
+                  } else {
+                    invalidCount.push(i + 1);
+                  }
+                }
+
+                // Si aucun fichier n'est valide, bloquer seulement si c'est la seule source de contenu
+                if (validFiles.length === 0) {
+                  if (newFiles.length > 0) {
+                    setMediaValidationError("All selected files are invalid. Please check the requirements.");
+                    e.target.value = "";
+                    return;
+                  }
+                }
+
+                // Si certains fichiers sont invalides, afficher un avertissement mais continuer
+                if (invalidCount.length > 0 && validFiles.length > 0) {
+                  const skippedMessage = invalidCount.length === 1 
+                    ? "1 file was skipped because it was invalid or failed validation."
+                    : `${invalidCount.length} files were skipped because they were invalid or failed validation.`;
+                  // Afficher comme notification d'avertissement (pas d'erreur bloquante)
+                  showNotification(skippedMessage, "error");
+                }
+
+                // APPEND seulement les fichiers valides aux existants
+                if (validFiles.length > 0) {
+                  const updatedFiles = [...mediaFiles, ...validFiles];
+                  const updatedPreviews = [...mediaPreviews, ...validPreviews];
+                  const updatedDimensions = [...mediaDimensions, ...validDimensions];
+
+                  setMediaFiles(updatedFiles);
+                  setMediaPreviews(updatedPreviews);
+                  setMediaDimensions(updatedDimensions);
+                  setMediaValidationError(null);
+                  
+                  // Garder l'index actuel ou aller à la première nouvelle photo
+                  if (mediaFiles.length === 0) {
+                    setCurrentPreviewIndex(0);
+                  }
+                }
+                
+                // Reset file input
+                e.target.value = "";
+              }}
             />
           </label>
+
+          {/* Aperçu et validation - Carousel pour plusieurs photos */}
+          {mediaPreviews.length > 0 && mediaDimensions.length > 0 && (() => {
+            // Handler pour le swipe dans le preview
+            const handlePreviewTouchStart = (e: React.TouchEvent) => {
+              const touch = e.touches[0];
+              (e.currentTarget as any).touchStartX = touch.clientX;
+            };
+
+            const handlePreviewTouchMove = (e: React.TouchEvent) => {
+              const touch = e.touches[0];
+              (e.currentTarget as any).touchCurrentX = touch.clientX;
+            };
+
+            const handlePreviewTouchEnd = (e: React.TouchEvent) => {
+              const startX = (e.currentTarget as any).touchStartX;
+              const currentX = (e.currentTarget as any).touchCurrentX;
+              const diff = startX - currentX;
+              const threshold = 50;
+
+              if (Math.abs(diff) > threshold) {
+                if (diff > 0 && currentPreviewIndex < mediaPreviews.length - 1) {
+                  // Swipe gauche -> photo suivante
+                  setCurrentPreviewIndex(prev => Math.min(mediaPreviews.length - 1, prev + 1));
+                } else if (diff < 0 && currentPreviewIndex > 0) {
+                  // Swipe droite -> photo précédente
+                  setCurrentPreviewIndex(prev => Math.max(0, prev - 1));
+                }
+              }
+            };
+
+            return (
+              <div className="media-preview-container">
+                <div 
+                  className="media-preview-carousel"
+                  onTouchStart={handlePreviewTouchStart}
+                  onTouchMove={handlePreviewTouchMove}
+                  onTouchEnd={handlePreviewTouchEnd}
+                >
+                  {/* Navigation gauche */}
+                  {mediaPreviews.length > 1 && currentPreviewIndex > 0 && (
+                    <button
+                      type="button"
+                      className="carousel-nav carousel-nav-left"
+                      onClick={() => setCurrentPreviewIndex(prev => Math.max(0, prev - 1))}
+                      aria-label="Previous photo"
+                    >
+                      ‹
+                    </button>
+                  )}
+
+                  {/* Conteneur des médias */}
+                  <div className="media-preview-slider" style={{ transform: `translateX(-${currentPreviewIndex * 100}%)` }}>
+                  {mediaPreviews.map((preview, index) => (
+                    <div key={index} className="media-preview-slide">
+                      <div className="media-preview-wrapper">
+                        {mediaFiles[index].type.startsWith("image/") ? (
+                          <img
+                            src={preview}
+                            alt={`Preview ${index + 1}`}
+                            className="media-preview-image"
+                          />
+                        ) : (
+                          <video
+                            src={preview}
+                            className="media-preview-image"
+                            muted
+                            playsInline
+                          />
+                        )}
+                        <div className="media-preview-overlay">
+                          {/* Infos techniques - affichées seulement si showPreviewInfo[index] est true */}
+                          {showPreviewInfo[index] && (
+                            <div className="media-preview-info">
+                              <span className="media-dimensions">
+                                {mediaDimensions[index].width} × {mediaDimensions[index].height}px
+                              </span>
+                              <span className="media-ratio">
+                                Ratio: {(mediaDimensions[index].width / mediaDimensions[index].height).toFixed(2)}
+                              </span>
+                            </div>
+                          )}
+                          
+                          {/* Bouton "ⓘ" pour afficher/masquer les infos techniques */}
+                          <button
+                            type="button"
+                            className="media-preview-info-toggle"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowPreviewInfo(prev => ({
+                                ...prev,
+                                [index]: !prev[index]
+                              }));
+                            }}
+                            aria-label={showPreviewInfo[index] ? "Hide technical info" : "Show technical info"}
+                          >
+                            ⓘ
+                          </button>
+
+                          {/* Bouton pour supprimer cette photo individuellement */}
+                          {mediaPreviews.length > 1 && (
+                            <button
+                              type="button"
+                              className="media-preview-remove-single"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Cleanup de l'URL de cette photo
+                                URL.revokeObjectURL(mediaPreviews[index]);
+                                // Supprimer cette photo des arrays
+                                const updatedFiles = mediaFiles.filter((_, i) => i !== index);
+                                const updatedPreviews = mediaPreviews.filter((_, i) => i !== index);
+                                const updatedDimensions = mediaDimensions.filter((_, i) => i !== index);
+                                
+                                setMediaFiles(updatedFiles);
+                                setMediaPreviews(updatedPreviews);
+                                setMediaDimensions(updatedDimensions);
+                                
+                                // Nettoyer le state d'affichage des infos pour cet index
+                                const updatedShowInfo: Record<number, boolean> = {};
+                                Object.entries(showPreviewInfo).forEach(([key, value]) => {
+                                  const keyNum = parseInt(key);
+                                  if (keyNum < index) {
+                                    updatedShowInfo[keyNum] = value;
+                                  } else if (keyNum > index) {
+                                    updatedShowInfo[keyNum - 1] = value;
+                                  }
+                                });
+                                setShowPreviewInfo(updatedShowInfo);
+                                
+                                // Ajuster l'index si nécessaire
+                                if (currentPreviewIndex >= updatedPreviews.length) {
+                                  setCurrentPreviewIndex(Math.max(0, updatedPreviews.length - 1));
+                                }
+                              }}
+                              aria-label={`Remove photo ${index + 1}`}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Navigation droite */}
+                {mediaPreviews.length > 1 && currentPreviewIndex < mediaPreviews.length - 1 && (
+                  <button
+                    type="button"
+                    className="carousel-nav carousel-nav-right"
+                    onClick={() => setCurrentPreviewIndex(prev => Math.min(mediaPreviews.length - 1, prev + 1))}
+                    aria-label="Next photo"
+                  >
+                    ›
+                  </button>
+                )}
+
+                {/* Dots de navigation */}
+                {mediaPreviews.length > 1 && (
+                  <div className="carousel-dots">
+                    {mediaPreviews.map((_, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        className={`carousel-dot ${index === currentPreviewIndex ? "active" : ""}`}
+                        onClick={() => setCurrentPreviewIndex(index)}
+                        aria-label={`Go to photo ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="btn danger-btn btn-small"
+                onClick={() => {
+                  // Cleanup all previews
+                  mediaPreviews.forEach(url => URL.revokeObjectURL(url));
+                  setMediaFiles([]);
+                  setMediaPreviews([]);
+                  setMediaValidationError(null);
+                  setMediaDimensions([]);
+                  setCurrentPreviewIndex(0);
+                  setShowPreviewInfo({});
+                  // Reset file input
+                  const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+                  if (fileInput) fileInput.value = "";
+                }}
+                style={{ marginTop: "8px" }}
+              >
+                Remove all
+              </button>
+            </div>
+            );
+          })()}
+
+          {/* Message d'erreur de validation - affiché uniquement en cas d'erreur */}
+          {mediaValidationError && (
+            <div className="media-validation-error" role="alert">
+              <strong>⚠️ Attention:</strong>
+              <p>This media is poorly framed and cannot be uploaded.</p>
+              <div className="media-requirements">
+                <ul>
+                  <li>Minimum size: 720 × 720 px</li>
+                  <li>Avoid ultra-vertical or ultra-wide formats</li>
+                  <li>Screenshots and standard images are supported</li>
+                </ul>
+              </div>
+            </div>
+          )}
 
           <button className="btn primary-btn" onClick={handleCreatePost}>
             Publish
@@ -1050,17 +1718,117 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
                 </div>
               )}
 
-              {/* Media */}
-              {post.media_type === "image" && post.media_url && (
-                <div className="post-media-wrapper">
-                  <img 
-                    src={post.media_url} 
-                    className="post-media post-media-image"
-                    alt="Post content"
-                    loading="lazy"
-                  />
-                </div>
-              )}
+              {/* Media - Support multi-photos avec carousel */}
+              {post.media_type === "image" && post.media_url && (() => {
+                // Parser les URLs : peut être une string simple ou un JSON array
+                let imageUrls: string[] = [];
+                try {
+                  const parsed = JSON.parse(post.media_url);
+                  if (Array.isArray(parsed)) {
+                    imageUrls = parsed;
+                  } else {
+                    imageUrls = [post.media_url];
+                  }
+                } catch {
+                  // Si ce n'est pas du JSON, c'est une string simple (backward compatibility)
+                  imageUrls = [post.media_url];
+                }
+
+                const currentIndex = postCarouselIndices[post.id] || 0;
+                const hasMultiple = imageUrls.length > 1;
+
+                // Handler pour le swipe
+                const handleTouchStart = (e: React.TouchEvent) => {
+                  const touch = e.touches[0];
+                  (e.currentTarget as any).touchStartX = touch.clientX;
+                };
+
+                const handleTouchMove = (e: React.TouchEvent) => {
+                  const touch = e.touches[0];
+                  (e.currentTarget as any).touchCurrentX = touch.clientX;
+                };
+
+                const handleTouchEnd = (e: React.TouchEvent) => {
+                  const startX = (e.currentTarget as any).touchStartX;
+                  const currentX = (e.currentTarget as any).touchCurrentX;
+                  const diff = startX - currentX;
+                  const threshold = 50;
+
+                  if (Math.abs(diff) > threshold) {
+                    if (diff > 0 && currentIndex < imageUrls.length - 1) {
+                      // Swipe gauche -> photo suivante
+                      setPostCarouselIndices(prev => ({ ...prev, [post.id]: currentIndex + 1 }));
+                    } else if (diff < 0 && currentIndex > 0) {
+                      // Swipe droite -> photo précédente
+                      setPostCarouselIndices(prev => ({ ...prev, [post.id]: currentIndex - 1 }));
+                    }
+                  }
+                };
+
+                return (
+                  <div className="post-media-wrapper">
+                    <div 
+                      className="post-media-carousel"
+                      onTouchStart={handleTouchStart}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                    >
+                      {/* Navigation gauche */}
+                      {hasMultiple && currentIndex > 0 && (
+                        <button
+                          type="button"
+                          className="carousel-nav carousel-nav-left"
+                          onClick={() => setPostCarouselIndices(prev => ({ ...prev, [post.id]: currentIndex - 1 }))}
+                          aria-label="Previous photo"
+                        >
+                          ‹
+                        </button>
+                      )}
+
+                      {/* Slider */}
+                      <div className="post-media-slider" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
+                        {imageUrls.map((url, index) => (
+                          <div key={index} className="post-media-slide">
+                            <img 
+                              src={url} 
+                              className="post-media post-media-image"
+                              alt={`Post content ${index + 1}`}
+                              loading="lazy"
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Navigation droite */}
+                      {hasMultiple && currentIndex < imageUrls.length - 1 && (
+                        <button
+                          type="button"
+                          className="carousel-nav carousel-nav-right"
+                          onClick={() => setPostCarouselIndices(prev => ({ ...prev, [post.id]: currentIndex + 1 }))}
+                          aria-label="Next photo"
+                        >
+                          ›
+                        </button>
+                      )}
+
+                      {/* Dots de navigation */}
+                      {hasMultiple && (
+                        <div className="carousel-dots">
+                          {imageUrls.map((_, index) => (
+                            <button
+                              key={index}
+                              type="button"
+                              className={`carousel-dot ${index === currentIndex ? "active" : ""}`}
+                              onClick={() => setPostCarouselIndices(prev => ({ ...prev, [post.id]: index }))}
+                              aria-label={`Go to photo ${index + 1}`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {post.media_type === "video" && post.media_url && (
                 <div className="post-media-wrapper">
@@ -1218,12 +1986,9 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           width: 100%;
           margin-top: 16px;
           margin-bottom: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
           border-radius: 8px;
           background: rgba(20, 20, 20, 0.5);
+          /* Pas de overflow ici - laisse les images s'afficher en entier */
         }
 
         .post-media-image {
@@ -1231,9 +1996,10 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           max-width: 100%;
           height: auto;
           max-height: 600px;
-          object-fit: contain;
-          object-position: center;
+          object-fit: contain !important; /* JAMAIS de cropping */
+          object-position: center !important;
           display: block;
+          margin: 0 auto;
         }
 
         .post-media-video {
@@ -1931,12 +2697,358 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 }
 
 
+        /* ======================================
+           MEDIA PREVIEW & VALIDATION
+        ====================================== */
+        .media-preview-container {
+          margin-top: 12px;
+          margin-bottom: 12px;
+        }
+
+        .media-preview-wrapper {
+          position: relative;
+          width: 100%;
+          max-width: 400px;
+          aspect-ratio: 1 / 1;
+          border-radius: 8px;
+          overflow: hidden;
+          border: 2px solid rgba(250, 204, 21, 0.4);
+          background: rgba(20, 20, 20, 0.8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .media-preview-image {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          display: block;
+        }
+
+        .media-preview-overlay {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+          padding: 12px;
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          min-height: 60px;
+        }
+
+        .media-preview-info {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          color: #ffffff;
+          font-size: 0.8rem;
+          flex: 1;
+        }
+
+        .media-dimensions {
+          font-weight: 600;
+          color: #facc15;
+        }
+
+        .media-ratio {
+          font-size: 0.75rem;
+          opacity: 0.8;
+        }
+
+        .media-preview-info-toggle {
+          position: absolute;
+          bottom: 8px;
+          right: 8px;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          color: #ffffff;
+          font-size: 16px;
+          font-weight: normal;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+          z-index: 15;
+          line-height: 1;
+          padding: 0;
+        }
+
+        .media-preview-info-toggle:hover {
+          background: rgba(0, 0, 0, 0.8);
+          border-color: rgba(250, 204, 21, 0.5);
+          color: #facc15;
+          transform: scale(1.1);
+        }
+
+        .media-preview-remove-single {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: rgba(239, 68, 68, 0.9);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          color: #ffffff;
+          font-size: 20px;
+          font-weight: bold;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+          z-index: 20;
+          line-height: 1;
+        }
+
+        .media-preview-remove-single:hover {
+          background: rgba(239, 68, 68, 1);
+          transform: scale(1.1);
+          box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+        }
+
+        .media-validation-error {
+          margin-top: 12px;
+          padding: 14px 16px;
+          background: rgba(239, 68, 68, 0.15);
+          border: 1px solid rgba(239, 68, 68, 0.4);
+          border-radius: 8px;
+          color: #fca5a5;
+          font-size: 0.875rem;
+          line-height: 1.5;
+        }
+
+        .media-validation-error strong {
+          display: block;
+          margin-bottom: 8px;
+          color: #f87171;
+          font-size: 0.9rem;
+        }
+
+        .media-validation-error p {
+          margin: 0 0 12px 0;
+          color: #fca5a5;
+        }
+
+        .media-requirements {
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .media-requirements p {
+          margin: 0 0 8px 0;
+          font-weight: 600;
+          color: #f87171;
+        }
+
+        .media-requirements ul {
+          margin: 0;
+          padding-left: 20px;
+          list-style-type: disc;
+        }
+
+        .media-requirements li {
+          margin: 4px 0;
+          color: #fca5a5;
+        }
+
+        .media-upload-info {
+          margin-top: 12px;
+          padding: 12px 14px;
+          background: rgba(30, 30, 30, 0.6);
+          border: 1px solid rgba(100, 100, 100, 0.3);
+          border-radius: 8px;
+          color: rgba(255, 255, 255, 0.8);
+          font-size: 0.8rem;
+          line-height: 1.6;
+        }
+
+        .media-upload-info p {
+          margin: 0 0 8px 0;
+          font-weight: 600;
+          color: #ffffff;
+        }
+
+        .media-upload-info ul {
+          margin: 0;
+          padding-left: 20px;
+          list-style-type: disc;
+        }
+
+        .media-upload-info li {
+          margin: 4px 0;
+          color: rgba(255, 255, 255, 0.7);
+        }
+
+        .media-upload-info strong {
+          color: #facc15;
+        }
+
+        /* ======================================
+           CAROUSEL STYLES (Preview & Posts) - VERSION CORRIGÉE
+        ====================================== */
+        /* ======================================
+           CAROUSEL - VERSION CORRIGÉE SANS CROPPING
+        ====================================== */
+        .media-preview-carousel,
+        .post-media-carousel {
+          position: relative;
+          width: 100%;
+          overflow: hidden; /* Nécessaire pour cacher les slides adjacentes */
+          border-radius: 8px;
+          background: rgba(20, 20, 20, 0.5);
+          /* La hauteur s'adapte automatiquement au contenu grâce au slider */
+        }
+
+        .media-preview-slider,
+        .post-media-slider {
+          display: flex;
+          transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          will-change: transform;
+          width: 100%;
+          /* Hauteur s'adapte à la slide la plus haute visible */
+          /* IMPORTANT: Les slides ont toutes la même structure, donc même hauteur max */
+        }
+
+        .media-preview-slide,
+        .post-media-slide {
+          min-width: 100%;
+          width: 100%;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(20, 20, 20, 0.5);
+          padding: 0;
+          margin: 0;
+          /* Hauteur s'adapte au contenu de l'image */
+          /* Toutes les slides ont la même hauteur max grâce à max-height sur les images */
+        }
+
+        /* Images dans le carousel - JAMAIS de cropping - FORCE contain */
+        .post-media-slide .post-media-image,
+        .media-preview-slide .media-preview-image {
+          width: 100%;
+          max-width: 100%;
+          height: auto;
+          max-height: 600px; /* Toutes les images respectent cette limite */
+          min-height: 0;
+          object-fit: contain !important; /* FORCE contain - JAMAIS de cropping */
+          object-position: center !important;
+          display: block;
+          margin: 0 auto;
+          /* Avec object-fit: contain, l'image s'adapte proportionnellement */
+          /* Si l'image est plus haute que 600px, elle sera réduite mais jamais coupée */
+        }
+
+        /* Pour les vidéos dans le carousel (si nécessaire) */
+        .post-media-slide .post-media-video,
+        .media-preview-slide video {
+          width: 100%;
+          max-width: 100%;
+          height: auto;
+          max-height: 600px;
+          min-height: 200px;
+          object-fit: contain !important;
+          object-position: center !important;
+          display: block;
+        }
+
+        .carousel-nav {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 10;
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          color: #ffffff;
+          font-size: 24px;
+          font-weight: bold;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+          user-select: none;
+        }
+
+        .carousel-nav:hover {
+          background: rgba(0, 0, 0, 0.8);
+          border-color: rgba(250, 204, 21, 0.5);
+          color: #facc15;
+        }
+
+        .carousel-nav-left {
+          left: 12px;
+        }
+
+        .carousel-nav-right {
+          right: 12px;
+        }
+
+        .carousel-dots {
+          position: absolute;
+          bottom: 12px;
+          left: 50%;
+          transform: translateX(-50%);
+          display: flex;
+          gap: 6px;
+          z-index: 10;
+        }
+
+        .carousel-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          border: none;
+          background: rgba(255, 255, 255, 0.4);
+          cursor: pointer;
+          transition: all 0.2s ease;
+          padding: 0;
+        }
+
+        .carousel-dot:hover {
+          background: rgba(255, 255, 255, 0.6);
+          transform: scale(1.2);
+        }
+
+        .carousel-dot.active {
+          background: #facc15;
+          width: 24px;
+          border-radius: 4px;
+        }
+
+        /* Touch swipe support for mobile */
+        .post-media-carousel {
+          touch-action: pan-y pinch-zoom;
+        }
+
         @media (max-width: 650px) {
           .feed-container {
             padding: 18px;
           }
           .card {
             padding: 16px;
+          }
+          .media-preview-wrapper {
+            max-width: 100%;
           }
         }
 
