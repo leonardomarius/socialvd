@@ -13,7 +13,7 @@ interface Light {
 
 export default function AmbientGlow() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationIdRef = useRef<number>();
+  const animationIdRef = useRef<number | null>(null);
   const lightsRef = useRef<Light[]>([]);
   const lastTimeRef = useRef<number>(0);
   const [reducedMotion, setReducedMotion] = useState(false);
