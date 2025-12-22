@@ -1,9 +1,11 @@
-// src/app/signup/page.tsx
+// FILE: src/app/signup/page.tsx
+
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import AmbientGlow from "@/components/background/AmbientGlow";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -11,17 +13,10 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pseudo, setPseudo] = useState("");
-
-  // 🔥 AJOUT — nouveau champ mindset
   const [mindset, setMindset] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // 🔥 NEW — fun facts
   const [passwordFocused, setPasswordFocused] = useState(false);
-
-  // 🔥 AJOUT — on fixe la fun fact une fois sélectionnée
   const [currentFact, setCurrentFact] = useState("");
 
   const funFacts = [
@@ -115,113 +110,214 @@ if (mindsetError) {
   return (
     <div
       style={{
-        maxWidth: 400,
-        margin: "40px auto",
-        padding: 20,
-        border: "1px solid #222",
-        borderRadius: 8,
-        background: "#000",
+        position: "relative",
+        width: "100%",
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+        background: "#1a1a1a",
       }}
     >
-      <h1 style={{ marginBottom: 16 }}>Create an account</h1>
-
-      <form
-        onSubmit={handleSignup}
-        style={{ display: "flex", flexDirection: "column", gap: 14 }}
+      <AmbientGlow />
+      <main
+        style={{
+          position: "relative",
+          zIndex: 10,
+          maxWidth: 400,
+          width: "100%",
+          margin: "40px auto",
+          padding: "40px",
+          color: "#ffffff",
+        }}
       >
-        <div>
-          <label>Username</label>
-          <input
-            type="text"
-            placeholder="Your username"
-            value={pseudo}
-            onChange={(e) => setPseudo(e.target.value)}
-            required
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </div>
+        <h1 style={{ marginBottom: 24, fontSize: "1.75rem", fontWeight: 700, textAlign: "center" }}>
+          Create an account
+        </h1>
 
-        <div>
-          <label>Email</label>
-          <input
-            type="email"
-            placeholder="Email address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </div>
+        <form
+          onSubmit={handleSignup}
+          style={{ display: "flex", flexDirection: "column", gap: 16 }}
+        >
+          <div>
+            <label style={{ display: "block", marginBottom: 6, fontSize: "0.875rem", color: "#ffffff" }}>
+              Username
+            </label>
+            <input
+              type="text"
+              placeholder="Your username"
+              value={pseudo}
+              onChange={(e) => setPseudo(e.target.value)}
+              required
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                borderRadius: 6,
+                border: "1px solid rgba(100, 100, 100, 0.3)",
+                background: "rgba(30, 30, 30, 0.8)",
+                color: "#ffffff",
+                fontSize: "0.9rem",
+                outline: "none",
+                transition: "all 0.2s",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "rgba(255, 215, 0, 0.5)";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "rgba(100, 100, 100, 0.3)";
+              }}
+            />
+          </div>
 
-        <div>
-          <label>Password</label>
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onFocus={() => {
-              setPasswordFocused(true);
-              // 🔥 AJOUT — on choisit une fun fact UNIQUEMENT lorsqu'on clique
-              setCurrentFact(
-                funFacts[Math.floor(Math.random() * funFacts.length)]
-              );
-            }}
-            onBlur={() => setPasswordFocused(false)}
-            required
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, fontSize: "0.875rem", color: "#ffffff" }}>
+              Email
+            </label>
+            <input
+              type="email"
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                borderRadius: 6,
+                border: "1px solid rgba(100, 100, 100, 0.3)",
+                background: "rgba(30, 30, 30, 0.8)",
+                color: "#ffffff",
+                fontSize: "0.9rem",
+                outline: "none",
+                transition: "all 0.2s",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "rgba(255, 215, 0, 0.5)";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "rgba(100, 100, 100, 0.3)";
+              }}
+            />
+          </div>
 
-        {/* 🔥 NEW — Display fun fact */}
-        {passwordFocused && (
-          <p
+          <div>
+            <label style={{ display: "block", marginBottom: 6, fontSize: "0.875rem", color: "#ffffff" }}>
+              Password
+            </label>
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onFocus={() => {
+                setPasswordFocused(true);
+                setCurrentFact(
+                  funFacts[Math.floor(Math.random() * funFacts.length)]
+                );
+              }}
+              onBlur={() => setPasswordFocused(false)}
+              required
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                borderRadius: 6,
+                border: "1px solid rgba(100, 100, 100, 0.3)",
+                background: "rgba(30, 30, 30, 0.8)",
+                color: "#ffffff",
+                fontSize: "0.9rem",
+                outline: "none",
+                transition: "all 0.2s",
+              }}
+              onFocusCapture={(e) => {
+                e.currentTarget.style.borderColor = "rgba(255, 215, 0, 0.5)";
+              }}
+              onBlurCapture={(e) => {
+                e.currentTarget.style.borderColor = "rgba(100, 100, 100, 0.3)";
+              }}
+            />
+          </div>
+
+          {passwordFocused && (
+            <p
+              style={{
+                marginTop: "-6px",
+                marginBottom: "4px",
+                fontSize: "0.78rem",
+                color: "rgba(220,220,235,0.7)",
+                opacity: 0.9,
+                transition: "opacity 0.3s ease",
+              }}
+            >
+              {currentFact}
+            </p>
+          )}
+
+          <div>
+            <label style={{ display: "block", marginBottom: 6, fontSize: "0.875rem", color: "#ffffff" }}>
+              Mindset
+            </label>
+            <input
+              type="text"
+              placeholder="What would define you best"
+              value={mindset}
+              onChange={(e) => setMindset(e.target.value)}
+              required
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                borderRadius: 6,
+                border: "1px solid rgba(100, 100, 100, 0.3)",
+                background: "rgba(30, 30, 30, 0.8)",
+                color: "#ffffff",
+                fontSize: "0.9rem",
+                outline: "none",
+                transition: "all 0.2s",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "rgba(255, 215, 0, 0.5)";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "rgba(100, 100, 100, 0.3)";
+              }}
+            />
+          </div>
+
+          {errorMsg && (
+            <p style={{ color: "#f87171", fontSize: "0.875rem", marginTop: 4 }}>{errorMsg}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary-glow"
             style={{
-              marginTop: "-6px",
-              marginBottom: "4px",
-              fontSize: "0.78rem",
-              color: "rgba(220,220,235,0.7)",
-              opacity: 0.9,
-              transition: "opacity 0.3s ease",
+              marginTop: 5,
+              padding: "12px 16px",
+              background: "rgba(30, 30, 30, 0.8)",
+              color: "white",
+              borderRadius: 6,
+              border: "1px solid rgba(255, 215, 0, 0.3)",
+              cursor: loading ? "not-allowed" : "pointer",
+              fontSize: "0.875rem",
+              fontWeight: 500,
+              transition: "all 0.2s",
+              boxShadow: "0 1px 3px rgba(0, 0, 0, 0.4), 0 0 12px rgba(255, 215, 0, 0.15)",
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.currentTarget.style.borderColor = "rgba(255, 215, 0, 0.5)";
+                e.currentTarget.style.boxShadow = "0 2px 8px rgba(255, 215, 0, 0.25), 0 0 20px rgba(255, 215, 0, 0.2)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "rgba(255, 215, 0, 0.3)";
+              e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.4), 0 0 12px rgba(255, 215, 0, 0.15)";
             }}
           >
-            {currentFact}
-          </p>
-        )}
-
-        {/* 🔥 AJOUT — Champ mindset */}
-        <div>
-          <label>Mindset</label>
-          <input
-            type="text"
-            placeholder="What would define you best"
-            value={mindset}
-            onChange={(e) => setMindset(e.target.value)}
-            required
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </div>
-
-        {errorMsg && (
-          <p style={{ color: "red", fontSize: 14, marginTop: 4 }}>{errorMsg}</p>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            marginTop: 5,
-            padding: "10px 16px",
-            background: "#0070f3",
-            color: "white",
-            borderRadius: 6,
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          {loading ? "Creating your account..." : "Sign up"}
-        </button>
-      </form>
+            {loading ? "Creating your account..." : "Sign up"}
+          </button>
+        </form>
+      </main>
     </div>
   );
 }

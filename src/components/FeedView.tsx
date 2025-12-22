@@ -154,44 +154,129 @@ const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
   }, []);
 
   // -----------------------------------------------------
-// Vérifier session
+// Vérifier session - VERSION ROBUSTE
 // -----------------------------------------------------
 useEffect(() => {
-  const loadSession = async () => {
-  try {
-    const { data } = await supabase.auth.getUser();
+  let mounted = true;
 
-    if (!data.user) {
+  const loadUser = async () => {
+    try {
+      // Méthode principale: getUser() (plus fiable)
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !userData?.user) {
+        // Fallback: getSession()
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !sessionData?.session?.user) {
+          console.error("No authenticated user found");
+          if (mounted) {
+            router.push("/login");
+          }
+          return;
+        }
+
+        if (!mounted) return;
+        const userId = sessionData.session.user.id;
+        setMyId(userId);
+
+        // Charger le pseudo
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("pseudo")
+          .eq("id", userId)
+          .single();
+
+        if (!mounted) return;
+        setPseudo(profile?.pseudo || "Utilisateur");
+        return;
+      }
+
+      // getUser() a réussi
+      if (!mounted) return;
+      const userId = userData.user.id;
+      setMyId(userId);
+
+      // Charger le pseudo
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("pseudo")
+        .eq("id", userId)
+        .single();
+
+      if (profileError) {
+        console.error("Profile error:", profileError);
+      }
+
+      if (!mounted) return;
+      setPseudo(profile?.pseudo || "Utilisateur");
+    } catch (err: any) {
+      // navigation / hot reload / fetch interrompu
+      if (
+        err?.name === "AbortError" ||
+        String(err?.message || err).includes("Failed to fetch")
+      ) {
+        return;
+      }
+      console.error("Error loading user:", err);
+      if (mounted) {
+        router.push("/login");
+      }
+    }
+  };
+
+  // Charger immédiatement
+  loadUser();
+
+  // Écouter les changements d'authentification
+  const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+    if (!mounted) return;
+
+    if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+      if (session?.user) {
+        setMyId(session.user.id);
+
+        // Charger le pseudo
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("pseudo")
+          .eq("id", session.user.id)
+          .single();
+
+        if (!mounted) return;
+        setPseudo(profile?.pseudo || "Utilisateur");
+      }
+    } else if (event === "SIGNED_OUT") {
+      setMyId(null);
+      setPseudo("");
       router.push("/login");
-      return;
     }
+  });
 
-    if (!isMountedRef.current) return;
-    setMyId(data.user.id);
+  return () => {
+    mounted = false;
+    authListener.subscription.unsubscribe();
+  };
+}, []); // Exécuter seulement au montage du composant
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("pseudo")
-      .eq("id", data.user.id)
-      .single();
-
-    if (!isMountedRef.current) return;
-    setPseudo(profile?.pseudo || "Utilisateur");
-  } catch (err: any) {
-    // navigation / hot reload / fetch interrompu
-    if (
-      err?.name === "AbortError" ||
-      String(err?.message || err).includes("Failed to fetch")
-    ) {
-      return;
+// Vérifier si myId n'est pas chargé après un délai (safety check)
+useEffect(() => {
+  const timer = setTimeout(() => {
+    if (!myId) {
+      // Vérifier une dernière fois avec getUser()
+      supabase.auth.getUser().then(({ data, error }) => {
+        if (!error && data?.user) {
+          setMyId(data.user.id);
+        } else {
+          // Afficher une notification si vraiment pas de session
+          showNotification("Your session could not be loaded. Please refresh the page.", "error");
+        }
+      });
     }
-    console.error(err);
-  }
-};
+  }, 2000); // Attendre 2 secondes avant de vérifier
 
-
-  loadSession();
-}, [router]);
+  return () => clearTimeout(timer);
+}, [myId, showNotification]);
 
 // Charger les données (même si myId n'est pas encore prêt)
 // myId sert juste à marquer isLikedByMe, mais les posts doivent apparaître quoi qu'il arrive.
@@ -2711,7 +2796,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           max-width: 400px;
           aspect-ratio: 1 / 1;
           border-radius: 8px;
-          overflow: hidden;
+          overflow: visible; /* Permettre aux boutons de sortir du wrapper */
           border: 2px solid rgba(250, 204, 21, 0.4);
           background: rgba(20, 20, 20, 0.8);
           display: flex;
@@ -2731,12 +2816,20 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           bottom: 0;
           left: 0;
           right: 0;
+          top: 0; /* Étendre l'overlay sur toute la hauteur pour permettre le positionnement absolu */
           background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
           padding: 12px;
           display: flex;
           align-items: flex-end;
           justify-content: space-between;
           min-height: 60px;
+          pointer-events: none; /* Permettre les clics à travers l'overlay sauf sur les boutons */
+        }
+        
+        /* Réactiver les pointer-events sur les éléments interactifs */
+        .media-preview-overlay button,
+        .media-preview-overlay .media-preview-info {
+          pointer-events: auto;
         }
 
         .media-preview-info {
@@ -2791,7 +2884,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
         .media-preview-remove-single {
           position: absolute;
-          top: 8px;
+          top: 8px; /* Positionné en haut à droite du preview (overlay couvre maintenant toute la hauteur) */
           right: 8px;
           width: 32px;
           height: 32px;
@@ -2808,7 +2901,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           align-items: center;
           justify-content: center;
           transition: all 0.2s ease;
-          z-index: 20;
+          z-index: 25; /* Plus élevé que l'info button pour être au-dessus */
           line-height: 1;
         }
 
