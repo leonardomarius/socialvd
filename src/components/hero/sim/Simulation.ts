@@ -232,7 +232,7 @@ export class Simulation {
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.geometry = new THREE.PlaneGeometry(2, 2);
     
-    const rtOptions: THREE.WebGLRenderTargetOptions = {
+    const rtOptions: THREE.RenderTargetOptions = {
       type: THREE.FloatType,
       format: THREE.RGBAFormat,
       minFilter: THREE.LinearFilter,
