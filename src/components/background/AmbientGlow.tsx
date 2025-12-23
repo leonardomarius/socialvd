@@ -22,15 +22,12 @@ export default function AmbientGlow() {
 
   useEffect(() => {
     setMounted(true);
-    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReducedMotion(mediaQuery.matches);
-
-    const handleChange = (e: MediaQueryListEvent) => {
-      setReducedMotion(e.matches);
+    const checkMotionPreference = () => {
+      const motionPreference = localStorage.getItem("motion");
+      setReducedMotion(motionPreference === "off");
     };
-
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
+    
+    checkMotionPreference();
   }, []);
 
   useEffect(() => {
