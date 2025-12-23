@@ -7,7 +7,9 @@ import {
   EllipsisVerticalIcon,
   TrashIcon,
   ChatBubbleLeftIcon,
+  HeartIcon,
 } from "@heroicons/react/24/outline";
+import { HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
 
 /* =====================
    TYPES (identiques feed)
@@ -301,50 +303,75 @@ export default function PostCard({
       (c.user_id && c.user_id === myId) || c.author_pseudo === pseudo;
 
     return (
-      <div key={c.id} style={{ paddingLeft: depth * 14 }}>
+      <div key={c.id}>
         <div className="glass-comment">
-          <div className="comment-line">
-            <Link
-              href={`/profile/${c.user_id}`}
-              className="comment-author clickable-author"
-            >
-              {c.author_pseudo}
+          <div className="comment-header-with-avatar">
+            <Link href={`/profile/${c.user_id}`}>
+              <img
+                src={
+                  c.avatar_url ||
+                  "https://via.placeholder.com/32/333333/FFFFFF?text=?"
+                }
+                className="comment-avatar"
+                alt={c.author_pseudo}
+              />
             </Link>
+            <div className="comment-header-content">
+              <Link
+                href={`/profile/${c.user_id}`}
+                className="comment-author clickable-author"
+              >
+                {c.author_pseudo}
+              </Link>
+            </div>
+          </div>
+          <div className="comment-content">
             <span className="comment-text">{c.content}</span>
           </div>
 
           <div className="comment-actions">
-            <button
-              className="btn ghost-btn btn-small"
-              onClick={() => {
-                setReplyTo(c.id);
-                setNewComment(`@${c.author_pseudo} `);
-              }}
-              type="button"
-            >
-              Reply
-            </button>
+            <div className="comment-actions-left">
+              <button
+                className="comment-reply-link"
+                onClick={() => {
+                  setReplyTo(c.id);
+                  setNewComment(`@${c.author_pseudo} `);
+                }}
+                type="button"
+              >
+                Reply
+              </button>
+
+              {canDelete && (
+                <button
+                  className="btn danger-btn btn-small"
+                  onClick={() => deleteComment(c.id)}
+                  type="button"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
 
             <button
-              className={`btn ghost-btn btn-small ${c.isLikedByMe ? "liked" : ""}`}
+              className={`comment-like-heart ${c.isLikedByMe ? "liked" : ""}`}
               onClick={() => toggleCommentLike(c)}
               type="button"
             >
-              ❤️ {c.likes_count ?? 0}
+              {c.isLikedByMe ? (
+                <HeartIconSolid className="comment-heart-icon" />
+              ) : (
+                <HeartIcon className="comment-heart-icon" />
+              )}
+              <span className="comment-like-count">{c.likes_count ?? 0}</span>
             </button>
-
-            {canDelete && (
-              <button
-                className="btn danger-btn btn-small"
-                onClick={() => deleteComment(c.id)}
-                type="button"
-              >
-                Delete
-              </button>
-            )}
           </div>
 
-          {c.replies.map((r) => renderComment(r, depth + 1))}
+          {c.replies.length > 0 && (
+            <div className="comment-replies-wrapper" style={{ marginLeft: 40 }}>
+              {c.replies.map((r) => renderComment(r, depth + 1))}
+            </div>
+          )}
         </div>
       </div>
     );

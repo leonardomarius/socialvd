@@ -12,7 +12,9 @@ import {
   PencilSquareIcon,
   TrashIcon,
   ChatBubbleLeftIcon,
+  HeartIcon,
 } from "@heroicons/react/24/outline";
+import { HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
 
 type Post = {
   id: string;
@@ -1205,16 +1207,27 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
     <div
       key={comment.id}
       className="comment-wrapper"
-      style={{ paddingLeft: depth * 15 }}
     >
       <div className="comment-body glass-comment">
-        <div className="comment-header">
-          <Link
-            href={`/profile/${comment.user_id}`}
-            className="comment-author clickable-author"
-          >
-            {comment.author_pseudo}
+        <div className="comment-header-with-avatar">
+          <Link href={`/profile/${comment.user_id}`}>
+            <img
+              src={
+                comment.avatar_url ||
+                "https://via.placeholder.com/32/333333/FFFFFF?text=?"
+              }
+              className="comment-avatar"
+              alt={comment.author_pseudo}
+            />
           </Link>
+          <div className="comment-header-content">
+            <Link
+              href={`/profile/${comment.user_id}`}
+              className="comment-author clickable-author"
+            >
+              {comment.author_pseudo}
+            </Link>
+          </div>
         </div>
         
         <div className="comment-content">
@@ -1222,41 +1235,52 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         </div>
 
         <div className="comment-actions">
-          <button
-            className="btn ghost-btn"
-            onClick={() => {
-              setNewComments(prev => ({
-                ...prev,
-                [post.id]: `@${comment.author_pseudo} `
-              }));
-              setReplyTo(prev => ({ ...prev, [post.id]: comment.id }));
-            }}
-            type="button"
-          >
-            Reply
-          </button>
-
-          {canDelete && (
+          <div className="comment-actions-left">
             <button
-              className="btn danger-btn"
-              onClick={() => handleDeleteComment(comment.id)}
+              className="comment-reply-link"
+              onClick={() => {
+                setNewComments(prev => ({
+                  ...prev,
+                  [post.id]: `@${comment.author_pseudo} `
+                }));
+                setReplyTo(prev => ({ ...prev, [post.id]: comment.id }));
+              }}
               type="button"
             >
-              Delete
+              Reply
             </button>
-          )}
+
+            {canDelete && (
+              <button
+                className="btn danger-btn"
+                onClick={() => handleDeleteComment(comment.id)}
+                type="button"
+              >
+                Delete
+              </button>
+            )}
+          </div>
 
           <button
-            className={`btn ghost-btn ${comment.isLikedByMe ? "liked" : ""}`}
+            className={`comment-like-heart ${comment.isLikedByMe ? "liked" : ""}`}
             onClick={() => handleToggleCommentLike(comment.id)}
             type="button"
           >
-            Like {comment.likes_count ?? 0}
+            {comment.isLikedByMe ? (
+              <HeartIconSolid className="comment-heart-icon" />
+            ) : (
+              <HeartIcon className="comment-heart-icon" />
+            )}
+            <span className="comment-like-count">{comment.likes_count ?? 0}</span>
           </button>
         </div>
 
-        {comment.replies.map(child =>
-          renderThreadedComment(child, depth + 1, post)
+        {comment.replies.length > 0 && (
+          <div className="comment-replies-wrapper" style={{ marginLeft: 40 }}>
+            {comment.replies.map(child =>
+              renderThreadedComment(child, depth + 1, post)
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -1940,19 +1964,11 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
                   }}
                   type="button"
                 >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill={post.isLikedByMe ? "#facc15" : "none"}
-                    stroke={post.isLikedByMe ? "#facc15" : "#ffffff"}
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M14 9V5a3 3 0 0 0-6 0v4" />
-                    <path d="M5 15V11a2 2 0 0 1 2-2h11l-1 8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2" />
-                  </svg>
+                  {post.isLikedByMe ? (
+                    <HeartIconSolid className="like-icon" />
+                  ) : (
+                    <HeartIcon className="like-icon" />
+                  )}
                   <span>{post.likes_count ?? 0}</span>
                 </button>
 
@@ -2625,6 +2641,21 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
             inset 0 1px 0 rgba(255, 255, 255, 0.12);
         }
 
+        .like-icon {
+          width: 18px;
+          height: 18px;
+          color: inherit;
+          transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .like-button:active .like-icon {
+          transform: scale(1.3);
+        }
+
+        .like-button.liked .like-icon {
+          color: #facc15;
+        }
+
         @keyframes fadeInScale {
           from {
             opacity: 0;
@@ -2685,10 +2716,10 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 16px;
-  padding-left: calc(24px * var(--depth));
   position: relative;
   isolation: isolate;
 }
+
 
 
 .depth-0 { --depth: 0; }
@@ -2711,19 +2742,42 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.comment-header-with-avatar {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.comment-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(156, 163, 175, 0.2);
+  flex-shrink: 0;
+}
+
 .comment-header {
   margin-bottom: 6px;
 }
 
+.comment-header-content {
+  flex: 1;
+  min-width: 0;
+}
+
 .comment-content {
   margin-bottom: 8px;
+  margin-left: 42px;
 }
 
 .comment-author {
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: #ffffff;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-block;
 }
 
 .comment-author:hover {
@@ -2742,16 +2796,10 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
   color: #ffffff;
   line-height: 1.55;
   word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
-.comment-actions {
-  margin-top: 8px;
-  display: flex;
-  gap: 8px;
-  position: relative;
-  z-index: 30;
-  isolation: isolate;
-}
 
 /* Les boutons de commentaires utilisent maintenant les classes .btn standard */
 

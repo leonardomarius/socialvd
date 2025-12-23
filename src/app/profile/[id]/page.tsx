@@ -7,7 +7,8 @@
   import EditProfileForm from "@/components/EditProfileForm";
   import Link from "next/link";
   import MateButton from "@/components/MateButton";
-  import { XMarkIcon } from "@heroicons/react/24/outline";
+  import { XMarkIcon, HeartIcon } from "@heroicons/react/24/outline";
+  import { HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
 
   // 🔥 AJOUT — IMPORT
   import MateSessionButton from "@/components/MateSessionButton";
@@ -111,6 +112,8 @@ type Comment = {
   author_avatar: string | null;
   likes: number;
   parent_id: string | null;
+  likes_count?: number;
+  isLikedByMe?: boolean;
 };
 
 
@@ -219,23 +222,53 @@ setLocalLikes(selectedPost.likes ?? 0);
     profiles:profiles (
       pseudo,
       avatar_url
-    )
+    ),
+    comment_likes(count)
   `)
   .eq("post_id", selectedPost.id)
   .order("created_at", { ascending: true });
 
 
-    const formatted = (data || []).map((c: any) => ({
-  id: c.id,
-  post_id: c.post_id,
-  user_id: c.user_id,
-  content: c.content,
-  created_at: c.created_at,
-  parent_id: c.parent_id,
-  likes: c.likes ?? 0,
-  author_pseudo: c.profiles?.pseudo ?? null,
-  author_avatar: c.profiles?.avatar_url ?? null,
-}));
+    // Get comment likes for current user
+    let myCommentLikesMap: Record<string, boolean> = {};
+    if (myId) {
+      const { data: myCommentLikes } = await supabase
+        .from("comment_likes")
+        .select("comment_id")
+        .eq("user_id", myId);
+
+      if (myCommentLikes) {
+        myCommentLikesMap = myCommentLikes.reduce(
+          (acc: Record<string, boolean>, row: any) => {
+            acc[row.comment_id] = true;
+            return acc;
+          },
+          {}
+        );
+      }
+    }
+
+    const formatted = (data || []).map((c: any) => {
+      const likesArray = c.comment_likes || [];
+      const likesCount =
+        Array.isArray(likesArray) && likesArray[0]?.count
+          ? likesArray[0].count
+          : 0;
+
+      return {
+        id: c.id,
+        post_id: c.post_id,
+        user_id: c.user_id,
+        content: c.content,
+        created_at: c.created_at,
+        parent_id: c.parent_id,
+        likes: c.likes ?? 0,
+        author_pseudo: c.profiles?.pseudo ?? null,
+        author_avatar: c.profiles?.avatar_url ?? null,
+        likes_count: likesCount,
+        isLikedByMe: !!myCommentLikesMap[c.id],
+      };
+    });
 
 
     setComments(formatted);
@@ -464,6 +497,39 @@ const handleToggleFollow = async () => {
   setLocalLikes((prev) => Math.max(0, prev + (currentlyLiked ? -1 : 1)));
   setIsLiking(false);
 };
+
+  const handleToggleCommentLike = async (commentId: string) => {
+    if (!myId) return;
+
+    const comment = comments.find((c) => c.id === commentId);
+    const currentlyLiked = comment?.isLikedByMe;
+
+    if (currentlyLiked) {
+      await supabase
+        .from("comment_likes")
+        .delete()
+        .eq("comment_id", commentId)
+        .eq("user_id", myId);
+    } else {
+      await supabase.from("comment_likes").insert({
+        comment_id: commentId,
+        user_id: myId,
+      });
+    }
+
+    // Mise à jour locale
+    setComments((prev) =>
+      prev.map((c) =>
+        c.id !== commentId
+          ? c
+          : {
+              ...c,
+              isLikedByMe: !currentlyLiked,
+              likes_count: (c.likes_count ?? 0) + (currentlyLiked ? -1 : 1),
+            }
+      )
+    );
+  };
 
   const handleAddComment = async () => {
     if (!myId || !selectedPost || !newComment.trim()) return;
@@ -957,19 +1023,11 @@ const handleToggleFollow = async () => {
           type="button"
           disabled={isLiking}
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill={(selectedPost as any).isLikedByMe ? "#facc15" : "none"}
-            stroke={(selectedPost as any).isLikedByMe ? "#facc15" : "#ffffff"}
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M14 9V5a3 3 0 0 0-6 0v4" />
-            <path d="M5 15V11a2 2 0 0 1 2-2h11l-1 8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2" />
-          </svg>
+          {(selectedPost as any).isLikedByMe ? (
+            <HeartIconSolid className="like-icon" style={{ width: "20px", height: "20px" }} />
+          ) : (
+            <HeartIcon className="like-icon" style={{ width: "20px", height: "20px" }} />
+          )}
           <span style={{ 
             fontSize: "0.95rem",
             fontWeight: "600",
@@ -1011,13 +1069,25 @@ const handleToggleFollow = async () => {
                 className="glass-comment"
                 style={{ marginLeft: isReply ? "32px" : "0", marginBottom: "12px" }}
               >
-                <div className="comment-header">
-                  <Link
-                    href={`/profile/${comment.user_id}`}
-                    className="comment-author clickable-author"
-                  >
-                    {comment.author_pseudo || "Unknown"}
+                <div className="comment-header-with-avatar">
+                  <Link href={`/profile/${comment.user_id}`}>
+                    <img
+                      src={
+                        comment.author_avatar ||
+                        "https://via.placeholder.com/32/333333/FFFFFF?text=?"
+                      }
+                      className="comment-avatar"
+                      alt={comment.author_pseudo || "Unknown"}
+                    />
                   </Link>
+                  <div className="comment-header-content">
+                    <Link
+                      href={`/profile/${comment.user_id}`}
+                      className="comment-author clickable-author"
+                    >
+                      {comment.author_pseudo || "Unknown"}
+                    </Link>
+                  </div>
                 </div>
 
                 <div className="comment-content">
@@ -1025,38 +1095,53 @@ const handleToggleFollow = async () => {
                 </div>
 
                 <div className="comment-actions">
-                  <button
-                    className="btn ghost-btn btn-small"
-                    onClick={() => {
-                      setReplyTo(comment.id);
-                      setNewComment(`@${comment.author_pseudo} `);
-                      setTimeout(() => {
-                        if (commentInputRef.current) {
-                          commentInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-                          commentInputRef.current.focus();
-                        }
-                      }, 100);
-                    }}
-                    type="button"
-                  >
-                    Reply
-                  </button>
-
-                  {canDelete && (
+                  <div className="comment-actions-left">
                     <button
-                      className="btn danger-btn btn-small"
-                      onClick={async () => {
-                        await supabase
-                          .from("comments")
-                          .delete()
-                          .eq("id", comment.id);
-                        setComments((prev) => prev.filter((c) => c.id !== comment.id));
+                      className="comment-reply-link"
+                      onClick={() => {
+                        setReplyTo(comment.id);
+                        setNewComment(`@${comment.author_pseudo} `);
+                        setTimeout(() => {
+                          if (commentInputRef.current) {
+                            commentInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+                            commentInputRef.current.focus();
+                          }
+                        }, 100);
                       }}
                       type="button"
                     >
-                      Delete
+                      Reply
                     </button>
-                  )}
+
+                    {canDelete && (
+                      <button
+                        className="btn danger-btn btn-small"
+                        onClick={async () => {
+                          await supabase
+                            .from("comments")
+                            .delete()
+                            .eq("id", comment.id);
+                          setComments((prev) => prev.filter((c) => c.id !== comment.id));
+                        }}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    className={`comment-like-heart ${comment.isLikedByMe ? "liked" : ""}`}
+                    onClick={() => handleToggleCommentLike(comment.id)}
+                    type="button"
+                  >
+                    {comment.isLikedByMe ? (
+                      <HeartIconSolid className="comment-heart-icon" />
+                    ) : (
+                      <HeartIcon className="comment-heart-icon" />
+                    )}
+                    <span className="comment-like-count">{comment.likes_count ?? 0}</span>
+                  </button>
                 </div>
               </div>
             );
