@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import {
@@ -8,6 +8,7 @@ import {
   TrashIcon,
   ChatBubbleLeftIcon,
   HeartIcon,
+  ChartBarIcon,
 } from "@heroicons/react/24/outline";
 import { HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
 
@@ -55,6 +56,8 @@ type Props = {
   games?: { id: string; name: string; slug: string }[];
   onPostDeleted?: (postId: string) => void;
   variant?: "feed" | "grid";
+  hasVotedThisWeek?: boolean;
+  onVote?: (postId: string) => void;
 };
 
 
@@ -168,10 +171,14 @@ export default function PostCard({
   games = [],
   onPostDeleted,
   variant = "feed",
+  hasVotedThisWeek = false,
+  onVote,
 }: Props) {
 
   const [openMenu, setOpenMenu] = useState(false);
   const [openComments, setOpenComments] = useState(false);
+  const [showVoteModal, setShowVoteModal] = useState(false);
+  const [localHasVoted, setLocalHasVoted] = useState(hasVotedThisWeek);
 
   const [localComments, setLocalComments] = useState<Comment[]>(comments);
   const [newComment, setNewComment] = useState("");
@@ -179,6 +186,11 @@ export default function PostCard({
 
   const [likesCount, setLikesCount] = useState(post.likes_count ?? 0);
   const [isLiked, setIsLiked] = useState(!!post.isLikedByMe);
+
+  // Sync local vote state with prop
+  useEffect(() => {
+    setLocalHasVoted(hasVotedThisWeek);
+  }, [hasVotedThisWeek]);
 
   /* =====================
      POST ACTIONS
@@ -291,6 +303,60 @@ export default function PostCard({
 
     if (!error) {
       setLocalComments((c) => c.filter((x) => x.id !== commentId));
+    }
+  };
+
+  /* =====================
+     VOTE FOR POST OF THE WEEK
+  ===================== */
+
+  const handleVoteClick = () => {
+    if (localHasVoted || hasVotedThisWeek || !myId) return;
+    setShowVoteModal(true);
+  };
+
+    const handleConfirmVote = async () => {
+    if (!myId || localHasVoted || hasVotedThisWeek) return;
+
+    // Get current week start (Monday)
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Monday = 1
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() + diff);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from("weekly_votes")
+      .insert({
+        user_id: myId,
+        post_id: post.id,
+        week_start: weekStart.toISOString().split('T')[0], // YYYY-MM-DD format
+      })
+      .select();
+
+    if (error) {
+      // Log full error details for debugging
+      console.error("Error voting - Full response:", {
+        error: JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint,
+        errorCode: error.code,
+      });
+      
+      setShowVoteModal(false);
+      // Note: PostCard doesn't have showNotification, so we rely on parent component
+      // The error will be visible in console for debugging
+      return;
+    }
+
+    // Immediately update local state to disable button
+    setLocalHasVoted(true);
+    setShowVoteModal(false);
+    
+    if (onVote) {
+      onVote(post.id);
     }
   };
 
@@ -476,6 +542,37 @@ export default function PostCard({
 )}
 
 
+      {/* Actions */}
+      <div className="post-actions">
+        {/* LIKE BUTTON */}
+        <button
+          className={`like-button ${isLiked ? "liked" : ""}`}
+          onClick={toggleLike}
+          type="button"
+          disabled={!myId}
+        >
+          {isLiked ? (
+            <HeartIconSolid className="like-icon" />
+          ) : (
+            <HeartIcon className="like-icon" />
+          )}
+          <span>{likesCount}</span>
+        </button>
+
+        {/* VOTE BUTTON */}
+        {myId && (
+          <button
+            className={`vote-button ${localHasVoted || hasVotedThisWeek ? "voted" : ""}`}
+            onClick={handleVoteClick}
+            type="button"
+            disabled={localHasVoted || hasVotedThisWeek}
+            title={localHasVoted || hasVotedThisWeek ? "You have already voted this week" : "Vote for Post of the Week"}
+          >
+            <ChartBarIcon className="vote-icon" />
+          </button>
+        )}
+      </div>
+
       {/* Comments */}
       {openComments && (
         <div className="glass-card">
@@ -491,6 +588,33 @@ export default function PostCard({
             <button className="btn ghost-btn btn-small" onClick={addComment} type="button">
               Send
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Vote Confirmation Modal */}
+      {showVoteModal && (
+        <div className="vote-modal-backdrop" onClick={() => setShowVoteModal(false)}>
+          <div className="vote-modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Vote for Post of the Week</h3>
+            <p>You only have one vote per week.</p>
+            <p>Are you sure you want to use it for this post?</p>
+            <div className="vote-modal-actions">
+              <button
+                className="btn primary-btn"
+                onClick={handleConfirmVote}
+                type="button"
+              >
+                Yes
+              </button>
+              <button
+                className="btn ghost-btn"
+                onClick={() => setShowVoteModal(false)}
+                type="button"
+              >
+                No
+              </button>
+            </div>
           </div>
         </div>
       )}

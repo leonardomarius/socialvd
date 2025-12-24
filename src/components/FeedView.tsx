@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import PostCard from "@/components/PostCard";
+import PostCard, { Post as PostCardPost } from "@/components/PostCard";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -13,6 +13,9 @@ import {
   TrashIcon,
   ChatBubbleLeftIcon,
   HeartIcon,
+  ChartBarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 import { HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
 
@@ -89,10 +92,18 @@ const [mediaValidationError, setMediaValidationError] = useState<string | null>(
 const [mediaDimensions, setMediaDimensions] = useState<{ width: number; height: number }[]>([]);
 const [currentPreviewIndex, setCurrentPreviewIndex] = useState(0);
 const [showPreviewInfo, setShowPreviewInfo] = useState<Record<number, boolean>>({});
-const [postCarouselIndices, setPostCarouselIndices] = useState<Record<string, number>>({});
+  const [postCarouselIndices, setPostCarouselIndices] = useState<Record<string, number>>({});
 const [filterGameId, setFilterGameId] = useState<string>(
   forcedGameId ?? "all"
 );
+const [showCreatePost, setShowCreatePost] = useState<boolean>(false);
+
+  // Weekly showcase
+  const [weeklyPosts, setWeeklyPosts] = useState<Post[]>([]);
+  const [weeklyCarouselIndex, setWeeklyCarouselIndex] = useState(0);
+  const [weeklyAutoRotateTimer, setWeeklyAutoRotateTimer] = useState<NodeJS.Timeout | null>(null);
+  const [selectedWeeklyPost, setSelectedWeeklyPost] = useState<Post | null>(null);
+  const [hasVotedThisWeek, setHasVotedThisWeek] = useState(false);
 
 
 
@@ -477,6 +488,237 @@ if (commentsError) {
 
 
     setComments(commentsWithFlags);
+  };
+
+  // -----------------------------------------------------
+  // Load weekly posts (top 3 by votes)
+  // -----------------------------------------------------
+  const loadWeeklyPosts = async () => {
+    // Get current week start (Monday)
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Monday = 1
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() + diff);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+
+    // Get top 3 posts by weekly votes
+    const { data: votesData } = await supabase
+      .from("weekly_votes")
+      .select("post_id")
+      .eq("week_start", weekStartStr);
+
+    if (!votesData || votesData.length === 0) {
+      // Fallback: get top 3 posts by likes from last 7 days
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(now.getDate() - 7);
+      
+      const { data: fallbackPosts } = await supabase
+        .from("posts")
+        .select(`
+          *,
+          games (id, name, slug),
+          likes(count)
+        `)
+        .gte("created_at", sevenDaysAgo.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(3);
+
+      if (fallbackPosts) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, avatar_url");
+
+        const avatarMap: Record<string, string | null> = {};
+        profiles?.forEach((p) => {
+          avatarMap[p.id] = p.avatar_url;
+        });
+
+        const formatted = fallbackPosts.map((p: any) => {
+          const likesArray = p.likes || [];
+          const likesCount = Array.isArray(likesArray) && likesArray[0]?.count ? likesArray[0].count : 0;
+          return {
+            ...p,
+            avatar_url: avatarMap[p.user_id] || null,
+            likes_count: likesCount,
+            isLikedByMe: false,
+          };
+        });
+
+        setWeeklyPosts(formatted);
+      }
+      return;
+    }
+
+    // Count votes per post
+    const voteCounts: Record<string, number> = {};
+    votesData.forEach((v: any) => {
+      voteCounts[v.post_id] = (voteCounts[v.post_id] || 0) + 1;
+    });
+
+    // Get top 3 post IDs
+    const topPostIds = Object.entries(voteCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([id]) => id);
+
+    if (topPostIds.length === 0) {
+      setWeeklyPosts([]);
+      return;
+    }
+
+    // Fetch the posts
+    const { data: postsData } = await supabase
+      .from("posts")
+      .select(`
+        *,
+        games (id, name, slug),
+        likes(count)
+      `)
+      .in("id", topPostIds);
+
+    if (!postsData) {
+      setWeeklyPosts([]);
+      return;
+    }
+
+    // Get avatars
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, avatar_url");
+
+    const avatarMap: Record<string, string | null> = {};
+    profiles?.forEach((p) => {
+      avatarMap[p.id] = p.avatar_url;
+    });
+
+    // Get user likes
+    let myLikesMap: Record<string, boolean> = {};
+    if (myId) {
+      const { data: myLikes } = await supabase
+        .from("likes")
+        .select("post_id")
+        .eq("user_id", myId)
+        .in("post_id", topPostIds);
+
+      if (myLikes) {
+        myLikesMap = myLikes.reduce((acc: Record<string, boolean>, row: any) => {
+          acc[row.post_id] = true;
+          return acc;
+        }, {});
+      }
+    }
+
+    // Format posts maintaining order
+    const formatted = topPostIds
+      .map((id) => {
+        const p = postsData.find((post: any) => post.id === id);
+        if (!p) return null;
+
+        const likesArray = p.likes || [];
+        const likesCount = Array.isArray(likesArray) && likesArray[0]?.count ? likesArray[0].count : 0;
+
+        return {
+          ...p,
+          avatar_url: avatarMap[p.user_id] || null,
+          likes_count: likesCount,
+          isLikedByMe: !!myLikesMap[p.id],
+        };
+      })
+      .filter((p): p is Post => p !== null);
+
+    setWeeklyPosts(formatted);
+  };
+
+  // Check if user has voted this week
+  const checkVoteStatus = async () => {
+    if (!myId) {
+      setHasVotedThisWeek(false);
+      return;
+    }
+
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() + diff);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from("weekly_votes")
+      .select("id")
+      .eq("user_id", myId)
+      .eq("week_start", weekStartStr)
+      .limit(1);
+
+    if (error) {
+      console.error("Error checking vote status:", {
+        error: JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint,
+        errorCode: error.code,
+      });
+      // On error, assume user hasn't voted to be safe
+      setHasVotedThisWeek(false);
+      return;
+    }
+
+    setHasVotedThisWeek(!!data && data.length > 0);
+  };
+
+  // Load weekly posts on mount and when myId changes
+  useEffect(() => {
+    if (!forcedGameId && !forcedUserId) {
+      loadWeeklyPosts();
+      checkVoteStatus();
+    }
+  }, [myId, forcedGameId, forcedUserId]);
+
+  // Auto-rotate weekly carousel every 8 seconds
+  useEffect(() => {
+    if (weeklyPosts.length === 0 || weeklyPosts.length <= 1) return;
+
+    const timer = setInterval(() => {
+      setWeeklyCarouselIndex((prev) => (prev + 1) % weeklyPosts.length);
+    }, 8000);
+
+    setWeeklyAutoRotateTimer(timer);
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [weeklyPosts.length]);
+
+  // Reset auto-rotate timer on manual navigation
+  const handleWeeklyNav = (direction: "prev" | "next") => {
+    if (weeklyAutoRotateTimer) {
+      clearInterval(weeklyAutoRotateTimer);
+      setWeeklyAutoRotateTimer(null);
+    }
+
+    if (direction === "prev") {
+      setWeeklyCarouselIndex((prev) => (prev - 1 + weeklyPosts.length) % weeklyPosts.length);
+    } else {
+      setWeeklyCarouselIndex((prev) => (prev + 1) % weeklyPosts.length);
+    }
+
+    // Restart timer after 8 seconds
+    setTimeout(() => {
+      const timer = setInterval(() => {
+        setWeeklyCarouselIndex((prev) => (prev + 1) % weeklyPosts.length);
+      }, 8000);
+      setWeeklyAutoRotateTimer(timer);
+    }, 8000);
+  };
+
+  // Handle vote
+  const handleVote = async (postId: string) => {
+    setHasVotedThisWeek(true);
+    await loadWeeklyPosts();
+    await checkVoteStatus();
   };
 
 
@@ -1307,7 +1549,17 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           </div>
         )}
 
-        <h1 className="feed-title">News Feed</h1>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+          <h1 className="feed-title" style={{ marginBottom: 0, marginTop: 0 }}>News Feed</h1>
+          <button
+            className="create-post-toggle-btn"
+            onClick={() => setShowCreatePost(!showCreatePost)}
+            type="button"
+            aria-label={showCreatePost ? "Hide create post form" : "Show create post form"}
+          >
+            {showCreatePost ? "−" : "+"}
+          </button>
+        </div>
 
 <select
   className="input"
@@ -1338,7 +1590,203 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
   ))}
 </select>
 
+        {/* Weekly Showcase - Only show on main feed */}
+        {!forcedGameId && !forcedUserId && weeklyPosts.length > 0 && (
+          <div className="weekly-showcase">
+            <h2 className="weekly-showcase-title">Posts of the Week</h2>
+            <div className="weekly-carousel-wrapper">
+              <button
+                className="weekly-carousel-nav weekly-carousel-nav-left"
+                onClick={() => handleWeeklyNav("prev")}
+                type="button"
+                aria-label="Previous post"
+              >
+                <ChevronLeftIcon className="icon-24" />
+              </button>
+
+              <div className="weekly-carousel">
+                <div
+                  className="weekly-carousel-slider"
+                  style={{ transform: `translateX(-${weeklyCarouselIndex * 100}%)` }}
+                >
+                  {weeklyPosts.map((post, index) => {
+                    // Parse media URLs (can be single string or JSON array)
+                    let imageUrls: string[] = [];
+                    if (post.media_type === "image" && post.media_url) {
+                      try {
+                        const parsed = JSON.parse(post.media_url);
+                        if (Array.isArray(parsed)) {
+                          imageUrls = parsed;
+                        } else {
+                          imageUrls = [post.media_url];
+                        }
+                      } catch {
+                        imageUrls = [post.media_url];
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={post.id}
+                        className="weekly-carousel-slide"
+                        onClick={() => setSelectedWeeklyPost(post)}
+                      >
+                        <div className="weekly-post-card">
+                          {/* Media */}
+                          {post.media_type === "image" && imageUrls.length > 0 && (
+                            <div className="weekly-post-media">
+                              <img
+                                src={imageUrls[0]}
+                                alt="Post content"
+                                className="weekly-post-image"
+                              />
+                            </div>
+                          )}
+                          {post.media_type === "video" && post.media_url && (
+                            <div className="weekly-post-media">
+                              <video
+                                src={post.media_url}
+                                muted
+                                loop
+                                playsInline
+                                preload="metadata"
+                                className="weekly-post-video"
+                                autoPlay={index === weeklyCarouselIndex}
+                                onTimeUpdate={(e) => {
+                                  // Limit video playback to 8 seconds
+                                  if (e.currentTarget.currentTime >= 8) {
+                                    e.currentTarget.pause();
+                                  }
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          {/* Overlay with post info */}
+                          <div className="weekly-post-overlay">
+                            <div className="weekly-post-info">
+                              <Link
+                                href={`/profile/${post.user_id}`}
+                                className="weekly-post-author"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {post.author_pseudo}
+                              </Link>
+                              {post.games && (
+                                <Link
+                                  href={`/games/${post.games.slug}`}
+                                  className="weekly-post-game"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {post.games.name}
+                                </Link>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <button
+                className="weekly-carousel-nav weekly-carousel-nav-right"
+                onClick={() => handleWeeklyNav("next")}
+                type="button"
+                aria-label="Next post"
+              >
+                <ChevronRightIcon className="icon-24" />
+              </button>
+
+              {/* Dots indicator */}
+              {weeklyPosts.length > 1 && (
+                <div className="weekly-carousel-dots">
+                  {weeklyPosts.map((_, idx) => (
+                    <button
+                      key={idx}
+                      className={`weekly-carousel-dot ${idx === weeklyCarouselIndex ? "active" : ""}`}
+                      onClick={() => {
+                        if (weeklyAutoRotateTimer) {
+                          clearInterval(weeklyAutoRotateTimer);
+                          setWeeklyAutoRotateTimer(null);
+                        }
+                        setWeeklyCarouselIndex(idx);
+                        setTimeout(() => {
+                          const timer = setInterval(() => {
+                            setWeeklyCarouselIndex((prev) => (prev + 1) % weeklyPosts.length);
+                          }, 8000);
+                          setWeeklyAutoRotateTimer(timer);
+                        }, 8000);
+                      }}
+                      type="button"
+                      aria-label={`Go to post ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Weekly Post Modal */}
+        {selectedWeeklyPost && (
+          <div
+            className="modal-backdrop"
+            onClick={() => setSelectedWeeklyPost(null)}
+          >
+            <div
+              className="card profile-modal-card"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "680px",
+                maxWidth: "90vw",
+                maxHeight: "85vh",
+                overflowY: "auto",
+                overflowX: "hidden",
+                margin: "auto",
+                position: "relative",
+                zIndex: 10000,
+              }}
+            >
+              <button
+                onClick={() => setSelectedWeeklyPost(null)}
+                type="button"
+                style={{
+                  position: "absolute",
+                  top: "12px",
+                  right: "12px",
+                  background: "rgba(30, 30, 30, 0.9)",
+                  border: "1px solid rgba(100, 100, 100, 0.3)",
+                  borderRadius: "50%",
+                  width: "32px",
+                  height: "32px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "#ffffff",
+                  zIndex: 10001,
+                }}
+              >
+                ×
+              </button>
+
+              <PostCard
+                post={selectedWeeklyPost}
+                comments={comments.filter((c) => c.post_id === selectedWeeklyPost.id)}
+                myId={myId}
+                pseudo={pseudo}
+                games={games}
+                hasVotedThisWeek={hasVotedThisWeek}
+                onVote={handleVote}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Formulaire post */}
+        {showCreatePost && (
         <div className="card card-create">
           <h3 className="card-title">Create a post</h3>
 
@@ -1710,6 +2158,7 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
             Publish
           </button>
         </div>
+        )}
 
         {/* Posts */}
         {posts.map((post) => {
@@ -1972,6 +2421,67 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
                   <span>{post.likes_count ?? 0}</span>
                 </button>
 
+                {/* VOTE BUTTON */}
+                {myId && (
+                  <button
+                    className={`vote-button ${hasVotedThisWeek ? "voted" : ""}`}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (hasVotedThisWeek) return;
+
+                      // Get current week start
+                      const now = new Date();
+                      const dayOfWeek = now.getDay();
+                      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                      const weekStart = new Date(now);
+                      weekStart.setDate(now.getDate() + diff);
+                      weekStart.setHours(0, 0, 0, 0);
+
+                      const confirmed = window.confirm(
+                        "You only have one vote per week.\nAre you sure you want to use it for this post?"
+                      );
+
+                      if (!confirmed) return;
+
+                      const { data, error } = await supabase
+                        .from("weekly_votes")
+                        .insert({
+                          user_id: myId,
+                          post_id: post.id,
+                          week_start: weekStart.toISOString().split('T')[0],
+                        })
+                        .select();
+
+                      if (error) {
+                        // Log full error details for debugging
+                        console.error("Error voting - Full response:", {
+                          error: JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
+                          errorMessage: error.message,
+                          errorDetails: error.details,
+                          errorHint: error.hint,
+                          errorCode: error.code,
+                        });
+                        
+                        // Show meaningful error message
+                        const errorMessage = error.message || error.details || error.hint || "Failed to record vote. Please try again.";
+                        showNotification(`Error: ${errorMessage}`, "error");
+                        return;
+                      }
+
+                      setHasVotedThisWeek(true);
+                      showNotification("Vote recorded!", "success");
+                      await loadWeeklyPosts();
+                      await checkVoteStatus();
+                    }}
+                    type="button"
+                    disabled={hasVotedThisWeek}
+                    title={hasVotedThisWeek ? "You have already voted this week" : "Vote for Post of the Week"}
+                  >
+                    <ChartBarIcon className="vote-icon" />
+                  </button>
+                )}
+
                 {/* COMMENT COUNT */}
                 <div className="icon-text-inline">
                   <ChatBubbleLeftIcon className="icon-18 subtle" />
@@ -2050,6 +2560,48 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
           letter-spacing: -0.02em;
           color: #ffffff;
           text-shadow: 0 0 20px rgba(250, 204, 21, 0.2);
+        }
+
+        .create-post-toggle-btn {
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(30, 30, 30, 0.8);
+          border: 1px solid rgba(100, 100, 100, 0.3);
+          border-radius: 6px;
+          color: #ffffff;
+          font-size: 1.25rem;
+          font-weight: 400;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          box-shadow: 
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          padding: 0;
+          line-height: 1;
+          user-select: none;
+        }
+
+        .create-post-toggle-btn:hover {
+          background: rgba(40, 40, 40, 0.9);
+          border-color: rgba(250, 204, 21, 0.5);
+          color: #facc15;
+          box-shadow: 
+            0 2px 8px rgba(250, 204, 21, 0.2),
+            0 0 16px rgba(250, 204, 21, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
+          transform: translateY(-1px);
+        }
+
+        .create-post-toggle-btn:active {
+          transform: translateY(0);
+          box-shadow: 
+            0 1px 3px rgba(250, 204, 21, 0.3),
+            inset 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
         .card {
