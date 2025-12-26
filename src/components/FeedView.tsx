@@ -491,63 +491,40 @@ if (commentsError) {
   };
 
   // -----------------------------------------------------
-  // Load weekly posts (top 3 by votes)
+  // Helper: Calculate current week start (Monday)
   // -----------------------------------------------------
-  const loadWeeklyPosts = async () => {
-    // Get current week start (Monday)
+  const getCurrentWeekStart = (): string => {
     const now = new Date();
     const dayOfWeek = now.getDay();
     const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Monday = 1
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() + diff);
     weekStart.setHours(0, 0, 0, 0);
-    const weekStartStr = weekStart.toISOString().split('T')[0];
+    return weekStart.toISOString().split('T')[0]; // YYYY-MM-DD format
+  };
 
-    // Get top 3 posts by weekly votes
-    const { data: votesData } = await supabase
-      .from("weekly_votes")
+  // -----------------------------------------------------
+  // Load weekly posts (top 3 by votes)
+  // -----------------------------------------------------
+  const loadWeeklyPosts = async () => {
+    const weekStartStr = getCurrentWeekStart();
+
+    // Get top 3 posts by weekly votes from Supabase
+    const { data: votesData, error: votesError } = await supabase
+      .from("weekly_post_votes")
       .select("post_id")
       .eq("week_start", weekStartStr);
 
+    // If error or no votes, don't display any posts (no fallback)
+    if (votesError) {
+      console.error("Error loading weekly votes:", votesError);
+      setWeeklyPosts([]);
+      return;
+    }
+
     if (!votesData || votesData.length === 0) {
-      // Fallback: get top 3 posts by likes from last 7 days
-      const sevenDaysAgo = new Date(now);
-      sevenDaysAgo.setDate(now.getDate() - 7);
-      
-      const { data: fallbackPosts } = await supabase
-        .from("posts")
-        .select(`
-          *,
-          games (id, name, slug),
-          likes(count)
-        `)
-        .gte("created_at", sevenDaysAgo.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(3);
-
-      if (fallbackPosts) {
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, avatar_url");
-
-        const avatarMap: Record<string, string | null> = {};
-        profiles?.forEach((p) => {
-          avatarMap[p.id] = p.avatar_url;
-        });
-
-        const formatted = fallbackPosts.map((p: any) => {
-          const likesArray = p.likes || [];
-          const likesCount = Array.isArray(likesArray) && likesArray[0]?.count ? likesArray[0].count : 0;
-          return {
-            ...p,
-            avatar_url: avatarMap[p.user_id] || null,
-            likes_count: likesCount,
-            isLikedByMe: false,
-          };
-        });
-
-        setWeeklyPosts(formatted);
-      }
+      // No votes for this week: don't display any posts
+      setWeeklyPosts([]);
       return;
     }
 
@@ -632,48 +609,54 @@ if (commentsError) {
   };
 
   // Check if user has voted this week
+  // Reads from Supabase with localStorage fallback
   const checkVoteStatus = async () => {
     if (!myId) {
       setHasVotedThisWeek(false);
       return;
     }
 
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() + diff);
-    weekStart.setHours(0, 0, 0, 0);
-    const weekStartStr = weekStart.toISOString().split('T')[0];
+    const weekStartStr = getCurrentWeekStart();
 
-    const { data, error } = await supabase
-      .from("weekly_votes")
-      .select("id")
-      .eq("user_id", myId)
-      .eq("week_start", weekStartStr)
-      .limit(1);
+    try {
+      // Try to read from Supabase first
+      const { data, error } = await supabase
+        .from("weekly_post_votes")
+        .select("id")
+        .eq("user_id", myId)
+        .eq("week_start", weekStartStr)
+        .limit(1);
 
-    if (error) {
-      console.error("Error checking vote status:", {
-        error: JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
-        errorMessage: error.message,
-        errorDetails: error.details,
-        errorHint: error.hint,
-        errorCode: error.code,
-      });
-      // On error, assume user hasn't voted to be safe
-      setHasVotedThisWeek(false);
-      return;
+      if (error) {
+        // If Supabase error, fallback to localStorage
+        console.warn("Error reading vote status from Supabase, using localStorage fallback:", error);
+        const storageKey = `weekly_vote_${myId}_${weekStartStr}`;
+        const hasVoted = localStorage.getItem(storageKey) === 'true';
+        setHasVotedThisWeek(hasVoted);
+        return;
+      }
+
+      // Success: check if vote exists
+      setHasVotedThisWeek(!!data && Array.isArray(data) && data.length > 0);
+    } catch (err) {
+      // Handle unexpected exceptions, fallback to localStorage
+      console.error("Exception in checkVoteStatus, using localStorage fallback:", err);
+      try {
+        const storageKey = `weekly_vote_${myId}_${weekStartStr}`;
+        const hasVoted = localStorage.getItem(storageKey) === 'true';
+        setHasVotedThisWeek(hasVoted);
+      } catch (localStorageErr) {
+        // If localStorage also fails, assume user hasn't voted
+        setHasVotedThisWeek(false);
+      }
     }
-
-    setHasVotedThisWeek(!!data && data.length > 0);
   };
 
   // Load weekly posts on mount and when myId changes
   useEffect(() => {
     if (!forcedGameId && !forcedUserId) {
       loadWeeklyPosts();
-      checkVoteStatus();
+      checkVoteStatus(); // checkVoteStatus is async but we don't need to await here
     }
   }, [myId, forcedGameId, forcedUserId]);
 
@@ -715,10 +698,67 @@ if (commentsError) {
   };
 
   // Handle vote
+  // Saves to Supabase with localStorage fallback
   const handleVote = async (postId: string) => {
-    setHasVotedThisWeek(true);
-    await loadWeeklyPosts();
-    await checkVoteStatus();
+    if (!myId) return;
+
+    const weekStartStr = getCurrentWeekStart();
+
+    try {
+      // Try to insert into Supabase first
+      const { data, error } = await supabase
+        .from("weekly_post_votes")
+        .insert({
+          user_id: myId,
+          post_id: postId,
+          week_start: weekStartStr,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        // Check if error is due to unique constraint (already voted)
+        if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+          // User already voted this week
+          setHasVotedThisWeek(true);
+          showNotification("You have already voted this week.", "error");
+          await checkVoteStatus(); // Sync state
+          return;
+        }
+
+        // Other error: fallback to localStorage
+        console.warn("Error saving vote to Supabase, using localStorage fallback:", error);
+        try {
+          const storageKey = `weekly_vote_${myId}_${weekStartStr}`;
+          localStorage.setItem(storageKey, 'true');
+          setHasVotedThisWeek(true);
+          showNotification("Vote recorded (local storage)!", "success");
+        } catch (localStorageErr) {
+          console.error("Error saving vote to localStorage:", localStorageErr);
+          showNotification("Failed to record vote. Please try again.", "error");
+          return;
+        }
+      } else {
+        // Success: vote saved to Supabase
+        setHasVotedThisWeek(true);
+        showNotification("Vote recorded!", "success");
+        
+        // Also save to localStorage as backup
+        try {
+          const storageKey = `weekly_vote_${myId}_${weekStartStr}`;
+          localStorage.setItem(storageKey, 'true');
+        } catch (localStorageErr) {
+          // Ignore localStorage errors if Supabase succeeded
+        }
+      }
+
+      await loadWeeklyPosts();
+      await checkVoteStatus();
+    } catch (err) {
+      // Handle unexpected exceptions
+      console.error("Exception in handleVote:", err);
+      showNotification("Failed to record vote. Please try again.", "error");
+    }
   };
 
 
@@ -2444,35 +2484,62 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
                       if (!confirmed) return;
 
-                      const { data, error } = await supabase
-                        .from("weekly_votes")
-                        .insert({
-                          user_id: myId,
-                          post_id: post.id,
-                          week_start: weekStart.toISOString().split('T')[0],
-                        })
-                        .select();
+                      const weekStartStr = weekStart.toISOString().split('T')[0];
 
-                      if (error) {
-                        // Log full error details for debugging
-                        console.error("Error voting - Full response:", {
-                          error: JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
-                          errorMessage: error.message,
-                          errorDetails: error.details,
-                          errorHint: error.hint,
-                          errorCode: error.code,
-                        });
-                        
-                        // Show meaningful error message
-                        const errorMessage = error.message || error.details || error.hint || "Failed to record vote. Please try again.";
-                        showNotification(`Error: ${errorMessage}`, "error");
-                        return;
+                      try {
+                        // Try to insert into Supabase first
+                        const { data, error } = await supabase
+                          .from("weekly_post_votes")
+                          .insert({
+                            user_id: myId,
+                            post_id: post.id,
+                            week_start: weekStartStr,
+                          })
+                          .select()
+                          .single();
+
+                        if (error) {
+                          // Check if error is due to unique constraint (already voted)
+                          if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+                            setHasVotedThisWeek(true);
+                            showNotification("You have already voted this week.", "error");
+                            await checkVoteStatus();
+                            return;
+                          }
+
+                          // Other error: fallback to localStorage
+                          console.warn("Error saving vote to Supabase, using localStorage fallback:", error);
+                          try {
+                            const storageKey = `weekly_vote_${myId}_${weekStartStr}`;
+                            localStorage.setItem(storageKey, 'true');
+                            setHasVotedThisWeek(true);
+                            showNotification("Vote recorded (local storage)!", "success");
+                          } catch (localStorageErr) {
+                            console.error("Error saving vote to localStorage:", localStorageErr);
+                            showNotification("Failed to record vote. Please try again.", "error");
+                            return;
+                          }
+                        } else {
+                          // Success: vote saved to Supabase
+                          setHasVotedThisWeek(true);
+                          showNotification("Vote recorded!", "success");
+                          
+                          // Also save to localStorage as backup
+                          try {
+                            const storageKey = `weekly_vote_${myId}_${weekStartStr}`;
+                            localStorage.setItem(storageKey, 'true');
+                          } catch (localStorageErr) {
+                            // Ignore localStorage errors if Supabase succeeded
+                          }
+                        }
+
+                        await loadWeeklyPosts();
+                        await checkVoteStatus();
+                      } catch (err) {
+                        // Handle unexpected exceptions
+                        console.error("Exception in vote button onClick:", err);
+                        showNotification("Failed to record vote. Please try again.", "error");
                       }
-
-                      setHasVotedThisWeek(true);
-                      showNotification("Vote recorded!", "success");
-                      await loadWeeklyPosts();
-                      await checkVoteStatus();
                     }}
                     type="button"
                     disabled={hasVotedThisWeek}

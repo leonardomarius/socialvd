@@ -327,15 +327,25 @@ export default function PostCard({
     weekStart.setHours(0, 0, 0, 0);
 
     const { data, error } = await supabase
-      .from("weekly_votes")
+      .from("weekly_post_votes")
       .insert({
         user_id: myId,
         post_id: post.id,
         week_start: weekStart.toISOString().split('T')[0], // YYYY-MM-DD format
       })
-      .select();
+      .select()
+      .single();
 
     if (error) {
+      // Check if error is due to unique constraint (already voted)
+      if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+        // User already voted this week
+        setLocalHasVoted(true);
+        setShowVoteModal(false);
+        // Note: PostCard doesn't have showNotification, so we rely on parent component
+        return;
+      }
+
       // Log full error details for debugging
       console.error("Error voting - Full response:", {
         error: JSON.stringify(error, Object.getOwnPropertyNames(error), 2),

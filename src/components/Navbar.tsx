@@ -274,14 +274,6 @@ useEffect(() => {
               SocialVD
             </Link>
 
-            <Link href="/feed" className="nav-btn">
-              News Feed
-            </Link>
-
-            <Link href="/explore" className="nav-btn">
-              Explore
-            </Link>
-
             {/* --- DAILY QUOTE (ONLY ON /feed) --- */}
             {pathname === "/feed" && (
               <span
