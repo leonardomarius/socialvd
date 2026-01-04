@@ -471,6 +471,13 @@ export default function PostCard({
                 "https://via.placeholder.com/40/333333/FFFFFF?text=?"
               }
               className="avatar"
+              style={{
+                width: "40px",
+                height: "40px",
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "1px solid rgba(156, 163, 175, 0.2)",
+              }}
             />
           </Link>
 
@@ -522,17 +529,6 @@ export default function PostCard({
 {post.media_url && (
   <div
     className={`post-media-wrapper ${variant}`}
-    onMouseEnter={(e) => {
-      const video = e.currentTarget.querySelector("video");
-      if (video) video.play();
-    }}
-    onMouseLeave={(e) => {
-      const video = e.currentTarget.querySelector("video");
-      if (video) {
-        video.pause();
-        video.currentTime = 0;
-      }
-    }}
   >
     {post.media_type === "image" && (
       <img src={post.media_url} className="post-media" />
@@ -541,8 +537,9 @@ export default function PostCard({
     {post.media_type === "video" && (
       <video
         src={post.media_url}
+        autoPlay
         muted
-        loop
+        controls
         playsInline
         preload="metadata"
         className="post-media"
@@ -582,6 +579,20 @@ export default function PostCard({
           </button>
         )}
       </div>
+
+      {/* Comment toggle button */}
+      <button
+        className="btn ghost-btn"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpenComments(!openComments);
+        }}
+        type="button"
+        style={{ marginTop: "12px" }}
+      >
+        {openComments ? "Hide comments" : `Show comments (${tree.length})`}
+      </button>
 
       {/* Comments */}
       {openComments && (

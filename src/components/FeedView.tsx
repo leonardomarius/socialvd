@@ -1771,24 +1771,35 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
 
         {/* Weekly Post Modal */}
         {selectedWeeklyPost && (
-          <div
-            className="modal-backdrop"
-            onClick={() => setSelectedWeeklyPost(null)}
-          >
+          <>
+            <style dangerouslySetInnerHTML={{__html: `
+              .profile-modal-card::-webkit-scrollbar {
+                display: none;
+              }
+              .profile-modal-card {
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+              }
+            `}} />
             <div
-              className="card profile-modal-card"
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: "680px",
-                maxWidth: "90vw",
-                maxHeight: "85vh",
-                overflowY: "auto",
-                overflowX: "hidden",
-                margin: "auto",
-                position: "relative",
-                zIndex: 10000,
-              }}
+              className="modal-backdrop"
+              onClick={() => setSelectedWeeklyPost(null)}
             >
+              <div
+                className="card profile-modal-card"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "680px",
+                  maxWidth: "90vw",
+                  maxHeight: "90vh",
+                  overflowY: "auto",
+                  overflowX: "hidden",
+                  margin: "auto",
+                  position: "relative",
+                  zIndex: 10000,
+                  padding: "18px 22px",
+                }}
+              >
               <button
                 onClick={() => setSelectedWeeklyPost(null)}
                 type="button"
@@ -1821,8 +1832,9 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
                 hasVotedThisWeek={hasVotedThisWeek}
                 onVote={handleVote}
               />
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         {/* Formulaire post */}
