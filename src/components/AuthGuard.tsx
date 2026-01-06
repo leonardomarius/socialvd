@@ -10,15 +10,19 @@ export default function AuthGuard({ children }: any) {
 
   useEffect(() => {
     const check = async () => {
-      const { data } = await supabase.auth.getSession();
+      try {
+        const { data, error } = await supabase.auth.getSession();
 
-      if (!data.session) {
+        if (error || !data.session) {
+          router.replace("/login");
+          return;
+        }
+
+        localStorage.setItem("user_id", data.session.user.id);
+        setLoading(false);
+      } catch {
         router.replace("/login");
-        return;
       }
-
-      localStorage.setItem("user_id", data.session.user.id);
-      setLoading(false);
     };
 
     check();
