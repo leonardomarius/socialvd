@@ -105,10 +105,26 @@ export default function SearchOverlay({
       setLoading(true);
 
       try {
+        // Get access token from Supabase session
+        let accessToken: string | null = null;
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          accessToken = session?.access_token || null;
+        } catch (authError) {
+          // Session not available, will use service_role fallback in API
+        }
+
+        // Build headers with authorization if token is available
+        const headers: HeadersInit = {};
+        if (accessToken) {
+          headers['Authorization'] = `Bearer ${accessToken}`;
+        }
+
         const response = await fetch(
           `/api/search?q=${encodeURIComponent(query.trim())}`,
           {
             signal: abortControllerRef.current?.signal,
+            headers,
           }
         );
 

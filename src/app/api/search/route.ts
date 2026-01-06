@@ -57,23 +57,30 @@ export async function GET(request: Request) {
       return NextResponse.json(emptyResult);
     }
 
-    // Try to get session from cookies first (in case Supabase sets them)
-    const cookieStore = await cookies();
-    const projectRef = supabaseUrl.match(/https?:\/\/([^.]+)\.supabase\.co/)?.[1];
+    // Try to get access token from Authorization header first (most reliable)
+    const authHeader = request.headers.get("Authorization");
     let accessToken: string | null = null;
     let refreshToken: string | null = null;
 
-    if (projectRef) {
-      const authCookieName = `sb-${projectRef}-auth-token`;
-      const authCookie = cookieStore.get(authCookieName);
-      
-      if (authCookie?.value) {
-        try {
-          const sessionData = JSON.parse(authCookie.value);
-          accessToken = sessionData.access_token || null;
-          refreshToken = sessionData.refresh_token || null;
-        } catch {
-          // Cookie exists but not in expected format
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      accessToken = authHeader.substring(7);
+    } else {
+      // Fallback: Try to get session from cookies (in case Supabase sets them)
+      const cookieStore = await cookies();
+      const projectRef = supabaseUrl.match(/https?:\/\/([^.]+)\.supabase\.co/)?.[1];
+
+      if (projectRef) {
+        const authCookieName = `sb-${projectRef}-auth-token`;
+        const authCookie = cookieStore.get(authCookieName);
+        
+        if (authCookie?.value) {
+          try {
+            const sessionData = JSON.parse(authCookie.value);
+            accessToken = sessionData.access_token || null;
+            refreshToken = sessionData.refresh_token || null;
+          } catch {
+            // Cookie exists but not in expected format
+          }
         }
       }
     }
@@ -82,26 +89,41 @@ export async function GET(request: Request) {
     let supabase;
     let executionContext = "anon";
 
-    if (accessToken && refreshToken) {
-      // We have a session from cookies - use authenticated client
-      supabase = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      });
-      
+    if (accessToken) {
+      // We have an access token (from header or cookies) - try authenticated client
       try {
-        await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
+        supabase = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+          global: {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
         });
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          executionContext = `authenticated:${user.id}`;
+        
+        // If we have both tokens, set the full session for better compatibility
+        if (refreshToken) {
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
         }
-      } catch {
+        
+        // Verify the token is valid by getting the user
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (user && !userError) {
+          executionContext = `authenticated:${user.id}`;
+        } else {
+          // Token invalid or expired, fall through to service role
+          supabase = null;
+        }
+      } catch (error) {
         // Session invalid, fall through to service role
+        console.warn("[SEARCH API] Failed to authenticate with token:", error);
+        supabase = null;
       }
     }
 
