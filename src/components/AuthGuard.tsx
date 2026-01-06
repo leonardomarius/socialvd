@@ -1,11 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+
+// ✅ Fonction pour vérifier si le profil est complet
+async function isProfileComplete(userId: string): Promise<boolean> {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("pseudo, bio")
+    .eq("id", userId)
+    .single();
+
+  // Profil complet si pseudo ET bio sont définis
+  return !!(profile && profile.pseudo && profile.bio);
+}
 
 export default function AuthGuard({ children }: any) {
   const router = useRouter();
+  const pathname = usePathname();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,6 +32,16 @@ export default function AuthGuard({ children }: any) {
         }
 
         localStorage.setItem("user_id", data.session.user.id);
+
+        // ✅ Vérifier si le profil est complet (sauf si on est déjà sur /onboarding)
+        if (pathname !== "/onboarding") {
+          const profileComplete = await isProfileComplete(data.session.user.id);
+          if (!profileComplete) {
+            router.replace("/onboarding");
+            return;
+          }
+        }
+
         setLoading(false);
       } catch {
         router.replace("/login");
@@ -26,7 +49,7 @@ export default function AuthGuard({ children }: any) {
     };
 
     check();
-  }, []);
+  }, [router, pathname]);
 
   if (loading) return <p>Chargement...</p>;
 

@@ -75,6 +75,9 @@ const pathname = usePathname();
   const [myId, setMyId] = useState<string | null>(null);
   const [pseudo, setPseudo] = useState<string>("");
 
+  // ✅ ÉTATS EXPLICITES : loading / error / empty
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsError, setPostsError] = useState<string | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
     const [comments, setComments] = useState<Comment[]>([]);
 
@@ -291,11 +294,20 @@ useEffect(() => {
   return () => clearTimeout(timer);
 }, [myId, showNotification]);
 
-// Charger les données (même si myId n'est pas encore prêt)
-// myId sert juste à marquer isLikedByMe, mais les posts doivent apparaître quoi qu'il arrive.
+// ✅ Charger les données avec gestion d'erreur explicite
+// On attend que filterGameId soit stable avant de charger
 useEffect(() => {
-  loadAllData();
-}, [myId, filterGameId, pathname]);
+  // Réinitialiser l'état à chaque changement de filtre
+  setPostsLoading(true);
+  setPostsError(null);
+  
+  // Charger les données (myId peut être null, on gère ça dans loadAllData)
+  loadAllData().catch((err) => {
+    console.error("Error in loadAllData:", err);
+    setPostsError("Failed to load posts. Please refresh the page.");
+    setPostsLoading(false);
+  });
+}, [filterGameId, pathname, forcedGameId, forcedUserId]); // ✅ Retirer myId des dépendances pour éviter les recharges inutiles
 
 
 
@@ -324,51 +336,63 @@ useEffect(() => {
   // Charger posts + commentaires (+ likes)
   // -----------------------------------------------------
   const loadAllData = async () => {
+    try {
+      // ✅ Charger les jeux d'abord (non-bloquant)
       const { data: gamesData, error: gamesError } = await supabase
-    .from("games")
-    .select("id, name, slug")
-    .order("name");
+        .from("games")
+        .select("id, name, slug")
+        .order("name");
 
-  if (gamesError) {
-    console.error(gamesError);
-  } else {
-    setGames(gamesData || []);
-  }
+      if (gamesError) {
+        console.error("Games error:", gamesError);
+      } else {
+        setGames(gamesData || []);
+      }
 
-    let postsQuery = supabase
-  .from("posts")
-  .select(`
-    *,
-    games (
-      id,
-      name,
-      slug
-    ),
-    likes(count)
-  `)
-  .order("created_at", { ascending: false });
+      // ✅ Charger les posts avec gestion d'erreur explicite
+      let postsQuery = supabase
+        .from("posts")
+        .select(`
+          *,
+          games (
+            id,
+            name,
+            slug
+          ),
+          likes(count)
+        `)
+        .order("created_at", { ascending: false });
 
-if (forcedGameId && forcedGameId !== "all") {
-  postsQuery = postsQuery.eq("game_id", forcedGameId);
-}
+      if (forcedGameId && forcedGameId !== "all") {
+        postsQuery = postsQuery.eq("game_id", forcedGameId);
+      }
 
-if (forcedUserId) {
-  postsQuery = postsQuery.eq("user_id", forcedUserId);
-}
+      if (forcedUserId) {
+        postsQuery = postsQuery.eq("user_id", forcedUserId);
+      }
 
+      if (filterGameId !== "all") {
+        postsQuery = postsQuery.eq("game_id", filterGameId);
+      }
 
-if (filterGameId !== "all") {
-  postsQuery = postsQuery.eq("game_id", filterGameId);
-}
+      const { data: postsData, error: postsError } = await postsQuery;
 
-const { data: postsData, error: postsError } = await postsQuery;
+      // ✅ Gestion d'erreur explicite
+      if (postsError) {
+        console.error("Posts error:", postsError);
+        setPostsError("Failed to load posts. Please try again.");
+        setPostsLoading(false);
+        showNotification("Error loading posts", "error");
+        return;
+      }
 
-
-if (postsError) {
-  console.error(postsError);
-  showNotification("Error loading posts", "error");
-  return;
-}
+      // ✅ Si pas d'erreur mais pas de données, c'est un état vide valide
+      if (!postsData) {
+        setPosts([]);
+        setPostsLoading(false);
+        setPostsError(null);
+        return;
+      }
 
 
     const { data: profiles, error: profilesError } = await supabase
@@ -402,44 +426,47 @@ if (postsError) {
       }
     }
 
-    const postsFormatted: Post[] =
-      postsData?.map((p: any) => {
-        const likesArray = p.likes || [];
-        const likesCount =
-          Array.isArray(likesArray) && likesArray[0]?.count
-            ? likesArray[0].count
-            : 0;
+      // ✅ Formater les posts (même si myId est null, on peut afficher les posts)
+      const postsFormatted: Post[] =
+        postsData.map((p: any) => {
+          const likesArray = p.likes || [];
+          const likesCount =
+            Array.isArray(likesArray) && likesArray[0]?.count
+              ? likesArray[0].count
+              : 0;
 
-        return {
-          ...p,
-          avatar_url: avatarMap[p.user_id] || null,
-          likes_count: likesCount,
-          isLikedByMe: !!myLikesMap[p.id],
-        };
-      }) || [];
+          return {
+            ...p,
+            avatar_url: avatarMap[p.user_id] || null,
+            likes_count: likesCount,
+            isLikedByMe: !!myLikesMap[p.id], // ✅ myId peut être null, isLikedByMe sera false
+          };
+        });
 
-    setPosts(postsFormatted);
+      setPosts(postsFormatted);
+      setPostsLoading(false);
+      setPostsError(null);
 
-        const { data: commentsData, error: commentsError } = await supabase
-  .from("comments")
-  .select(`
-    id,
-    post_id,
-    user_id,
-    author_pseudo,
-    content,
-    created_at,
-    parent_id,
-    comment_likes(count)
-  `)
-  .order("created_at", { ascending: true });
+      // ✅ Charger les commentaires (non-bloquant pour l'affichage des posts)
+      const { data: commentsData, error: commentsError } = await supabase
+        .from("comments")
+        .select(`
+          id,
+          post_id,
+          user_id,
+          author_pseudo,
+          content,
+          created_at,
+          parent_id,
+          comment_likes(count)
+        `)
+        .order("created_at", { ascending: true });
 
-
-if (commentsError) {
-  console.error(commentsError);
-  showNotification("Error loading comments", "error");
-  return;
-}
+      // ✅ Erreur de commentaires n'empêche pas l'affichage des posts
+      if (commentsError) {
+        console.error("Comments error:", commentsError);
+        // On continue quand même, les commentaires seront vides
+      }
 
 
     // Formater les commentaires avec le compteur de likes
@@ -480,14 +507,28 @@ if (commentsError) {
       }
     }
 
-    const commentsWithFlags = baseComments.map((c) => ({
-  ...c,
-  isLikedByMe: !!myCommentLikesMap[c.id],
-  avatar_url: avatarMap[c.user_id ?? ""] || null,   // ✅ AJOUT
-}));
+      const commentsWithFlags = (commentsData || []).map((c: any) => {
+        const likesArray = c.comment_likes || [];
+        const likesCount =
+          Array.isArray(likesArray) && likesArray[0]?.count
+            ? likesArray[0].count
+            : 0;
 
+        return {
+          ...c,
+          likes_count: likesCount,
+          isLikedByMe: !!myCommentLikesMap[c.id], // ✅ myId peut être null
+          avatar_url: avatarMap[c.user_id ?? ""] || null,
+        };
+      });
 
-    setComments(commentsWithFlags);
+      setComments(commentsWithFlags);
+    } catch (err) {
+      // ✅ Gestion d'erreur globale
+      console.error("Error in loadAllData:", err);
+      setPostsError("An unexpected error occurred. Please refresh the page.");
+      setPostsLoading(false);
+    }
   };
 
   // -----------------------------------------------------
@@ -2212,8 +2253,43 @@ function renderThreadedComment(comment: CommentNode, depth: number, post: Post) 
         </div>
         )}
 
+        {/* ✅ État de chargement explicite */}
+        {postsLoading && (
+          <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
+            <p style={{ color: "#ffffff", opacity: 0.7 }}>Loading posts...</p>
+          </div>
+        )}
+
+        {/* ✅ État d'erreur explicite */}
+        {postsError && !postsLoading && (
+          <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
+            <p style={{ color: "#f87171", marginBottom: "12px" }}>{postsError}</p>
+            <button
+              className="btn primary-btn"
+              onClick={() => {
+                setPostsLoading(true);
+                setPostsError(null);
+                loadAllData().catch((err) => {
+                  console.error("Error retrying loadAllData:", err);
+                  setPostsError("Failed to load posts. Please refresh the page.");
+                  setPostsLoading(false);
+                });
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* ✅ État vide explicite */}
+        {!postsLoading && !postsError && posts.length === 0 && (
+          <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
+            <p style={{ color: "#ffffff", opacity: 0.7 }}>No posts found.</p>
+          </div>
+        )}
+
         {/* Posts */}
-        {posts.map((post) => {
+        {!postsLoading && !postsError && posts.map((post) => {
           const postComments = comments.filter((c) => c.post_id === post.id);
           const isEditing = editingPostId === post.id;
           const isMenuOpen = openMenuPostId === post.id;

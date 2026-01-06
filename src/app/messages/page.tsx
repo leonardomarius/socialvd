@@ -25,17 +25,23 @@ export default function MessagesPage() {
   const [myId, setMyId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // 🔥 Main loading function
+  // ✅ Main loading function avec gestion d'erreur explicite
   const load = async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData.session) {
-      router.push("/login");
-      return;
-    }
+    try {
+      setLoading(true);
+      setError(null);
 
-    const userId = sessionData.session.user.id;
-    setMyId(userId);
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !sessionData.session) {
+        router.push("/login");
+        return;
+      }
+
+      const userId = sessionData.session.user.id;
+      setMyId(userId);
 
     // 🔥 Filter conversations_users by current user FIRST
     const { data: convUsers } = await supabase
@@ -47,29 +53,38 @@ export default function MessagesPage() {
       new Set(convUsers?.map((c) => c.conversation_id) ?? [])
     );
 
-    if (convIds.length === 0) {
-      setConversations([]);
-      setLoading(false);
-      return;
-    }
+      if (convIds.length === 0) {
+        setConversations([]);
+        setLoading(false);
+        setError(null);
+        return;
+      }
 
-    const { data: convs } = await supabase
-      .from("conversations")
-      .select("*")
-      .in("id", convIds)
-      .order("updated_at", { ascending: false });
+      const { data: convs, error: convsError } = await supabase
+        .from("conversations")
+        .select("*")
+        .in("id", convIds)
+        .order("updated_at", { ascending: false });
 
-    // 🔥 Fetch all participants for all conversations
-    const { data: participants, error: participantsError } = await supabase
-      .from("conversations_users")
-      .select("conversation_id, user_id")
-      .in("conversation_id", convIds);
+      if (convsError) {
+        console.error("Error fetching conversations:", convsError);
+        setError("Failed to load conversations. Please try again.");
+        setLoading(false);
+        return;
+      }
 
-    if (participantsError) {
-      console.error("Error fetching participants:", participantsError);
-      setLoading(false);
-      return;
-    }
+      // ✅ Fetch all participants for all conversations
+      const { data: participants, error: participantsError } = await supabase
+        .from("conversations_users")
+        .select("conversation_id, user_id")
+        .in("conversation_id", convIds);
+
+      if (participantsError) {
+        console.error("Error fetching participants:", participantsError);
+        setError("Failed to load conversation participants. Please try again.");
+        setLoading(false);
+        return;
+      }
 
     // 🔥 Build a map: conversation_id -> other_user_id
     // For each conversation, find the user who is NOT the current user
@@ -163,13 +178,30 @@ export default function MessagesPage() {
       };
     });
 
-    setConversations(fullConvs);
-    setLoading(false);
+      setConversations(fullConvs);
+      setLoading(false);
+      setError(null);
+    } catch (err) {
+      console.error("Exception in load:", err);
+      setError("An unexpected error occurred. Please refresh the page.");
+      setLoading(false);
+    }
   };
 
-  // 🔥 Initial load
+  // ✅ Initial load avec cleanup
   useEffect(() => {
-    load();
+    let mounted = true;
+
+    const init = async () => {
+      await load();
+      if (!mounted) return;
+    };
+
+    init();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
     // 🔥 REALTIME watch messages → reload UNIQUEMENT quand je suis loggé
@@ -218,8 +250,79 @@ export default function MessagesPage() {
       timeStyle: "short",
     });
 
-  if (loading)
-    return <p style={{ color: "white", padding: 20 }}>Loading…</p>;
+  // ✅ État de chargement explicite
+  if (loading) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          display: "flex",
+          justifyContent: "center",
+          marginTop: "40px",
+          padding: "0 20px",
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "700px",
+            background: "rgba(0,0,0,0.80)",
+            borderRadius: "20px",
+            padding: "25px",
+            border: "1px solid rgba(255,255,255,0.15)",
+            textAlign: "center",
+          }}
+        >
+          <p style={{ color: "white", opacity: 0.7 }}>Loading conversations...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ État d'erreur explicite
+  if (error) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          display: "flex",
+          justifyContent: "center",
+          marginTop: "40px",
+          padding: "0 20px",
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "700px",
+            background: "rgba(0,0,0,0.80)",
+            borderRadius: "20px",
+            padding: "25px",
+            border: "1px solid rgba(255,255,255,0.15)",
+            textAlign: "center",
+          }}
+        >
+          <p style={{ color: "#f87171", marginBottom: "16px" }}>{error}</p>
+          <button
+            onClick={() => {
+              setError(null);
+              load();
+            }}
+            style={{
+              padding: "8px 16px",
+              background: "rgba(30, 30, 30, 0.8)",
+              border: "1px solid rgba(100, 100, 100, 0.3)",
+              borderRadius: "6px",
+              color: "#ffffff",
+              cursor: "pointer",
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -5,41 +5,45 @@ import { useEffect, useState } from "react";
 
 export default function PageTransitionLoader({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [loading, setLoading] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [prevPath, setPrevPath] = useState(pathname);
 
   useEffect(() => {
     if (pathname !== prevPath) {
-      setLoading(true);
+      // ✅ Afficher le loader seulement pendant la transition réelle
+      setIsTransitioning(true);
+      setPrevPath(pathname);
 
-      const timeout = setTimeout(() => {
-        setLoading(false);
-        setPrevPath(pathname);
-      }, 600); // durée d’apparition
+      // ✅ Timeout minimum pour éviter le flash, mais ne pas bloquer indéfiniment
+      // Le loader disparaîtra dès que la nouvelle page sera montée
+      const minDisplayTime = setTimeout(() => {
+        setIsTransitioning(false);
+      }, 200); // ✅ Réduit à 200ms pour ne pas masquer les problèmes
 
-      return () => clearTimeout(timeout);
+      // ✅ Cleanup si le composant est démonté avant la fin du timeout
+      return () => {
+        clearTimeout(minDisplayTime);
+        setIsTransitioning(false);
+      };
     }
   }, [pathname, prevPath]);
 
   return (
     <>
-      {loading && (
+      {isTransitioning && (
         <div className="comet-container">
           <div className="comet"></div>
         </div>
       )}
 
-      <div className={loading ? "content dimmed" : "content"}>
+      {/* ✅ Ne pas dimmer le contenu - laisse les pages gérer leur propre état de chargement */}
+      <div className="content">
         {children}
       </div>
 
       <style jsx>{`
         .content {
-          transition: opacity 0.3s ease;
-        }
-
-        .dimmed {
-          opacity: 0.3;
+          /* ✅ Pas de transition d'opacité - laisse les pages gérer leur propre état */
         }
 
         /* Conteneur de la comète */

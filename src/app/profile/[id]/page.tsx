@@ -136,6 +136,8 @@ type Comment = {
     const [showEdit, setShowEdit] = useState(false);
 
     const [profile, setProfile] = useState<Profile | null>(null);
+    const [profileLoading, setProfileLoading] = useState(true);
+    const [profileError, setProfileError] = useState<string | null>(null);
     const [isFollowing, setIsFollowing] = useState(false);
 
     const [userPosts, setUserPosts] = useState<Post[]>([]);
@@ -287,26 +289,78 @@ setLocalLikes(selectedPost.likes ?? 0);
       getUser();
     }, []);
 
-    // Load all profile-related data
+    // ✅ Load profile first
     useEffect(() => {
-      if (!id) return;
-      loadProfile();
+      if (!id) {
+        setProfileError("Invalid profile ID");
+        setProfileLoading(false);
+        return;
+      }
+
+      let mounted = true;
+
+      const init = async () => {
+        await loadProfile();
+        if (!mounted) return;
+      };
+
+      init();
+
+      return () => {
+        mounted = false;
+      };
+    }, [id]);
+
+    // ✅ Load other data after profile is loaded
+    useEffect(() => {
+      if (!id || profileLoading || !profile) return;
+
       loadUserPosts();
       loadFollowCounts();
       loadGameAccounts();
-      checkFollow();
       loadMatesCount();
-    }, [id, myId]);
+    }, [id, profileLoading, profile]);
 
-    // Profile
+    // ✅ Check follow status when myId is available
+    useEffect(() => {
+      if (!id || !myId || profileLoading || !profile) return;
+      checkFollow();
+    }, [myId, id, profileLoading, profile]);
+
+    // ✅ Profile avec gestion d'erreur explicite
     const loadProfile = async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", id)
-        .single();
+      try {
+        setProfileLoading(true);
+        setProfileError(null);
 
-      setProfile(data || null);
+        const { data, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", id)
+          .single();
+
+        if (profileError) {
+          console.error("Profile error:", profileError);
+          // ✅ Distinguer "not found" de "erreur réseau"
+          if (profileError.code === "PGRST116") {
+            setProfileError("Profile not found");
+          } else {
+            setProfileError("Failed to load profile. Please try again.");
+          }
+          setProfile(null);
+          setProfileLoading(false);
+          return;
+        }
+
+        setProfile(data || null);
+        setProfileLoading(false);
+        setProfileError(null);
+      } catch (err) {
+        console.error("Exception in loadProfile:", err);
+        setProfileError("An unexpected error occurred. Please refresh the page.");
+        setProfile(null);
+        setProfileLoading(false);
+      }
     };
 
     // Posts
@@ -724,7 +778,42 @@ const handleToggleFollow = async () => {
       );
     }
 
-    if (!profile) return <p>Profile not found...</p>;
+    // ✅ État de chargement explicite
+    if (profileLoading) {
+      return (
+        <div style={{ padding: 30, textAlign: "center", color: "#ffffff" }}>
+          <p style={{ opacity: 0.7 }}>Loading profile...</p>
+        </div>
+      );
+    }
+
+    // ✅ État d'erreur explicite
+    if (profileError || !profile) {
+      return (
+        <div style={{ padding: 30, textAlign: "center" }}>
+          <p style={{ color: "#f87171", marginBottom: "16px" }}>
+            {profileError || "Profile not found"}
+          </p>
+          <button
+            onClick={() => {
+              setProfileError(null);
+              setProfileLoading(true);
+              loadProfile();
+            }}
+            style={{
+              padding: "8px 16px",
+              background: "rgba(30, 30, 30, 0.8)",
+              border: "1px solid rgba(100, 100, 100, 0.3)",
+              borderRadius: "6px",
+              color: "#ffffff",
+              cursor: "pointer",
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
 
 
     return (
