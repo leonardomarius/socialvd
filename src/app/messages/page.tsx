@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import Image from "next/image";
 import Link from "next/link";
 
 type UserProfile = {
@@ -26,190 +27,169 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
 
   // 🔥 Main loading function
-  const loadConversations = async () => {
-    try {
-      // 1. Vérifier la session
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !sessionData.session) {
-        router.replace("/login");
-        return;
+  const load = async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+      router.push("/login");
+      return;
+    }
+
+    const userId = sessionData.session.user.id;
+    setMyId(userId);
+
+    // 🔥 Filter conversations_users by current user FIRST
+    const { data: convUsers } = await supabase
+      .from("conversations_users")
+      .select("conversation_id")
+      .eq("user_id", userId);
+
+    const convIds = Array.from(
+      new Set(convUsers?.map((c) => c.conversation_id) ?? [])
+    );
+
+    if (convIds.length === 0) {
+      setConversations([]);
+      setLoading(false);
+      return;
+    }
+
+    const { data: convs } = await supabase
+      .from("conversations")
+      .select("*")
+      .in("id", convIds)
+      .order("updated_at", { ascending: false });
+
+    // 🔥 Fetch all participants for all conversations
+    const { data: participants, error: participantsError } = await supabase
+      .from("conversations_users")
+      .select("conversation_id, user_id")
+      .in("conversation_id", convIds);
+
+    if (participantsError) {
+      console.error("Error fetching participants:", participantsError);
+      setLoading(false);
+      return;
+    }
+
+    // 🔥 Build a map: conversation_id -> other_user_id
+    // For each conversation, find the user who is NOT the current user
+    const conversationToOtherUser: Record<string, string> = {};
+    
+    // Group participants by conversation
+    const participantsByConv: Record<string, string[]> = {};
+    (participants ?? []).forEach((p) => {
+      if (!participantsByConv[p.conversation_id]) {
+        participantsByConv[p.conversation_id] = [];
       }
+      participantsByConv[p.conversation_id].push(p.user_id);
+    });
 
-      const userId = sessionData.session.user.id;
-      setMyId(userId);
-
-      // 2. Récupérer les conversation_ids de l'utilisateur
-      const { data: convUsers, error: convUsersError } = await supabase
-        .from("conversations_users")
-        .select("conversation_id")
-        .eq("user_id", userId);
-
-      if (convUsersError) {
-        console.error("Error fetching conversations_users:", convUsersError);
-        setLoading(false);
-        return;
+    // For each conversation, find the other user
+    Object.keys(participantsByConv).forEach((convId) => {
+      const userIds = participantsByConv[convId];
+      const otherUser = userIds.find((uid) => uid !== userId);
+      if (otherUser) {
+        conversationToOtherUser[convId] = otherUser;
       }
+    });
 
-      const convIds = Array.from(
-        new Set((convUsers || []).map((c) => c.conversation_id).filter(Boolean))
-      );
+    // 🔥 Get unique other user IDs
+    const otherIds = Array.from(
+      new Set(Object.values(conversationToOtherUser).filter(Boolean))
+    );
 
-      if (convIds.length === 0) {
-        setConversations([]);
-        setLoading(false);
-        return;
-      }
+    // 🔥 Fetch profiles (only if we have IDs)
+    const profilesMap: Record<string, UserProfile> = {};
+    if (otherIds.length > 0) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, pseudo, avatar_url")
+        .in("id", otherIds);
 
-      // 3. Récupérer les conversations
-      const { data: convs, error: convsError } = await supabase
-        .from("conversations")
-        .select("*")
-        .in("id", convIds)
-        .order("updated_at", { ascending: false });
-
-      if (convsError) {
-        console.error("Error fetching conversations:", convsError);
-        setLoading(false);
-        return;
-      }
-
-      // 4. Récupérer l'autre utilisateur via les messages (contournement RLS)
-      // Comme la RLS ne retourne que notre propre ligne dans conversations_users,
-      // on utilise les messages pour identifier l'autre participant
-      const conversationToOtherUser: Record<string, string> = {};
-      
-      // Récupérer un message par conversation pour identifier les autres senders
-      // On fait une requête pour récupérer tous les messages nécessaires
-      const { data: sampleMessages } = await supabase
-        .from("messages")
-        .select("conversation_id, sender_id")
-        .in("conversation_id", convIds)
-        .neq("sender_id", userId)
-        .order("created_at", { ascending: false });
-
-      // Construire la map conversation_id -> other_user_id
-      if (sampleMessages) {
-        // Pour chaque conversation, prendre le premier sender différent trouvé
-        const seenConversations = new Set<string>();
-        sampleMessages.forEach((msg) => {
-          if (msg.conversation_id && msg.sender_id && !seenConversations.has(msg.conversation_id)) {
-            conversationToOtherUser[msg.conversation_id] = msg.sender_id;
-            seenConversations.add(msg.conversation_id);
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+      } else if (profiles) {
+        profiles.forEach((p) => {
+          if (p && p.id) {
+            profilesMap[p.id] = {
+              id: p.id,
+              pseudo: p.pseudo ?? null,
+              avatar_url: p.avatar_url ?? null,
+            };
           }
         });
       }
-
-      // Pour les conversations où on n'a pas trouvé de message de l'autre,
-      // essayer de récupérer n'importe quel message
-      const missingConvs = convIds.filter((id) => !conversationToOtherUser[id]);
-      if (missingConvs.length > 0) {
-        const { data: anyMessages } = await supabase
-          .from("messages")
-          .select("conversation_id, sender_id")
-          .in("conversation_id", missingConvs)
-          .order("created_at", { ascending: false });
-
-        if (anyMessages) {
-          const seenMissing = new Set<string>();
-          anyMessages.forEach((msg) => {
-            if (
-              msg.conversation_id &&
-              msg.sender_id &&
-              msg.sender_id !== userId &&
-              !conversationToOtherUser[msg.conversation_id] &&
-              !seenMissing.has(msg.conversation_id)
-            ) {
-              conversationToOtherUser[msg.conversation_id] = msg.sender_id;
-              seenMissing.add(msg.conversation_id);
-            }
-          });
-        }
-      }
-
-      // 6. Récupérer les profils des autres utilisateurs
-      const otherIds = Array.from(
-        new Set(Object.values(conversationToOtherUser))
-      ).filter(Boolean);
-
-      const profilesMap: Record<string, UserProfile> = {};
-      if (otherIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
-          .from("profiles")
-          .select("id, pseudo, avatar_url")
-          .in("id", otherIds);
-
-        if (profilesError) {
-          console.error("❌ Error fetching profiles:", profilesError);
-        } else if (profiles && Array.isArray(profiles)) {
-          profiles.forEach((p) => {
-            if (p && p.id) {
-              profilesMap[p.id] = {
-                id: p.id,
-                pseudo: p.pseudo ?? null,
-                avatar_url: p.avatar_url ?? null,
-              };
-            }
-          });
-        }
-      }
-
-      // 7. Récupérer les compteurs unread (messages non lus dont sender_id != myId)
-      const { data: unreadMessages, error: unreadError } = await supabase
-        .from("messages")
-        .select("conversation_id")
-        .eq("seen", false)
-        .neq("sender_id", userId)
-        .in("conversation_id", convIds);
-
-      const unreadCount: Record<string, number> = {};
-      if (!unreadError && unreadMessages) {
-        unreadMessages.forEach((m) => {
-          unreadCount[m.conversation_id] = (unreadCount[m.conversation_id] ?? 0) + 1;
-        });
-      }
-
-      // 8. Construire la liste finale
-      const fullConvs: Conversation[] = (convs || []).map((conv) => {
-        const otherUserId = conversationToOtherUser[conv.id];
-        const profileData = otherUserId ? profilesMap[otherUserId] : null;
-
-        return {
-          id: conv.id,
-          last_message: conv.last_message ?? null,
-          updated_at: conv.updated_at ?? conv.created_at ?? new Date().toISOString(),
-          other_user: profileData || null,
-          unread: unreadCount[conv.id] ?? 0,
-        };
-      });
-
-      setConversations(fullConvs);
-    } catch (error) {
-      console.error("Error in loadConversations:", error);
-    } finally {
-      setLoading(false);
     }
+
+    const { data: unread } = await supabase
+      .from("messages")
+      .select("conversation_id")
+      .eq("seen", false)
+      .neq("sender_id", userId);
+
+    const unreadCount: Record<string, number> = {};
+    unread?.forEach((m) => {
+      unreadCount[m.conversation_id] =
+        (unreadCount[m.conversation_id] ?? 0) + 1;
+    });
+
+    // 🔥 Get the ACTUAL last message
+    const lastMessages: Record<string, string | null> = {};
+
+    for (const convId of convIds) {
+      const { data: lastMsg } = await supabase
+        .from("messages")
+        .select("content")
+        .eq("conversation_id", convId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      lastMessages[convId] = lastMsg?.content ?? null;
+    }
+
+    // 🔥 Map conversations with correct profile lookup
+    const fullConvs: Conversation[] = (convs ?? []).map((conv) => {
+      const otherUserId = conversationToOtherUser[conv.id];
+      const profileData = otherUserId ? profilesMap[otherUserId] : null;
+      const otherUser: UserProfile | null = profileData || null;
+
+      return {
+        id: conv.id,
+        last_message: lastMessages[conv.id],
+        updated_at: conv.updated_at,
+        other_user: otherUser,
+        unread: unreadCount[conv.id] ?? 0,
+      };
+    });
+
+    setConversations(fullConvs);
+    setLoading(false);
   };
 
   // 🔥 Initial load
   useEffect(() => {
-    loadConversations();
+    load();
   }, []);
 
-  // 🔥 REALTIME: écouter les changements de messages
+    // 🔥 REALTIME watch messages → reload UNIQUEMENT quand je suis loggé
   useEffect(() => {
     if (!myId) return;
 
     const channel = supabase
-      .channel("messages-list-realtime-" + myId)
+      .channel("messages-list-" + myId)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "messages",
+          // on s'intéresse surtout aux messages reçus,
+          // mais RLS filtrera de toute façon
+          filter: `sender_id=neq.${myId}`,
         },
         () => {
-          loadConversations();
+          load();
         }
       )
       .on(
@@ -218,9 +198,10 @@ export default function MessagesPage() {
           event: "UPDATE",
           schema: "public",
           table: "messages",
+          filter: `sender_id=neq.${myId}`,
         },
         () => {
-          loadConversations();
+          load();
         }
       )
       .subscribe();
@@ -230,63 +211,35 @@ export default function MessagesPage() {
     };
   }, [myId]);
 
-  const formatDate = (iso: string) => {
-    const date = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    if (diffDays === 0) {
-      return date.toLocaleTimeString("fr-FR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString("fr-FR", { weekday: "short" });
-    } else {
-      return date.toLocaleDateString("fr-FR", {
-        day: "2-digit",
-        month: "2-digit",
-      });
-    }
-  };
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleString("en-US", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
 
-  if (loading) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          display: "flex",
-          justifyContent: "center",
-          marginTop: "40px",
-          padding: "0 20px",
-        }}
-      >
-        <p style={{ color: "white", padding: 20 }}>Chargement…</p>
-      </div>
-    );
-  }
+  if (loading)
+    return <p style={{ color: "white", padding: 20 }}>Loading…</p>;
 
   return (
-    <>
-      <div
-        style={{
-          width: "100%",
-          display: "flex",
-          justifyContent: "center",
-          marginTop: "40px",
-          padding: "0 20px",
-        }}
-      >
+    <div
+      style={{
+        width: "100%",
+        display: "flex",
+        justifyContent: "center",
+        marginTop: "40px",
+        padding: "0 20px",
+      }}
+    >
       <div
         style={{
           width: "100%",
           maxWidth: "700px",
-          background: "rgba(30, 30, 30, 0.8)",
+          background: "rgba(0,0,0,0.80)",
           borderRadius: "20px",
           padding: "25px",
-          border: "1px solid rgba(255, 255, 255, 0.1)",
-          boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
+          border: "1px solid rgba(255,255,255,0.15)",
+          boxShadow: "0 0 35px rgba(0,0,0,0.6)",
         }}
       >
         <h1
@@ -295,7 +248,6 @@ export default function MessagesPage() {
             fontWeight: "bold",
             textAlign: "center",
             marginBottom: "25px",
-            color: "#ffffff",
           }}
         >
           Messages
@@ -303,143 +255,101 @@ export default function MessagesPage() {
 
         {conversations.length === 0 && (
           <p style={{ color: "#bbb", textAlign: "center", marginTop: 30 }}>
-            Aucune conversation.
+            No conversations yet.
           </p>
         )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
           {conversations.map((conv) => {
-            const displayUser = conv.other_user;
+  // 🔥 Resolve display user safely at render time
+  const otherUserId =
+    conv.other_user?.id ??
+    null;
 
-            return (
-              <Link
-                key={conv.id}
-                href={`/messages/${conv.id}`}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "15px",
-                  background: "rgba(20, 20, 20, 0.6)",
-                  padding: "14px",
-                  borderRadius: "14px",
-                  border: "1px solid rgba(255, 255, 255, 0.1)",
-                  textDecoration: "none",
-                  transition: "all 0.2s ease",
-                  cursor: "pointer",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(30, 30, 30, 0.8)";
-                  e.currentTarget.style.borderColor = "rgba(250, 204, 21, 0.3)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "rgba(20, 20, 20, 0.6)";
-                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.1)";
-                }}
-              >
-                {displayUser?.avatar_url ? (
-                  <img
-                    src={displayUser.avatar_url}
-                    alt={displayUser.pseudo ?? "Avatar"}
-                    className="avatar"
-                  />
-                ) : (
-                  <div
-                    className="avatar"
-                    style={{
-                      background: "rgba(100, 100, 100, 0.3)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#999",
-                      fontSize: "18px",
-                    }}
-                  >
-                    ?
-                  </div>
-                )}
+  const displayUser =
+    otherUserId && conv.other_user
+      ? conv.other_user
+      : conv.other_user;
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 4,
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontWeight: "600",
-                        fontSize: "15px",
-                        color: "#ffffff",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {displayUser?.pseudo ?? "Utilisateur inconnu"}
-                    </p>
+  return (
+    <Link
+      key={conv.id}
+      href={`/messages/${conv.id}`}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "15px",
+        background: "rgba(20,20,20,0.9)",
+        padding: "14px",
+        borderRadius: "14px",
+        border: "1px solid rgba(255,255,255,0.1)",
+        textDecoration: "none",
+        transition: "0.2s",
+      }}
+    >
 
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        color: "#aaa",
-                        marginLeft: "8px",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {formatDate(conv.updated_at)}
-                    </span>
-                  </div>
+              <Image
+  src={displayUser?.avatar_url || "/default-avatar.png"}
+  width={50}
+  height={50}
+  alt={displayUser?.pseudo ?? "User avatar"}
+  style={{ borderRadius: "50%" }}
+/>
 
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: 4,
+                  }}
+                >
                   <p
                     style={{
-                      fontSize: "13px",
-                      color: "#ddd",
+                      fontWeight: "600",
+                      fontSize: "15px",
+                      color: "white",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {conv.last_message ?? "Nouvelle conversation"}
+                    {displayUser?.pseudo ?? "Unknown user"}
                   </p>
+
+                  <span style={{ fontSize: "11px", color: "#aaa" }}>
+                    {formatDate(conv.updated_at)}
+                  </span>
                 </div>
 
-                {conv.unread > 0 && (
-                  <span
-                    style={{
-                      background: "#facc15",
-                      width: "22px",
-                      height: "22px",
-                      borderRadius: "50%",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      fontSize: "11px",
-                      fontWeight: "bold",
-                      color: "#000",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {conv.unread > 99 ? "99+" : conv.unread}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+                <p style={{ fontSize: "13px", color: "#ddd" }}>
+                  {conv.last_message ?? "New conversation"}
+                </p>
+              </div>
+
+              {conv.unread > 0 && (
+                <span
+                  style={{
+                    background: "red",
+                    width: "22px",
+                    height: "22px",
+                    borderRadius: "50%",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    fontSize: "11px",
+                    fontWeight: "bold",
+                    color: "white",
+                  }}
+                >
+                  {conv.unread}
+                </span>
+              )}
+            </Link>
+          )})}
         </div>
       </div>
     </div>
-
-    <style jsx>{`
-      .avatar {
-        width: 46px;
-        height: 46px;
-        object-fit: cover;
-        border-radius: 999px;
-        border: 1px solid rgba(156, 163, 175, 0.2);
-      }
-    `}</style>
-    </>
   );
 }
