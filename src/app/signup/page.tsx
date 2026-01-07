@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AmbientGlow from "@/components/background/AmbientGlow";
@@ -25,44 +25,26 @@ export default function SignupPage() {
     "I keep this place safe. You're good.",
   ];
 
-  // ✅ Vérifier les paramètres d'erreur dans l'URL (après retour OAuth)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const errorParam = params.get("error");
-    if (errorParam) {
-      setErrorMsg(errorParam);
-      // Nettoyer l'URL
-      window.history.replaceState({}, document.title, window.location.pathname);
+  const handleGoogleSignup = async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
-  }, []);
 
-  const handleGoogleSignup = async () => {
     setGoogleLoading(true);
     setErrorMsg(null);
-    
-    try {
-      // Lancer OAuth - la redirection vers Google se fait automatiquement
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-      
-      // Si erreur immédiate (rare, avant redirection), afficher l'erreur
-      if (error) {
-        setErrorMsg("Google authentication failed. Please try again.");
-        setGoogleLoading(false);
-      }
-      // Si pas d'erreur, la redirection vers Google se fait automatiquement
-      // L'utilisateur sera redirigé vers Google, puis vers /auth/callback
-      // qui gérera le succès ou l'échec
-    } catch (err) {
-      // Erreur lors de l'appel OAuth (exception)
-      console.error("Exception in Google signup:", err);
-      setErrorMsg("Google authentication failed. Please try again.");
-      setGoogleLoading(false);
-    }
+
+    // Lancer OAuth - la redirection vers Google se fait automatiquement
+    // Ne pas utiliser try/catch car la redirection est un comportement normal
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    // Si pas d'erreur, la redirection vers Google se fait automatiquement
+    // L'utilisateur quitte cette page, donc pas besoin de réinitialiser googleLoading
   };
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -366,6 +348,7 @@ if (mindsetError) {
         </div>
 
         <button
+          type="button"
           onClick={handleGoogleSignup}
           disabled={loading || googleLoading}
           style={{

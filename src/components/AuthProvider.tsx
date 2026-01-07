@@ -63,34 +63,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         // ✅ Vérifier le profil si l'utilisateur est connecté
         if (initialSession?.user) {
           const currentPath = pathname || window.location.pathname;
-          
-          // Si l'utilisateur est sur /login ou /signup
-          if (currentPath === "/login" || currentPath === "/signup") {
-            // Vérifier si auto-login est activé
-            const autoLoginEnabled = typeof window !== "undefined" && localStorage.getItem("socialvd_auto_login") === "true";
-            
-            // Rediriger UNIQUEMENT si auto-login est explicitement activé par l'utilisateur
-            // Aucune redirection automatique basée sur des tokens OAuth ou session existante
-            if (autoLoginEnabled) {
-              const profileComplete = await isProfileComplete(initialSession.user.id);
-              if (profileComplete) {
-                router.replace("/feed");
-              } else {
-                router.replace("/onboarding");
-              }
-            }
-            // Si auto-login désactivé, ne rien faire - laisser l'utilisateur sur /login
-            return;
-          }
-          
-          // Ne pas vérifier sur les autres pages publiques
-          if (currentPath !== "/onboarding" && !currentPath.startsWith("/auth/")) {
+          // Ne pas vérifier sur les pages publiques
+          if (currentPath !== "/onboarding" && currentPath !== "/login" && currentPath !== "/signup" && !currentPath.startsWith("/auth/")) {
             const profileComplete = await isProfileComplete(initialSession.user.id);
             if (!profileComplete) {
               router.replace("/onboarding");
-            } else if (currentPath === "/") {
-              // Si profil complet et sur la page d'accueil, rediriger vers /feed
-              router.replace("/feed");
             }
           }
         }
@@ -115,40 +92,14 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
-        // ✅ Vérifier le profil après connexion (SIGNED_IN)
-        // Note: Après un clic sur "Continue with Google", l'utilisateur est redirigé vers /auth/callback
-        // qui gère la redirection vers /feed ou /onboarding. Si on arrive ici sur /login avec SIGNED_IN,
-        // c'est probablement une session existante, donc on ne redirige que si auto-login est activé.
-        if (newSession?.user && event === "SIGNED_IN") {
+        // ✅ Vérifier le profil après connexion (SIGNED_IN ou TOKEN_REFRESHED)
+        if (newSession?.user && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
           const currentPath = window.location.pathname;
-          
-          // Si l'utilisateur est sur /login ou /signup après SIGNED_IN
-          if (currentPath === "/login" || currentPath === "/signup") {
-            // Vérifier si auto-login est activé
-            const autoLoginEnabled = typeof window !== "undefined" && localStorage.getItem("socialvd_auto_login") === "true";
-            
-            // Rediriger UNIQUEMENT si auto-login est explicitement activé
-            // Ne pas rediriger automatiquement après SIGNED_IN sans action utilisateur
-            if (autoLoginEnabled) {
-              const profileComplete = await isProfileComplete(newSession.user.id);
-              if (profileComplete) {
-                router.replace("/feed");
-              } else {
-                router.replace("/onboarding");
-              }
-            }
-            // Si auto-login désactivé, ne rien faire - laisser l'utilisateur sur /login
-            return;
-          }
-          
-          // Ne pas vérifier sur les autres pages publiques
-          if (currentPath !== "/onboarding" && !currentPath.startsWith("/auth/")) {
+          // Ne pas vérifier sur les pages publiques
+          if (currentPath !== "/onboarding" && currentPath !== "/login" && currentPath !== "/signup" && !currentPath.startsWith("/auth/")) {
             const profileComplete = await isProfileComplete(newSession.user.id);
             if (!profileComplete) {
               router.replace("/onboarding");
-            } else if (currentPath === "/") {
-              // Si profil complet et sur la page d'accueil, rediriger vers /feed
-              router.replace("/feed");
             }
           }
         }
