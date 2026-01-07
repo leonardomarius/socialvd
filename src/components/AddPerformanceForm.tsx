@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { isCS2Performance } from "@/lib/cs2-utils";
 
 export default function AddPerformanceForm({ userId, onAdded }: { 
   userId: string; 
@@ -16,6 +17,13 @@ export default function AddPerformanceForm({ userId, onAdded }: {
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     setLoading(true);
+
+    // CS2 performances are read-only - synced from backend
+    if (isCS2Performance(gameName)) {
+      alert("CS2 performances are automatically synced from Steam. CS2 stats cannot be added manually.");
+      setLoading(false);
+      return;
+    }
 
     const { error } = await supabase.from("game_performances").insert({
       user_id: userId,
@@ -48,11 +56,20 @@ export default function AddPerformanceForm({ userId, onAdded }: {
 
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: "10px" }}>
-          <label>Game</label>
+          <label>Game (CS2 not allowed - synced automatically)</label>
           <input
             type="text"
             value={gameName}
-            onChange={(e) => setGameName(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              // Prevent CS2 from being entered
+              if (isCS2Performance(value)) {
+                alert("CS2 performances are automatically synced from Steam. CS2 stats cannot be added manually.");
+                return;
+              }
+              setGameName(value);
+            }}
+            placeholder="Game name (not CS2)"
             required
             style={{
               width: "100%",

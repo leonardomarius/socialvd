@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { isCS2Account } from "@/lib/cs2-utils";
 
 export default function AddGameAccountPage() {
   const router = useRouter();
@@ -37,6 +38,13 @@ export default function AddGameAccountPage() {
 
     if (!myId) {
       setErrorMsg("Vous devez être connecté pour ajouter un compte.");
+      return;
+    }
+
+    // CS2 accounts cannot be added manually - they must be synced via backend
+    if (isCS2Account(game)) {
+      setErrorMsg("CS2 accounts must be connected via Steam. CS2 accounts are managed automatically through the backend sync.");
+      setLoading(false);
       return;
     }
 
@@ -105,7 +113,11 @@ export default function AddGameAccountPage() {
             <option value="gta">GTA Online</option>
             <option value="valorant">Valorant</option>
             <option value="cod">Call of Duty</option>
+            {/* CS2 is not available - synced automatically */}
           </select>
+          <p style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+            Note: CS2 accounts are synced automatically from Steam and cannot be added manually.
+          </p>
         </div>
 
         {/* Pseudo */}

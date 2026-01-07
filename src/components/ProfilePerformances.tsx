@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { isCS2Performance } from "@/lib/cs2-utils";
 
 type Performance = {
   id: string;
@@ -52,6 +53,12 @@ export default function ProfilePerformances({
   async function deletePerformance(id: string) {
     if (!myId || myId !== userId) return;
 
+    const perf = performances.find((p) => p.id === id);
+    if (perf && isCS2Performance(perf.game_name)) {
+      alert("CS2 performances are read-only and cannot be deleted manually.");
+      return;
+    }
+
     const confirmDelete = window.confirm("Supprimer cette performance ?");
     if (!confirmDelete) return;
 
@@ -68,6 +75,12 @@ export default function ProfilePerformances({
   // Edit
   // -----------------------------------------
   function startEdit(p: Performance) {
+    // CS2 performances are read-only
+    if (isCS2Performance(p.game_name)) {
+      alert("CS2 performances are read-only and synced from Steam.");
+      return;
+    }
+
     setEditingId(p.id);
     setEditGameName(p.game_name);
     setEditTitle(p.performance_title);
@@ -81,6 +94,14 @@ export default function ProfilePerformances({
 
   async function saveEdit() {
     if (!editingId || !myId || myId !== userId) return;
+
+    // CS2 performances are read-only
+    if (isCS2Performance(editGameName)) {
+      alert("CS2 performances are read-only and cannot be edited manually.");
+      setSavingEdit(false);
+      setEditingId(null);
+      return;
+    }
 
     setSavingEdit(true);
 
@@ -167,8 +188,8 @@ export default function ProfilePerformances({
                   </p>
                 )}
 
-                {/* Action buttons */}
-                {myId === userId && (
+                {/* Action buttons - Hidden for CS2 (read-only) */}
+                {myId === userId && !isCS2Performance(p.game_name) && (
                   <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                     <button onClick={() => startEdit(p)} style={btnEdit}>
                       ✏
@@ -176,6 +197,12 @@ export default function ProfilePerformances({
                     <button onClick={() => deletePerformance(p.id)} style={btnDelete}>
                       🗑
                     </button>
+                  </div>
+                )}
+                {/* CS2 badge for read-only performances */}
+                {isCS2Performance(p.game_name) && (
+                  <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6, fontStyle: "italic" }}>
+                    Synced from Steam
                   </div>
                 )}
               </>

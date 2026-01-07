@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image";
+import { isCS2Performance, isCS2Account, syncCS2Stats } from "@/lib/cs2-utils";
 
 /* ---------------------------------------------
    Types
@@ -70,6 +71,9 @@ export default function EditProfileForm({
   const [accGame, setAccGame] = useState("");
   const [accUsername, setAccUsername] = useState("");
   const [accPlatform, setAccPlatform] = useState("PlayStation");
+  const [gameAccounts, setGameAccounts] = useState<GameAccount[]>([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [syncingCS2, setSyncingCS2] = useState(false);
 
   /* ---------------------------------------------
      Load performances
@@ -88,7 +92,23 @@ export default function EditProfileForm({
 
   useEffect(() => {
     loadPerformances();
+    loadGameAccounts();
   }, []);
+
+  /* ---------------------------------------------
+     Load game accounts
+  --------------------------------------------- */
+  async function loadGameAccounts() {
+    setLoadingAccounts(true);
+    const { data } = await supabase
+      .from("game_accounts")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    setGameAccounts((data || []) as GameAccount[]);
+    setLoadingAccounts(false);
+  }
 
   /* ---------------------------------------------
      Upload avatar
@@ -158,6 +178,13 @@ export default function EditProfileForm({
     e.preventDefault();
     setAdding(true);
 
+    // CS2 performances are read-only - synced from backend
+    if (isCS2Performance(gameName)) {
+      alert("CS2 performances are automatically synced from Steam. Use the 'Sync CS2' button to update your stats.");
+      setAdding(false);
+      return;
+    }
+
     if (performances.length >= 4) {
       alert("You can only add up to 4 performances.");
       setAdding(false);
@@ -185,6 +212,12 @@ export default function EditProfileForm({
      Delete performance
   --------------------------------------------- */
   const deletePerformance = async (id: string) => {
+    const perf = performances.find((p) => p.id === id);
+    if (perf && isCS2Performance(perf.game_name)) {
+      alert("CS2 performances are read-only and cannot be deleted manually.");
+      return;
+    }
+
     const ok = confirm("Delete this performance?");
     if (!ok) return;
 
@@ -197,6 +230,12 @@ export default function EditProfileForm({
      Edit performance
   --------------------------------------------- */
   const startEdit = (p: Performance) => {
+    // CS2 performances are read-only
+    if (isCS2Performance(p.game_name)) {
+      alert("CS2 performances are read-only and synced from Steam.");
+      return;
+    }
+
     setEditingId(p.id);
     setEditGameName(p.game_name);
     setEditTitle(p.performance_title);
@@ -205,6 +244,13 @@ export default function EditProfileForm({
 
   const saveEdit = async () => {
     if (!editingId) return;
+
+    // CS2 performances are read-only
+    if (isCS2Performance(editGameName)) {
+      alert("CS2 performances are read-only and cannot be edited manually.");
+      setEditingId(null);
+      return;
+    }
 
     const { error } = await supabase
       .from("game_performances")
@@ -218,6 +264,25 @@ export default function EditProfileForm({
     if (!error) {
       setEditingId(null);
       loadPerformances();
+    }
+  };
+
+  /* ---------------------------------------------
+     Sync CS2 stats
+  --------------------------------------------- */
+  const handleSyncCS2 = async () => {
+    setSyncingCS2(true);
+    const result = await syncCS2Stats(supabase, userId);
+    setSyncingCS2(false);
+
+    if (result.success) {
+      alert("CS2 stats sync initiated. Your stats will be updated shortly.");
+      // Reload performances after a short delay to allow sync to process
+      setTimeout(() => {
+        loadPerformances();
+      }, 2000);
+    } else {
+      alert(`Failed to sync CS2 stats: ${result.error || "Unknown error"}`);
     }
   };
 
@@ -381,11 +446,19 @@ export default function EditProfileForm({
             <p style={{ opacity: 0.7 }}>{p.performance_value}</p>
           )}
 
-          {/* Buttons */}
-          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-            <button onClick={() => startEdit(p)} style={btnIcon}>✏</button>
-            <button onClick={() => deletePerformance(p.id)} style={btnDelete}>🗑</button>
-          </div>
+          {/* Buttons - Hidden for CS2 performances (read-only) */}
+          {!isCS2Performance(p.game_name) && (
+            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+              <button onClick={() => startEdit(p)} style={btnIcon}>✏</button>
+              <button onClick={() => deletePerformance(p.id)} style={btnDelete}>🗑</button>
+            </div>
+          )}
+          {/* CS2 badge for read-only performances */}
+          {isCS2Performance(p.game_name) && (
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.6, fontStyle: "italic" }}>
+              Synced from Steam
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -428,6 +501,58 @@ export default function EditProfileForm({
       {/* GAME ACCOUNTS */}
       <h2 style={{ marginTop: 40 }}>Game accounts</h2>
 
+      {/* CS2 Sync Button */}
+      {gameAccounts.some((acc) => isCS2Account(acc.game)) && (
+        <div style={{ marginBottom: 20 }}>
+          <button
+            onClick={handleSyncCS2}
+            disabled={syncingCS2}
+            style={{
+              ...saveBtn,
+              background: syncingCS2 ? "rgba(80,80,80,0.5)" : "rgba(80,120,255,0.85)",
+              cursor: syncingCS2 ? "not-allowed" : "pointer",
+              opacity: syncingCS2 ? 0.6 : 1,
+            }}
+          >
+            {syncingCS2 ? "Syncing CS2..." : "Sync CS2 Stats"}
+          </button>
+          <p style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}>
+            Sync your CS2 stats from Steam
+          </p>
+        </div>
+      )}
+
+      {/* Display existing CS2 accounts (read-only) */}
+      {gameAccounts.filter((acc) => isCS2Account(acc.game)).length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 16, marginBottom: 10 }}>CS2 Account (Read-only)</h3>
+          {gameAccounts
+            .filter((acc) => isCS2Account(acc.game))
+            .map((acc) => (
+              <div
+                key={acc.id}
+                style={{
+                  ...perfCard,
+                  opacity: 0.8,
+                  borderColor: "rgba(255,255,255,0.15)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <strong>{acc.game}</strong>
+                    <p style={{ margin: "4px 0", opacity: 0.8 }}>Username: {acc.username}</p>
+                    <p style={{ margin: "4px 0", opacity: 0.8 }}>Platform: {acc.platform || "Steam"}</p>
+                    <p style={{ margin: "4px 0", fontSize: 12, opacity: 0.6, fontStyle: "italic" }}>
+                      {acc.verified ? "✓ Verified" : "⏳ Syncing..."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
+
+      {/* Add non-CS2 game accounts */}
       <div
         style={{
           display: "flex",
@@ -438,9 +563,17 @@ export default function EditProfileForm({
         }}
       >
         <input
-          placeholder="Game"
+          placeholder="Game (not CS2)"
           value={accGame}
-          onChange={(e) => setAccGame(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            // Prevent CS2 from being entered manually
+            if (isCS2Account(value)) {
+              alert("CS2 accounts must be connected via Steam. Use the sync button if you already have a CS2 account linked.");
+              return;
+            }
+            setAccGame(value);
+          }}
           style={{
             ...inputField,
             flex: "1",
@@ -483,6 +616,12 @@ export default function EditProfileForm({
               return;
             }
 
+            // Prevent CS2 from being added manually
+            if (isCS2Account(accGame)) {
+              alert("CS2 accounts must be connected via Steam. CS2 accounts are managed automatically.");
+              return;
+            }
+
             await supabase.from("game_accounts").insert({
               user_id: userId,
               game: accGame,
@@ -496,6 +635,7 @@ export default function EditProfileForm({
             setAccPlatform("PlayStation");
 
             alert("Account successfully registered in your game accounts.");
+            loadGameAccounts();
           }}
           style={{
             padding: "10px 16px",
@@ -512,7 +652,9 @@ export default function EditProfileForm({
       </div>
 
       <p style={{ opacity: 0.6, marginTop: 10 }}>
-        Your game accounts are successfully stored.
+        {gameAccounts.some((acc) => isCS2Account(acc.game))
+          ? "CS2 accounts are synced from Steam. Other game accounts can be added manually."
+          : "Your game accounts are successfully stored."}
       </p>
     </div>
   );

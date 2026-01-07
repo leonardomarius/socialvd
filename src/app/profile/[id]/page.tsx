@@ -9,6 +9,7 @@
   import MateButton from "@/components/MateButton";
   import { XMarkIcon, HeartIcon } from "@heroicons/react/24/outline";
   import { HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
+  import { isCS2Account } from "@/lib/cs2-utils";
 
   // 🔥 AJOUT — IMPORT
   import MateSessionButton from "@/components/MateSessionButton";
@@ -689,6 +690,12 @@ const handleToggleFollow = async () => {
 
     // Game account editing
     const startEditAccount = (acc: GameAccount) => {
+      // CS2 accounts are read-only
+      if (isCS2Account(acc.game)) {
+        alert("CS2 accounts are read-only and synced from Steam.");
+        return;
+      }
+
       setEditingAccountId(acc.id);
       setEditGame(acc.game);
       setEditUsername(acc.username);
@@ -702,6 +709,14 @@ const handleToggleFollow = async () => {
 
     const saveEditAccount = async () => {
       if (!editingAccountId) return;
+
+      // CS2 accounts are read-only
+      if (isCS2Account(editGame)) {
+        alert("CS2 accounts are read-only and cannot be edited manually.");
+        setEditingAccountId(null);
+        setSavingEdit(false);
+        return;
+      }
 
       setSavingEdit(true);
 
@@ -727,6 +742,12 @@ const handleToggleFollow = async () => {
     };
 
     const deleteAccount = async (accountId: string) => {
+      const acc = gameAccounts.find((a) => a.id === accountId);
+      if (acc && isCS2Account(acc.game)) {
+        alert("CS2 accounts are read-only and cannot be deleted manually.");
+        return;
+      }
+
       const confirmDelete = window.confirm(
         "Delete this game account? This action is permanent."
       );
@@ -1530,10 +1551,18 @@ const handleToggleFollow = async () => {
               padding: 14,
               borderRadius: 12,
               background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.10)",
+              border: isCS2Account(acc.game) ? "1px solid rgba(80,120,255,0.3)" : "1px solid rgba(255,255,255,0.10)",
+              opacity: isCS2Account(acc.game) ? 0.9 : 1,
             }}
           >
-            <p style={{ color: "#fff" }}><b>Game:</b> {acc.game}</p>
+            <p style={{ color: "#fff" }}>
+              <b>Game:</b> {acc.game}
+              {isCS2Account(acc.game) && (
+                <span style={{ fontSize: 11, marginLeft: 8, opacity: 0.7, fontStyle: "italic" }}>
+                  (Read-only, synced from Steam)
+                </span>
+              )}
+            </p>
             <p style={{ color: "#ddd" }}><b>Username:</b> {acc.username}</p>
             <p style={{ color: "#aaa" }}><b>Platform:</b> {acc.platform}</p>
             <p style={{ marginTop: 6, color: acc.verified ? "lightgreen" : "orange" }}>
