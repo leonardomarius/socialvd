@@ -75,9 +75,13 @@ export default function Navbar() {
 
  // --- AUTH (IMPORTANT : initialise logged + myId + compteurs initiaux)
 useEffect(() => {
+  let mounted = true;
+
   const load = async () => {
     const { data } = await supabase.auth.getUser();
     const user = data.user;
+
+    if (!mounted) return;
 
     if (!user) {
       setLogged(false);
@@ -96,22 +100,32 @@ useEffect(() => {
       .eq("id", user.id)
       .single();
 
+    if (!mounted) return;
+
     if (profile) {
       setPseudo(profile.pseudo || "");
     }
 
-    await Promise.all([
-      loadNotifications(user.id),
-      loadNavbarCounts(user.id),
-    ]);
+    if (mounted) {
+      await Promise.all([
+        loadNotifications(user.id),
+        loadNavbarCounts(user.id),
+      ]);
+    }
   };
 
   load();
+
+  return () => {
+    mounted = false;
+  };
 }, []);
 
 // --- REALTIME — messages + notifications
 useEffect(() => {
   if (!myId) return;
+
+  let mounted = true;
 
   // --- Channel messages ---
   const msgChannel = supabase
@@ -125,7 +139,9 @@ useEffect(() => {
         filter: `sender_id=neq.${myId}`, // messages reçus uniquement
       },
       () => {
-        loadNavbarCounts(myId); // message reçu → +1
+        if (mounted) {
+          loadNavbarCounts(myId); // message reçu → +1
+        }
       }
     )
     .on(
@@ -137,7 +153,7 @@ useEffect(() => {
         filter: `sender_id=neq.${myId}`,
       },
       (payload) => {
-        if (payload.new.seen === true && payload.old.seen === false) {
+        if (mounted && payload.new.seen === true && payload.old.seen === false) {
           loadNavbarCounts(myId); // message lu → -1
         }
       }
@@ -156,7 +172,9 @@ useEffect(() => {
         filter: `user_id=eq.${myId}`,
       },
       () => {
-        loadNotifications(myId); // nouvelle notif → +1
+        if (mounted) {
+          loadNotifications(myId); // nouvelle notif → +1
+        }
       }
     )
     .on(
@@ -168,7 +186,7 @@ useEffect(() => {
         filter: `user_id=eq.${myId}`,
       },
       (payload) => {
-        if (payload.new.seen === true && payload.old.seen === false) {
+        if (mounted && payload.new.seen === true && payload.old.seen === false) {
           loadNotifications(myId); // notif vue → -1
         }
       }
@@ -177,6 +195,7 @@ useEffect(() => {
 
   // Cleanup
   return () => {
+    mounted = false;
     supabase.removeChannel(msgChannel);
     supabase.removeChannel(notifChannel);
   };

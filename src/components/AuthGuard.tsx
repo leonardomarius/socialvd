@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -16,40 +16,73 @@ async function isProfileComplete(userId: string): Promise<boolean> {
   return !!(profile && profile.pseudo && profile.bio);
 }
 
+// ✅ AuthGuard SIMPLIFIÉ avec gardes persistantes (useRef)
 export default function AuthGuard({ children }: any) {
   const router = useRouter();
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
+  const hasCheckedRef = useRef(false); // ✅ Garde persistante avec useRef
+  const hasRedirectedRef = useRef(false); // ✅ Garde persistante avec useRef
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    // ✅ Ne vérifier qu'une seule fois
+    if (hasCheckedRef.current) {
+      setLoading(false);
+      return;
+    }
+
     const check = async () => {
       try {
         const { data, error } = await supabase.auth.getSession();
 
+        if (!mountedRef.current) return;
+
         if (error || !data.session) {
-          router.replace("/login");
+          if (!hasRedirectedRef.current) {
+            hasRedirectedRef.current = true;
+            router.replace("/login");
+          }
+          hasCheckedRef.current = true;
+          setLoading(false);
           return;
         }
 
         localStorage.setItem("user_id", data.session.user.id);
 
         // ✅ Vérifier si le profil est complet (sauf si on est déjà sur /onboarding)
-        if (pathname !== "/onboarding") {
+        if (pathname !== "/onboarding" && !hasRedirectedRef.current) {
           const profileComplete = await isProfileComplete(data.session.user.id);
-          if (!profileComplete) {
+          if (!profileComplete && !hasRedirectedRef.current) {
+            hasRedirectedRef.current = true;
             router.replace("/onboarding");
+            hasCheckedRef.current = true;
+            setLoading(false);
             return;
           }
         }
 
-        setLoading(false);
+        if (mountedRef.current) {
+          hasCheckedRef.current = true;
+          setLoading(false);
+        }
       } catch {
-        router.replace("/login");
+        if (!mountedRef.current) return;
+        if (!hasRedirectedRef.current) {
+          hasRedirectedRef.current = true;
+          router.replace("/login");
+        }
+        hasCheckedRef.current = true;
+        setLoading(false);
       }
     };
 
     check();
-  }, [router, pathname]);
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [router, pathname]); // ✅ Dépendances stables
 
   if (loading) return <p>Chargement...</p>;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import PostCard, { Post as PostCardPost } from "@/components/PostCard";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -149,13 +149,13 @@ useEffect(() => {
 const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
 
 
-  const showNotification = (
+  const showNotification = useCallback((
     message: string,
     type: "success" | "error" = "success"
   ) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 3000);
-  };
+  }, []); // ✅ Fonction stable
 
   // Fermer le menu ⋮ si clic à l’extérieur
   useEffect(() => {
@@ -170,29 +170,34 @@ const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
   }, []);
 
   // -----------------------------------------------------
-// Vérifier session - VERSION ROBUSTE
+// Vérifier session - VERSION ROBUSTE ET STABLE
 // -----------------------------------------------------
 useEffect(() => {
   let mounted = true;
+  let hasLoaded = false; // ✅ Garde contre les chargements multiples
 
   const loadUser = async () => {
+    if (hasLoaded) return; // ✅ Ne charger qu'une seule fois
+    hasLoaded = true;
+
     try {
       // Méthode principale: getUser() (plus fiable)
       const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (!mounted) return;
 
       if (userError || !userData?.user) {
         // Fallback: getSession()
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         
+        if (!mounted) return;
+
         if (sessionError || !sessionData?.session?.user) {
           console.error("No authenticated user found");
-          if (mounted) {
-            router.push("/login");
-          }
+          router.push("/login");
           return;
         }
 
-        if (!mounted) return;
         const userId = sessionData.session.user.id;
         setMyId(userId);
 
@@ -209,7 +214,6 @@ useEffect(() => {
       }
 
       // getUser() a réussi
-      if (!mounted) return;
       const userId = userData.user.id;
       setMyId(userId);
 
@@ -273,69 +277,14 @@ useEffect(() => {
     mounted = false;
     authListener.subscription.unsubscribe();
   };
-}, []); // Exécuter seulement au montage du composant
+}, []); // ✅ Exécuter seulement au montage du composant - PAS de dépendances instables
 
-// Vérifier si myId n'est pas chargé après un délai (safety check)
-useEffect(() => {
-  const timer = setTimeout(() => {
-    if (!myId) {
-      // Vérifier une dernière fois avec getUser()
-      supabase.auth.getUser().then(({ data, error }) => {
-        if (!error && data?.user) {
-          setMyId(data.user.id);
-        } else {
-          // Afficher une notification si vraiment pas de session
-          showNotification("Your session could not be loaded. Please refresh the page.", "error");
-        }
-      });
-    }
-  }, 2000); // Attendre 2 secondes avant de vérifier
-
-  return () => clearTimeout(timer);
-}, [myId, showNotification]);
-
-// ✅ Charger les données avec gestion d'erreur explicite
-// On attend que filterGameId soit stable avant de charger
-useEffect(() => {
-  // Réinitialiser l'état à chaque changement de filtre
-  setPostsLoading(true);
-  setPostsError(null);
-  
-  // Charger les données (myId peut être null, on gère ça dans loadAllData)
-  loadAllData().catch((err) => {
-    console.error("Error in loadAllData:", err);
-    setPostsError("Failed to load posts. Please refresh the page.");
-    setPostsLoading(false);
-  });
-}, [filterGameId, pathname, forcedGameId, forcedUserId]); // ✅ Retirer myId des dépendances pour éviter les recharges inutiles
-
-
-
-useEffect(() => {
-  // 1) Forced (ex: page /games/[slug])
-  if (forcedGameId) {
-    setFilterGameId(forcedGameId);
-    return;
-  }
-
-  // 2) URL param ?game=
-  const gameFromUrl = searchParams.get("game");
-  if (gameFromUrl) {
-    setFilterGameId(gameFromUrl);
-    return;
-  }
-
-  // 3) Retour sur /feed sans param → reset propre
-  if (pathname === "/feed") {
-    setFilterGameId("all");
-  }
-}, [pathname, searchParams, forcedGameId]);
-
+// ✅ SUPPRIMÉ : Le safety check après 2 secondes causait des re-renders inutiles
 
   // -----------------------------------------------------
   // Charger posts + commentaires (+ likes)
   // -----------------------------------------------------
-  const loadAllData = async () => {
+  const loadAllData = useCallback(async () => {
     try {
       // ✅ Charger les jeux d'abord (non-bloquant)
       const { data: gamesData, error: gamesError } = await supabase
@@ -529,7 +478,69 @@ useEffect(() => {
       setPostsError("An unexpected error occurred. Please refresh the page.");
       setPostsLoading(false);
     }
+  }, [myId, filterGameId, forcedGameId, forcedUserId, showNotification]); // ✅ Dépendances stables
+
+// ✅ Charger les données avec gestion d'erreur explicite
+// On attend que filterGameId soit stable avant de charger
+useEffect(() => {
+  let mounted = true;
+  let isLoading = false; // ✅ Garde contre les chargements simultanés
+
+  const loadData = async () => {
+    if (isLoading) return; // ✅ Éviter les chargements simultanés
+    isLoading = true;
+
+    // Réinitialiser l'état à chaque changement de filtre
+    if (mounted) {
+      setPostsLoading(true);
+      setPostsError(null);
+    }
+    
+    try {
+      // Charger les données (myId peut être null, on gère ça dans loadAllData)
+      await loadAllData();
+    } catch (err) {
+      console.error("Error in loadAllData:", err);
+      if (mounted) {
+        setPostsError("Failed to load posts. Please refresh the page.");
+        setPostsLoading(false);
+      }
+    } finally {
+      isLoading = false;
+    }
   };
+
+  loadData();
+
+  return () => {
+    mounted = false;
+  };
+}, [filterGameId, pathname, forcedGameId, forcedUserId, loadAllData]); // ✅ Ajouter loadAllData qui est maintenant stable
+
+
+
+useEffect(() => {
+  // ✅ Garde contre les modifications multiples
+  let currentFilter = filterGameId;
+
+  // 1) Forced (ex: page /games/[slug])
+  if (forcedGameId && forcedGameId !== currentFilter) {
+    setFilterGameId(forcedGameId);
+    return;
+  }
+
+  // 2) URL param ?game=
+  const gameFromUrl = searchParams.get("game");
+  if (gameFromUrl && gameFromUrl !== currentFilter) {
+    setFilterGameId(gameFromUrl);
+    return;
+  }
+
+  // 3) Retour sur /feed sans param → reset propre
+  if (pathname === "/feed" && currentFilter !== "all" && !forcedGameId && !gameFromUrl) {
+    setFilterGameId("all");
+  }
+}, [pathname, searchParams, forcedGameId, filterGameId]); // ✅ Ajouter filterGameId pour éviter les boucles
 
   // -----------------------------------------------------
   // Helper: Calculate current week start (Monday)

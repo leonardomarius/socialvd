@@ -9,9 +9,13 @@ export default function AuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const [hasProcessed, setHasProcessed] = useState(false); // ✅ Garde contre les traitements multiples
 
   useEffect(() => {
+    if (hasProcessed) return; // ✅ Ne traiter qu'une seule fois
+
     const handleCallback = async () => {
+      setHasProcessed(true); // ✅ Marquer comme traité immédiatement
       try {
         // Récupérer les paramètres de l'URL
         const errorParam = searchParams.get("error");
@@ -100,7 +104,7 @@ export default function AuthCallbackPage() {
     };
 
     handleCallback();
-  }, [router, searchParams]);
+  }, [router, searchParams, hasProcessed]); // ✅ Ajouter hasProcessed pour éviter les re-traitements
 
   return (
     <div

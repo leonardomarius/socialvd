@@ -22,13 +22,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={interTight.className}>
       <body style={{ minHeight: "100vh", margin: 0 }}>
-        {/* Gestion session Supabase */}
+        {/* ✅ Gestion session Supabase - NE BLOQUE JAMAIS le render */}
         <AuthProvider>
-          {/* Loader transition */}
+          {/* ✅ Loader transition - non-bloquant */}
           <PageTransitionLoader>
-            {/* Navbar dynamique */}
+            {/* ✅ Navbar dynamique - non-bloquant */}
             <NavWrapper />
 
+            {/* ✅ Main content - toujours rendu, même si loading */}
             <main
               style={{
                 maxWidth: "800px",

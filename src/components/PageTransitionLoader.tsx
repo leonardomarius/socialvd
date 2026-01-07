@@ -1,18 +1,18 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 export default function PageTransitionLoader({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [prevPath, setPrevPath] = useState(pathname);
+  const prevPathRef = useRef(pathname); // ✅ Utiliser useRef pour éviter les dépendances instables
 
   useEffect(() => {
-    if (pathname !== prevPath) {
+    if (pathname !== prevPathRef.current) {
       // ✅ Afficher le loader seulement pendant la transition réelle
       setIsTransitioning(true);
-      setPrevPath(pathname);
+      prevPathRef.current = pathname; // ✅ Mettre à jour la ref immédiatement
 
       // ✅ Timeout minimum pour éviter le flash, mais ne pas bloquer indéfiniment
       // Le loader disparaîtra dès que la nouvelle page sera montée
@@ -26,7 +26,7 @@ export default function PageTransitionLoader({ children }: { children: React.Rea
         setIsTransitioning(false);
       };
     }
-  }, [pathname, prevPath]);
+  }, [pathname]); // ✅ Retirer prevPath des dépendances - on utilise une ref
 
   return (
     <>

@@ -36,22 +36,49 @@ export default function ProfilePage({ params }: any) {
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
 
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
+    let mounted = true;
+    let hasLoaded = false; // ✅ Garde contre les chargements multiples
+
     const getUser = async () => {
+      if (hasLoaded) return;
+      hasLoaded = true;
+
       const { data } = await supabase.auth.getUser();
-      setMyId(data.user?.id || null);
+      if (mounted) {
+        setMyId(data.user?.id || null);
+        setLoading(false);
+      }
     };
     getUser();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
-  if (!id || !myId) return;
+    if (!id || !myId || loading) return; // ✅ Attendre que myId soit chargé
 
-  loadProfile();
-  loadPosts();
-  loadFollowCounts();
-  checkFollow();
-}, [id, myId]);
+    let mounted = true;
+
+    const loadAll = async () => {
+      await Promise.all([
+        loadProfile(),
+        loadPosts(),
+        loadFollowCounts(),
+        checkFollow(),
+      ]);
+    };
+
+    loadAll();
+
+    return () => {
+      mounted = false;
+    };
+  }, [id, myId, loading]);
 
 
   const loadProfile = async () => {
@@ -114,7 +141,7 @@ export default function ProfilePage({ params }: any) {
     loadFollowCounts();
   };
 
-  if (!profile) return <p>Loading...</p>;
+  if (loading || !profile) return <p>Loading...</p>;
 
   return (
     <div
