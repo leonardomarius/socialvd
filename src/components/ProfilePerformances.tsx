@@ -36,14 +36,46 @@ export default function ProfilePerformances({
   }, [userId]);
 
   async function fetchPerf() {
-    const { data } = await supabase
+    // Load non-CS2 performances from legacy table
+    const { data: legacyData } = await supabase
       .from("game_performances")
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(4);
 
-    setPerformances((data || []) as Performance[]);
+    // Load CS2 performances from verified table
+    const { data: cs2Data } = await supabase
+      .from("latest_game_performances_verified")
+      .select("*")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(4);
+
+    // Combine and filter: CS2 from verified table, others from legacy
+    const legacyPerformances = (legacyData || []).filter(
+      (p) => !isCS2Performance(p.game_name)
+    ) as Performance[];
+
+    const cs2Performances = (cs2Data || []).map((p) => ({
+      id: p.id || `cs2-${p.user_id}`,
+      user_id: p.user_id,
+      game_name: "CS2",
+      performance_title: p.performance_title || "",
+      performance_value: p.performance_value || null,
+    })) as Performance[];
+
+    // Merge and limit to 4 total
+    const allPerformances = [...cs2Performances, ...legacyPerformances]
+      .sort((a, b) => {
+        // CS2 first, then by date if available
+        if (isCS2Performance(a.game_name) && !isCS2Performance(b.game_name)) return -1;
+        if (!isCS2Performance(a.game_name) && isCS2Performance(b.game_name)) return 1;
+        return 0;
+      })
+      .slice(0, 4);
+
+    setPerformances(allPerformances);
     setLoading(false);
   }
 
@@ -201,8 +233,17 @@ export default function ProfilePerformances({
                 )}
                 {/* CS2 badge for read-only performances */}
                 {isCS2Performance(p.game_name) && (
-                  <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6, fontStyle: "italic" }}>
-                    Synced from Steam
+                  <div style={{ 
+                    marginTop: 12, 
+                    fontSize: 12, 
+                    color: "rgba(80, 200, 120, 0.9)",
+                    fontWeight: 500,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}>
+                    <span style={{ fontSize: 14 }}>✓</span>
+                    <span>Verified • Official Steam Data</span>
                   </div>
                 )}
               </>

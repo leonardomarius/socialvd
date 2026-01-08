@@ -74,39 +74,135 @@ export default function EditProfileForm({
   const [gameAccounts, setGameAccounts] = useState<GameAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [syncingCS2, setSyncingCS2] = useState(false);
+  const [hasSteamCS2Link, setHasSteamCS2Link] = useState(false);
 
   /* ---------------------------------------------
      Load performances
   --------------------------------------------- */
   async function loadPerformances() {
     setLoadingPerf(true);
-    const { data } = await supabase
+    
+    // Load non-CS2 performances from legacy table
+    const { data: legacyData } = await supabase
       .from("game_performances")
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
-    setPerformances((data || []) as Performance[]);
+    // Load CS2 performances from verified table
+    const { data: cs2Data } = await supabase
+      .from("latest_game_performances_verified")
+      .select("*")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false });
+
+    // Combine: CS2 from verified table, others from legacy
+    const legacyPerformances = (legacyData || []).filter(
+      (p) => !isCS2Performance(p.game_name)
+    ) as Performance[];
+
+    const cs2Performances = (cs2Data || []).map((p) => ({
+      id: p.id || `cs2-${p.user_id}`,
+      user_id: p.user_id,
+      game_name: "CS2",
+      performance_title: p.performance_title || "",
+      performance_value: p.performance_value || null,
+    })) as Performance[];
+
+    // Merge: CS2 first, then legacy
+    const allPerformances = [...cs2Performances, ...legacyPerformances];
+
+    setPerformances(allPerformances);
     setLoadingPerf(false);
   }
 
   useEffect(() => {
     loadPerformances();
     loadGameAccounts();
+    checkSteamCS2Link();
   }, []);
+
+  /* ---------------------------------------------
+     Check if user has Steam CS2 link
+  --------------------------------------------- */
+  async function checkSteamCS2Link() {
+    // Get CS2 game_id (assuming slug is 'cs2')
+    const { data: cs2Game } = await supabase
+      .from("games")
+      .select("id")
+      .eq("slug", "cs2")
+      .single();
+
+    if (!cs2Game) {
+      setHasSteamCS2Link(false);
+      return;
+    }
+
+    const { data: link } = await supabase
+      .from("game_account_links")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("game_id", cs2Game.id)
+      .eq("provider", "steam")
+      .is("revoked_at", null)
+      .single();
+
+    setHasSteamCS2Link(!!link);
+  }
 
   /* ---------------------------------------------
      Load game accounts
   --------------------------------------------- */
   async function loadGameAccounts() {
     setLoadingAccounts(true);
-    const { data } = await supabase
+    
+    // Load non-CS2 accounts from legacy table
+    const { data: legacyAccounts } = await supabase
       .from("game_accounts")
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
-    setGameAccounts((data || []) as GameAccount[]);
+    // Load CS2 account from game_account_links
+    const { data: cs2Game } = await supabase
+      .from("games")
+      .select("id")
+      .eq("slug", "cs2")
+      .single();
+
+    let cs2Account: GameAccount | null = null;
+    if (cs2Game) {
+      const { data: cs2Link } = await supabase
+        .from("game_account_links")
+        .select("external_account_id, created_at")
+        .eq("user_id", userId)
+        .eq("game_id", cs2Game.id)
+        .eq("provider", "steam")
+        .is("revoked_at", null)
+        .single();
+
+      if (cs2Link) {
+        cs2Account = {
+          id: `cs2-link-${userId}`,
+          user_id: userId,
+          game: "CS2",
+          username: cs2Link.external_account_id || "Steam Account",
+          platform: "Steam",
+          verified: true, // Steam links are always verified
+        };
+      }
+    }
+
+    // Combine: CS2 from links, others from legacy
+    const legacyAccountsList = (legacyAccounts || []).filter(
+      (acc) => !isCS2Account(acc.game)
+    ) as GameAccount[];
+
+    const allAccounts = cs2Account 
+      ? [cs2Account, ...legacyAccountsList]
+      : legacyAccountsList;
+
+    setGameAccounts(allAccounts);
     setLoadingAccounts(false);
   }
 
@@ -271,6 +367,11 @@ export default function EditProfileForm({
      Sync CS2 stats
   --------------------------------------------- */
   const handleSyncCS2 = async () => {
+    if (!hasSteamCS2Link) {
+      alert("Please connect your Steam account first.");
+      return;
+    }
+
     setSyncingCS2(true);
     const result = await syncCS2Stats(supabase, userId);
     setSyncingCS2(false);
@@ -455,8 +556,17 @@ export default function EditProfileForm({
           )}
           {/* CS2 badge for read-only performances */}
           {isCS2Performance(p.game_name) && (
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.6, fontStyle: "italic" }}>
-              Synced from Steam
+            <div style={{ 
+              marginTop: 10, 
+              fontSize: 12, 
+              color: "rgba(80, 200, 120, 0.9)",
+              fontWeight: 500,
+              display: "flex",
+              alignItems: "center",
+              gap: 6
+            }}>
+              <span style={{ fontSize: 14 }}>✓</span>
+              <span>Verified • Official Steam Data</span>
             </div>
           )}
         </>
@@ -501,8 +611,8 @@ export default function EditProfileForm({
       {/* GAME ACCOUNTS */}
       <h2 style={{ marginTop: 40 }}>Game accounts</h2>
 
-      {/* CS2 Sync Button */}
-      {gameAccounts.some((acc) => isCS2Account(acc.game)) && (
+      {/* CS2 Sync Button or Connect Steam */}
+      {hasSteamCS2Link ? (
         <div style={{ marginBottom: 20 }}>
           <button
             onClick={handleSyncCS2}
@@ -520,6 +630,23 @@ export default function EditProfileForm({
             Sync your CS2 stats from Steam
           </p>
         </div>
+      ) : (
+        <div style={{ marginBottom: 20 }}>
+          <button
+            disabled
+            style={{
+              ...saveBtn,
+              background: "rgba(60,60,60,0.5)",
+              cursor: "not-allowed",
+              opacity: 0.6,
+            }}
+          >
+            Connect Steam
+          </button>
+          <p style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}>
+            Connect your Steam account to sync CS2 stats (coming soon)
+          </p>
+        </div>
       )}
 
       {/* Display existing CS2 accounts (read-only) */}
@@ -534,7 +661,7 @@ export default function EditProfileForm({
                 style={{
                   ...perfCard,
                   opacity: 0.8,
-                  borderColor: "rgba(255,255,255,0.15)",
+                  borderColor: "rgba(80, 200, 120, 0.3)",
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -542,8 +669,17 @@ export default function EditProfileForm({
                     <strong>{acc.game}</strong>
                     <p style={{ margin: "4px 0", opacity: 0.8 }}>Username: {acc.username}</p>
                     <p style={{ margin: "4px 0", opacity: 0.8 }}>Platform: {acc.platform || "Steam"}</p>
-                    <p style={{ margin: "4px 0", fontSize: 12, opacity: 0.6, fontStyle: "italic" }}>
-                      {acc.verified ? "✓ Verified" : "⏳ Syncing..."}
+                    <p style={{ 
+                      margin: "4px 0", 
+                      fontSize: 12, 
+                      color: "rgba(80, 200, 120, 0.9)",
+                      fontWeight: 500,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6
+                    }}>
+                      <span style={{ fontSize: 14 }}>✓</span>
+                      <span>Verified • Official Steam Data</span>
                     </p>
                   </div>
                 </div>

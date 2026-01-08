@@ -428,13 +428,53 @@ setLocalLikes(selectedPost.likes ?? 0);
     const loadGameAccounts = async () => {
       setLoadingGames(true);
 
-      const { data } = await supabase
+      // Load non-CS2 accounts from legacy table
+      const { data: legacyAccounts } = await supabase
         .from("game_accounts")
         .select("*")
         .eq("user_id", id)
         .order("created_at", { ascending: false });
 
-      setGameAccounts((data as GameAccount[]) || []);
+      // Load CS2 account from game_account_links
+      const { data: cs2Game } = await supabase
+        .from("games")
+        .select("id")
+        .eq("slug", "cs2")
+        .single();
+
+      let cs2Account: GameAccount | null = null;
+      if (cs2Game) {
+        const { data: cs2Link } = await supabase
+          .from("game_account_links")
+          .select("external_account_id, created_at")
+          .eq("user_id", id)
+          .eq("game_id", cs2Game.id)
+          .eq("provider", "steam")
+          .is("revoked_at", null)
+          .single();
+
+        if (cs2Link) {
+          cs2Account = {
+            id: `cs2-link-${id}`,
+            game: "CS2",
+            username: cs2Link.external_account_id || "Steam Account",
+            platform: "Steam",
+            verified: true, // Steam links are always verified
+            verification_code: null,
+          };
+        }
+      }
+
+      // Combine: CS2 from links, others from legacy
+      const legacyAccountsList = (legacyAccounts || []).filter(
+        (acc) => !isCS2Account(acc.game)
+      ) as GameAccount[];
+
+      const allAccounts = cs2Account 
+        ? [cs2Account, ...legacyAccountsList]
+        : legacyAccountsList;
+
+      setGameAccounts(allAccounts);
       setLoadingGames(false);
     };
 
@@ -1558,16 +1598,27 @@ const handleToggleFollow = async () => {
             <p style={{ color: "#fff" }}>
               <b>Game:</b> {acc.game}
               {isCS2Account(acc.game) && (
-                <span style={{ fontSize: 11, marginLeft: 8, opacity: 0.7, fontStyle: "italic" }}>
-                  (Read-only, synced from Steam)
+                <span style={{ 
+                  fontSize: 11, 
+                  marginLeft: 8, 
+                  color: "rgba(80, 200, 120, 0.9)",
+                  fontWeight: 500,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4
+                }}>
+                  <span style={{ fontSize: 12 }}>✓</span>
+                  <span>Verified • Official Steam Data</span>
                 </span>
               )}
             </p>
             <p style={{ color: "#ddd" }}><b>Username:</b> {acc.username}</p>
             <p style={{ color: "#aaa" }}><b>Platform:</b> {acc.platform}</p>
-            <p style={{ marginTop: 6, color: acc.verified ? "lightgreen" : "orange" }}>
-              {acc.verified ? "✔ Verified" : "⚠ Not verified"}
-            </p>
+            {!isCS2Account(acc.game) && (
+              <p style={{ marginTop: 6, color: acc.verified ? "lightgreen" : "orange" }}>
+                {acc.verified ? "✔ Verified" : "⚠ Not verified"}
+              </p>
+            )}
           </div>
         ))}
       </div>
