@@ -289,37 +289,27 @@ serve(async (req) => {
 
 /**
  * Helper function pour rediriger vers le frontend
- * Le frontend doit être déterminé depuis l'origine de la requête ou une variable d'environnement
+ * Utilise la variable d'environnement FRONTEND_URL
  */
 function redirectToFrontend(status: "linked" | "error", errorMessage: string | null): Response {
-  // Essayer de déterminer l'URL du frontend
-  // En production, on peut utiliser une variable d'environnement ou déduire depuis SUPABASE_URL
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  // Lire FRONTEND_URL depuis les variables d'environnement
+  const frontendUrl = Deno.env.get("FRONTEND_URL");
   
-  // Si localhost, utiliser le port 3000 (Next.js par défaut)
-  // Sinon, essayer de déduire depuis SUPABASE_URL ou utiliser une variable d'env
-  let frontendUrl: string;
-  
-  if (supabaseUrl.includes("localhost") || supabaseUrl.includes("127.0.0.1")) {
-    frontendUrl = "http://127.0.0.1:3000";
-  } else {
-    // En production, utiliser NEXT_PUBLIC_SITE_URL ou déduire
-    // Pour l'instant, on utilise un pattern commun : remplacer .supabase.co par votre domaine
-    // OU définir une variable d'environnement FRONTEND_URL
-    const frontendUrlEnv = Deno.env.get("FRONTEND_URL");
-    if (frontendUrlEnv) {
-      frontendUrl = frontendUrlEnv;
-    } else {
-      // Fallback: essayer de construire depuis SUPABASE_URL
-      try {
-        const url = new URL(supabaseUrl);
-        // Supposer que le frontend est sur le même domaine mais sans "functions" subdomain
-        frontendUrl = url.origin.replace(/functions\./, "");
-      } catch {
-        // Dernier fallback
-        frontendUrl = "https://your-frontend-domain.com";
-      }
+  if (!frontendUrl) {
+    console.error("FRONTEND_URL environment variable is not set");
+    // Fallback vers socialvd.com en cas d'erreur de configuration
+    const fallbackUrl = "https://socialvd.com";
+    const redirectUrl = new URL("/profile", fallbackUrl);
+    redirectUrl.searchParams.set("steam", status);
+    if (errorMessage && status === "error") {
+      redirectUrl.searchParams.set("error", encodeURIComponent(errorMessage));
     }
+    return new Response(null, {
+      status: 302,
+      headers: {
+        "Location": redirectUrl.toString(),
+      },
+    });
   }
 
   const redirectUrl = new URL("/profile", frontendUrl);
