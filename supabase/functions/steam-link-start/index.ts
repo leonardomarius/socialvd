@@ -34,7 +34,7 @@ serve(async (req) => {
   }
 
   try {
-    // 🔒 Vérifier que la méthode est GET (redirection)
+    // 🔒 Vérifier que la méthode est GET
     if (req.method !== "GET") {
       return new Response("Method not allowed", { 
         status: 405,
