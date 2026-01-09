@@ -366,67 +366,11 @@ export default function EditProfileForm({
   /* ---------------------------------------------
      Connect Steam
   --------------------------------------------- */
-  const handleConnectSteam = async () => {
-    console.log("Connect Steam clicked");
-    
-    try {
-      // 1) Récupérer la session Supabase
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        console.error("Steam link error: No active session", sessionError);
-        alert("Please log in to connect your Steam account.");
-        return;
-      }
-      
-      console.log("Session present, user:", session.user.id);
-      
-      // 2) Extraire access_token
-      const accessToken = session.access_token;
-      
-      // 3) Appeler steam-link-start via fetch avec Authorization Bearer
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      console.log("Calling steam-link-start");
-      
-      const response = await fetch(`${supabaseUrl}/functions/v1/steam-link-start`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-      
-      console.log("Steam link response status:", response.status);
-      
-      // 4) Vérifier res.ok
-      if (!response.ok) {
-        // Lire le body brut pour voir l'erreur exacte
-        const errorText = await response.text().catch(() => "Failed to read error response");
-        console.error("Steam link failed:", response.status, errorText);
-        alert("Failed to connect Steam. Please check the console for details (F12 > Console).");
-        return;
-      }
-      
-      // 5) Parser le JSON { redirect_url }
-      const data = await response.json();
-      console.log("Steam link success payload:", data);
-      const redirectUrl = data.redirect_url;
-      
-      if (!redirectUrl) {
-        console.error("Steam link error: No redirect_url in response", data);
-        alert("Failed to get Steam login URL.");
-        return;
-      }
-      
-      console.log("Redirect URL received, redirecting to Steam");
-      
-      // 6) Rediriger le navigateur
-      window.location.href = redirectUrl;
-      
-    } catch (err) {
-      console.error("Steam link error:", err);
-      alert("An error occurred while connecting Steam. Please try again.");
-    }
+  const handleConnectSteam = () => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const url = `${supabaseUrl}/functions/v1/steam-link-start`;
+    console.log("Redirecting to Steam link start");
+    window.location.href = url;
   };
 
   /* ---------------------------------------------
