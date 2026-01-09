@@ -403,3 +403,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/steam-link-callback/deno.json"
 entrypoint = "./functions/steam-link-callback/index.ts"
+
+[functions.sync-cs2-steam]
+enabled = true
+verify_jwt = false
+import_map = "./functions/sync-cs2-steam/deno.json"
+entrypoint = "./functions/sync-cs2-steam/index.ts"
