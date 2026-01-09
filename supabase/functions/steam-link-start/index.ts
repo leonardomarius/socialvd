@@ -175,14 +175,17 @@ serve(async (req) => {
 
     const steamAuthUrl = `${steamOpenIdUrl}?${openIdParams.toString()}`;
 
-    // 🔄 Rediriger vers Steam
-    return new Response(null, {
-      status: 302,
-      headers: {
-        ...corsHeaders,
-        "Location": steamAuthUrl,
-      },
-    });
+    // 🔄 Retourner l'URL Steam en JSON pour que le frontend redirige
+    return new Response(
+      JSON.stringify({ redirect_url: steamAuthUrl }),
+      {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
   } catch (error) {
     console.error("Error in steam-link-start:", error);
