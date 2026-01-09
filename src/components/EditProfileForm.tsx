@@ -396,16 +396,20 @@ export default function EditProfileForm({
         },
       });
       
+      console.log("Steam link response status:", response.status);
+      
       // 4) Vérifier res.ok
       if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        console.error("Steam link error: Edge function failed", response.status, errorText);
-        alert(`Failed to connect Steam: ${response.status}`);
+        // Lire le body brut pour voir l'erreur exacte
+        const errorText = await response.text().catch(() => "Failed to read error response");
+        console.error("Steam link failed:", response.status, errorText);
+        alert("Failed to connect Steam. Please check the console for details (F12 > Console).");
         return;
       }
       
       // 5) Parser le JSON { redirect_url }
       const data = await response.json();
+      console.log("Steam link success payload:", data);
       const redirectUrl = data.redirect_url;
       
       if (!redirectUrl) {
