@@ -22,10 +22,31 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  */
 
 serve(async (req) => {
+  // Headers CORS
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "https://socialvd.com",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  };
+
+  // Gérer les requêtes OPTIONS (preflight CORS)
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
+  }
+
   try {
     // 🔒 Vérifier que la méthode est GET
     if (req.method !== "GET") {
-      return new Response("Method not allowed", { status: 405 });
+      return new Response("Method not allowed", { 
+        status: 405,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/plain",
+        },
+      });
     }
 
     const url = new URL(req.url);
@@ -308,9 +329,17 @@ function redirectToFrontend(status: "linked" | "error", errorMessage: string | n
     redirectUrl.searchParams.set("error", encodeURIComponent(errorMessage));
   }
 
+  // Headers CORS pour la redirection
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "https://socialvd.com",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  };
+
   return new Response(null, {
     status: 302,
     headers: {
+      ...corsHeaders,
       "Location": redirectUrl.toString(),
     },
   });

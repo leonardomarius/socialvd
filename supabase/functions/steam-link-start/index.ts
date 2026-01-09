@@ -18,10 +18,31 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  */
 
 serve(async (req) => {
+  // Headers CORS
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "https://socialvd.com",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  };
+
+  // Gérer les requêtes OPTIONS (preflight CORS)
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
+  }
+
   try {
     // 🔒 Vérifier que la méthode est GET (redirection)
     if (req.method !== "GET") {
-      return new Response("Method not allowed", { status: 405 });
+      return new Response("Method not allowed", { 
+        status: 405,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/plain",
+        },
+      });
     }
 
     // 🔐 Récupérer l'utilisateur authentifié depuis les headers
@@ -34,7 +55,10 @@ serve(async (req) => {
         JSON.stringify({ error: "Unauthorized - No authentication token" }),
         { 
           status: 401,
-          headers: { "Content-Type": "application/json" }
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          }
         }
       );
     }
@@ -57,7 +81,10 @@ serve(async (req) => {
         JSON.stringify({ error: "Unauthorized - Invalid or missing authentication" }),
         { 
           status: 401,
-          headers: { "Content-Type": "application/json" }
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          }
         }
       );
     }
@@ -81,7 +108,10 @@ serve(async (req) => {
         JSON.stringify({ error: "CS2 game not found in database" }),
         { 
           status: 500,
-          headers: { "Content-Type": "application/json" }
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          }
         }
       );
     }
@@ -149,6 +179,7 @@ serve(async (req) => {
     return new Response(null, {
       status: 302,
       headers: {
+        ...corsHeaders,
         "Location": steamAuthUrl,
       },
     });
@@ -159,7 +190,12 @@ serve(async (req) => {
       JSON.stringify({ error: "Internal server error" }),
       { 
         status: 500,
-        headers: { "Content-Type": "application/json" }
+        headers: {
+          "Access-Control-Allow-Origin": "https://socialvd.com",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Authorization, Content-Type",
+          "Content-Type": "application/json",
+        }
       }
     );
   }
