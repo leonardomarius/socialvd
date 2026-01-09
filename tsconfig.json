@@ -33,5 +33,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
 , "tailwind.config.js"  ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "supabase/functions/**/*"]
 }
