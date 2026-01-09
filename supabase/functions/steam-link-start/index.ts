@@ -9,10 +9,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * Rôle :
  * - Générer une redirection Steam OpenID 2.0
  * - Créer un state sécurisé (HMAC) contenant user_id, game_id (CS2), timestamp
- * - Rediriger vers Steam OpenID
+ * - Rediriger vers Steam OpenID (HTTP 302)
+ * 
+ * Sécurité :
+ * - verify_jwt = false (accessible sans JWT)
+ * - user_id passé en query param (?user_id=<uuid>)
+ * - State signé HMAC-SHA256 avec expiration 10 minutes
+ * - Validation du state dans le callback
  * 
  * Contraintes :
- * - L'utilisateur doit être authentifié (cookie Supabase)
  * - Le front ne fournit PAS le SteamID
  * - Service role uniquement pour DB
  */
@@ -45,16 +50,15 @@ serve(async (req) => {
       });
     }
 
-    // 🔐 Récupérer l'utilisateur authentifié depuis les headers
-    // Les Edge Functions Supabase reçoivent automatiquement l'Authorization header
-    // quand appelées depuis le client Supabase (via functions.invoke ou fetch avec headers)
-    const authHeader = req.headers.get("Authorization");
+    // 🔐 Récupérer user_id depuis les query params
+    const url = new URL(req.url);
+    const userId = url.searchParams.get("user_id");
     
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!userId) {
       return new Response(
-        JSON.stringify({ error: "Unauthorized - No authentication token" }),
+        JSON.stringify({ error: "Missing user_id parameter" }),
         { 
-          status: 401,
+          status: 400,
           headers: {
             ...corsHeaders,
             "Content-Type": "application/json",
@@ -63,33 +67,22 @@ serve(async (req) => {
       );
     }
 
-    // Créer le client avec le contexte utilisateur pour vérifier l'auth
+    // Valider le format UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(userId)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid user_id format" }),
+        { 
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          }
+        }
+      );
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: { Authorization: authHeader },
-      },
-    });
-
-    // Vérifier que l'utilisateur est authentifié
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
-    
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized - Invalid or missing authentication" }),
-        { 
-          status: 401,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          }
-        }
-      );
-    }
-
-    const userId = user.id;
 
     // 🎮 Récupérer le game_id pour CS2 (via slug "cs2")
     // Utiliser service_role pour la lecture DB
@@ -175,17 +168,13 @@ serve(async (req) => {
 
     const steamAuthUrl = `${steamOpenIdUrl}?${openIdParams.toString()}`;
 
-    // 🔄 Retourner l'URL Steam en JSON pour que le frontend redirige
-    return new Response(
-      JSON.stringify({ redirect_url: steamAuthUrl }),
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    // 🔄 Rediriger vers Steam (HTTP 302)
+    return new Response(null, {
+      status: 302,
+      headers: {
+        "Location": steamAuthUrl,
+      },
+    });
 
   } catch (error) {
     console.error("Error in steam-link-start:", error);
