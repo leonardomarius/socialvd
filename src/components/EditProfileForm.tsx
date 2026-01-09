@@ -366,48 +366,9 @@ export default function EditProfileForm({
   /* ---------------------------------------------
      Connect Steam
   --------------------------------------------- */
-  const handleConnectSteam = async () => {
-    console.log("Connect Steam clicked");
-    try {
-      // Récupérer le token de session Supabase existante
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log("Steam session:", session);
-      
-      if (!session) {
-        console.error("Steam link error: No active session");
-        return;
-      }
-
-      // Appeler la fonction edge avec la session Supabase
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      console.log("Calling steam-link-start");
-      const response = await fetch(`${supabaseUrl}/functions/v1/steam-link-start`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${session.access_token}`,
-        },
-        redirect: "manual", // Ne pas suivre automatiquement la redirection
-      });
-
-      console.log("Steam link response status:", response?.status);
-
-      if (response.status === 302 || response.status === 301) {
-        // Récupérer l'URL depuis le header Location
-        const redirectUrl = response.headers.get("Location");
-        if (redirectUrl) {
-          window.location.href = redirectUrl;
-        } else {
-          console.error("Steam link error: No Location header in redirect response");
-        }
-      } else if (response.status === 401 || response.status === 403) {
-        console.error("Steam link error: Unauthorized - authentication failed");
-      } else {
-        const errorText = await response.text().catch(() => "");
-        console.error("Steam link error: Unexpected response status", response.status, errorText);
-      }
-    } catch (err) {
-      console.error("Steam link error:", err);
-    }
+  const handleConnectSteam = () => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    window.location.href = `${supabaseUrl}/functions/v1/steam-link-start`;
   };
 
   /* ---------------------------------------------
@@ -681,10 +642,7 @@ export default function EditProfileForm({
         <div style={{ marginBottom: 20 }}>
           <button
             type="button"
-            onClick={() => {
-              console.log("Button onClick triggered, handler type:", typeof handleConnectSteam);
-              handleConnectSteam();
-            }}
+            onClick={handleConnectSteam}
             style={{
               ...saveBtn,
               background: "rgba(80,120,255,0.85)",
