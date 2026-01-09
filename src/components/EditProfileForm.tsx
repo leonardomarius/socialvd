@@ -367,9 +367,11 @@ export default function EditProfileForm({
      Connect Steam
   --------------------------------------------- */
   const handleConnectSteam = async () => {
+    console.log("Connect Steam clicked");
     try {
       // Récupérer le token de session Supabase existante
       const { data: { session } } = await supabase.auth.getSession();
+      console.log("Steam session:", session);
       
       if (!session) {
         console.error("Steam link error: No active session");
@@ -378,6 +380,7 @@ export default function EditProfileForm({
 
       // Appeler la fonction edge avec la session Supabase
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      console.log("Calling steam-link-start");
       const response = await fetch(`${supabaseUrl}/functions/v1/steam-link-start`, {
         method: "GET",
         headers: {
@@ -385,6 +388,8 @@ export default function EditProfileForm({
         },
         redirect: "manual", // Ne pas suivre automatiquement la redirection
       });
+
+      console.log("Steam link response status:", response?.status);
 
       if (response.status === 302 || response.status === 301) {
         // Récupérer l'URL depuis le header Location
@@ -675,7 +680,11 @@ export default function EditProfileForm({
       ) : (
         <div style={{ marginBottom: 20 }}>
           <button
-            onClick={handleConnectSteam}
+            type="button"
+            onClick={() => {
+              console.log("Button onClick triggered, handler type:", typeof handleConnectSteam);
+              handleConnectSteam();
+            }}
             style={{
               ...saveBtn,
               background: "rgba(80,120,255,0.85)",
