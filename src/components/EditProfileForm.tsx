@@ -367,27 +367,16 @@ export default function EditProfileForm({
      Connect Steam
   --------------------------------------------- */
   const handleConnectSteam = async () => {
-    try {
-      // Récupérer l'utilisateur courant
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        console.error("Steam link error: No authenticated user", userError);
-        alert("Please log in to connect your Steam account.");
-        return;
-      }
-
-      // Construire l'URL avec user_id en query param
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const url = `${supabaseUrl}/functions/v1/steam-link-start?user_id=${user.id}`;
-      console.log("Redirecting to Steam link start");
-      
-      // Navigation browser native (pas de fetch pour éviter CORS)
-      window.location.href = url;
-    } catch (err) {
-      console.error("Steam link error:", err);
-      alert("An error occurred while connecting Steam. Please try again.");
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
+      alert("Please log in to connect your Steam account.");
+      return;
     }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const url = `${supabaseUrl}/functions/v1/steam-link-start?access_token=${session.access_token}`;
+    window.location.href = url;
   };
 
   /* ---------------------------------------------

@@ -12,8 +12,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * - Rediriger vers Steam OpenID (HTTP 302)
  * 
  * Sécurité :
- * - verify_jwt = false (accessible sans JWT)
- * - user_id passé en query param (?user_id=<uuid>)
+ * - verify_jwt = false (accessible sans JWT automatique)
+ * - Token JWT via Authorization header OU query param access_token
+ * - Vérification du token via supabase.auth.getUser()
  * - State signé HMAC-SHA256 avec expiration 10 minutes
  * - Validation du state dans le callback
  * 
@@ -50,30 +51,24 @@ serve(async (req) => {
       });
     }
 
-    // 🔐 Récupérer user_id depuis les query params
+    // 🔐 Récupérer le token JWT depuis Authorization header OU query param access_token
     const url = new URL(req.url);
-    const userId = url.searchParams.get("user_id");
+    const authHeader = req.headers.get("Authorization");
+    let accessToken: string | null = null;
     
-    if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "Missing user_id parameter" }),
-        { 
-          status: 400,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          }
-        }
-      );
+    // Essayer d'abord depuis l'header Authorization
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      accessToken = authHeader.substring(7); // Enlever "Bearer "
+    } else {
+      // Sinon, essayer depuis le query param
+      accessToken = url.searchParams.get("access_token");
     }
-
-    // Valider le format UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(userId)) {
+    
+    if (!accessToken) {
       return new Response(
-        JSON.stringify({ error: "Invalid user_id format" }),
+        JSON.stringify({ error: "Missing authentication token" }),
         { 
-          status: 400,
+          status: 401,
           headers: {
             ...corsHeaders,
             "Content-Type": "application/json",
@@ -83,6 +78,26 @@ serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    // Vérifier le token et obtenir l'utilisateur
+    const client = createClient(supabaseUrl, supabaseAnonKey);
+    const { data: { user }, error: authError } = await client.auth.getUser(accessToken);
+    
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired authentication token" }),
+        { 
+          status: 401,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          }
+        }
+      );
+    }
+
+    const userId = user.id;
 
     // 🎮 Récupérer le game_id pour CS2 (via slug "cs2")
     // Utiliser service_role pour la lecture DB
