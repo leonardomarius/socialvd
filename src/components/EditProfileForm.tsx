@@ -364,6 +364,48 @@ export default function EditProfileForm({
   };
 
   /* ---------------------------------------------
+     Connect Steam
+  --------------------------------------------- */
+  const handleConnectSteam = async () => {
+    try {
+      // Récupérer le token de session Supabase existante
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.error("Steam link error: No active session");
+        return;
+      }
+
+      // Appeler la fonction edge avec la session Supabase
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const response = await fetch(`${supabaseUrl}/functions/v1/steam-link-start`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        redirect: "manual", // Ne pas suivre automatiquement la redirection
+      });
+
+      if (response.status === 302 || response.status === 301) {
+        // Récupérer l'URL depuis le header Location
+        const redirectUrl = response.headers.get("Location");
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
+        } else {
+          console.error("Steam link error: No Location header in redirect response");
+        }
+      } else if (response.status === 401 || response.status === 403) {
+        console.error("Steam link error: Unauthorized - authentication failed");
+      } else {
+        const errorText = await response.text().catch(() => "");
+        console.error("Steam link error: Unexpected response status", response.status, errorText);
+      }
+    } catch (err) {
+      console.error("Steam link error:", err);
+    }
+  };
+
+  /* ---------------------------------------------
      Sync CS2 stats
   --------------------------------------------- */
   const handleSyncCS2 = async () => {
@@ -633,18 +675,18 @@ export default function EditProfileForm({
       ) : (
         <div style={{ marginBottom: 20 }}>
           <button
-            disabled
+            onClick={handleConnectSteam}
             style={{
               ...saveBtn,
-              background: "rgba(60,60,60,0.5)",
-              cursor: "not-allowed",
-              opacity: 0.6,
+              background: "rgba(80,120,255,0.85)",
+              cursor: "pointer",
+              opacity: 1,
             }}
           >
             Connect Steam
           </button>
           <p style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}>
-            Connect your Steam account to sync CS2 stats (coming soon)
+            Connect your Steam account to sync CS2 stats
           </p>
         </div>
       )}
