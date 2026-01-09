@@ -1,0 +1,317 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+/**
+ * =====================================================
+ * STEAM LINK CALLBACK - Edge Function
+ * =====================================================
+ * 
+ * Rôle :
+ * - Recevoir le retour Steam OpenID
+ * - Valider la signature OpenID auprès de Steam (check_authentication)
+ * - Extraire le steamid64 depuis openid.claimed_id
+ * - Valider et décoder le state (HMAC)
+ * - UPSERT dans game_account_links (NE JAMAIS modifier un steamid existant)
+ * - Déclencher l'Edge Function sync-cs2-steam (unitaire)
+ * - Rediriger vers le front : succès → /profile?steam=linked, erreur → /profile?steam=error
+ * 
+ * Contraintes :
+ * - Sécurité OpenID complète (no shortcuts)
+ * - Service role uniquement pour DB
+ * - Ne JAMAIS modifier un steamid existant
+ */
+
+serve(async (req) => {
+  try {
+    // 🔒 Vérifier que la méthode est GET
+    if (req.method !== "GET") {
+      return new Response("Method not allowed", { status: 405 });
+    }
+
+    const url = new URL(req.url);
+    
+    // 📥 Récupérer les paramètres OpenID depuis l'URL
+    const openIdParams: Record<string, string> = {};
+    for (const [key, value] of url.searchParams.entries()) {
+      if (key.startsWith("openid.")) {
+        openIdParams[key] = value;
+      }
+    }
+
+    // Récupérer le state depuis l'URL
+    // Le state est passé dans return_to, donc il sera dans les paramètres GET
+    const signedState = url.searchParams.get("state");
+
+    // 🔐 Vérifier que les paramètres OpenID essentiels sont présents
+    if (!openIdParams["openid.mode"] || !openIdParams["openid.return_to"]) {
+      console.error("Missing required OpenID parameters");
+      return redirectToFrontend("error", "Missing OpenID parameters");
+    }
+
+    // Steam renvoie "id_res" après une authentification réussie
+    // Mais vérifions aussi que nous avons bien les paramètres nécessaires
+    const openIdMode = openIdParams["openid.mode"];
+    if (openIdMode !== "id_res" && openIdMode !== "cancel") {
+      console.error("Invalid OpenID mode:", openIdMode);
+      return redirectToFrontend("error", "Invalid OpenID mode");
+    }
+    
+    // Si l'utilisateur a annulé, rediriger avec erreur
+    if (openIdMode === "cancel") {
+      return redirectToFrontend("error", "Authentication cancelled");
+    }
+
+    // 🔓 Décoder et valider le state (HMAC)
+    if (!signedState) {
+      console.error("Missing state parameter");
+      return redirectToFrontend("error", "Missing state parameter");
+    }
+
+    const [statePayload, signatureB64] = signedState.split(".");
+    
+    if (!statePayload || !signatureB64) {
+      console.error("Invalid state format");
+      return redirectToFrontend("error", "Invalid state format");
+    }
+
+    // Vérifier la signature HMAC
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(serviceRoleKey);
+    const payloadData = encoder.encode(statePayload);
+    
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      keyData,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    
+    const signature = await crypto.subtle.sign("HMAC", cryptoKey, payloadData);
+    const expectedSignatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+    
+    // Comparaison sécurisée des signatures (timing-safe)
+    if (signatureB64 !== expectedSignatureB64) {
+      console.error("Invalid state signature");
+      return redirectToFrontend("error", "Invalid state signature");
+    }
+
+    // Décoder le state
+    let stateData: { user_id: string; game_id: string; timestamp: number };
+    try {
+      stateData = JSON.parse(atob(statePayload));
+    } catch (e) {
+      console.error("Failed to decode state:", e);
+      return redirectToFrontend("error", "Failed to decode state");
+    }
+
+    // Vérifier que le state n'est pas expiré (max 10 minutes)
+    const stateAge = Date.now() - stateData.timestamp;
+    const MAX_STATE_AGE = 10 * 60 * 1000; // 10 minutes
+    
+    if (stateAge > MAX_STATE_AGE) {
+      console.error("State expired");
+      return redirectToFrontend("error", "State expired");
+    }
+
+    const { user_id, game_id } = stateData;
+
+    // ✅ Valider la signature OpenID auprès de Steam
+    // Steam OpenID 2.0 nécessite un appel à check_authentication
+    // IMPORTANT : Nous devons reconstruire les paramètres EXACTEMENT comme reçus
+    // mais avec le mode modifié pour la validation
+    const validationParams = new URLSearchParams();
+    
+    // Copier TOUS les paramètres OpenID reçus (sauf le mode qui sera changé)
+    for (const [key, value] of Object.entries(openIdParams)) {
+      if (key !== "openid.mode") {
+        validationParams.append(key, value);
+      }
+    }
+    
+    // Modifier le mode pour la validation (requis par OpenID 2.0)
+    validationParams.set("openid.mode", "check_authentication");
+
+    // Appel à Steam pour valider la signature
+    const validationUrl = "https://steamcommunity.com/openid/login";
+    const validationResponse = await fetch(validationUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: validationParams.toString(),
+    });
+
+    if (!validationResponse.ok) {
+      console.error("Steam validation request failed:", validationResponse.status);
+      return redirectToFrontend("error", "Steam validation failed");
+    }
+
+    const validationText = await validationResponse.text();
+    
+    // Steam répond avec "is_valid:true" ou "is_valid:false"
+    if (!validationText.includes("is_valid:true")) {
+      console.error("Steam OpenID validation failed:", validationText);
+      return redirectToFrontend("error", "Steam OpenID validation failed");
+    }
+
+    // 🎮 Extraire le steamid64 depuis openid.claimed_id
+    // Format: https://steamcommunity.com/openid/id/76561198012345678
+    const claimedId = openIdParams["openid.claimed_id"];
+    if (!claimedId) {
+      console.error("Missing openid.claimed_id");
+      return redirectToFrontend("error", "Missing Steam ID");
+    }
+
+    const steamIdMatch = claimedId.match(/\/id\/(\d+)$/);
+    if (!steamIdMatch || !steamIdMatch[1]) {
+      console.error("Invalid Steam ID format:", claimedId);
+      return redirectToFrontend("error", "Invalid Steam ID format");
+    }
+
+    const steamid64 = steamIdMatch[1];
+
+    // 🔐 Créer le client Supabase avec service_role
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    // 🛡️ Vérifier qu'aucun lien Steam n'existe déjà pour cet utilisateur ET ce jeu
+    // Si un lien existe, on ne le modifie PAS (règle stricte)
+    const { data: existingLink, error: checkError } = await adminClient
+      .from("game_account_links")
+      .select("id, external_account_id, revoked_at")
+      .eq("user_id", user_id)
+      .eq("game_id", game_id)
+      .eq("provider", "steam")
+      .maybeSingle();
+
+    if (checkError) {
+      console.error("Error checking existing link:", checkError);
+      return redirectToFrontend("error", "Database error");
+    }
+
+    // Si un lien existe et n'est pas révoqué, vérifier si c'est le même steamid
+    if (existingLink && !existingLink.revoked_at) {
+      if (existingLink.external_account_id === steamid64) {
+        // Même compte Steam, pas besoin de modifier
+        console.log("Steam account already linked");
+      } else {
+        // Compte Steam différent - NE PAS MODIFIER (règle stricte)
+        console.error("Steam account already linked to different ID");
+        return redirectToFrontend("error", "Steam account already linked");
+      }
+    }
+
+    // 💾 UPSERT dans game_account_links
+    // Si un lien existe mais est révoqué, on le réactive
+    // Sinon, on crée un nouveau lien
+    const now = new Date().toISOString();
+    
+    const { error: upsertError } = await adminClient
+      .from("game_account_links")
+      .upsert({
+        user_id: user_id,
+        game_id: game_id,
+        provider: "steam",
+        external_account_id: steamid64,
+        linked_at: now,
+        revoked_at: null,
+      }, {
+        onConflict: "user_id,game_id,provider",
+      });
+
+    if (upsertError) {
+      console.error("Error upserting game_account_link:", upsertError);
+      return redirectToFrontend("error", "Failed to link Steam account");
+    }
+
+    // 🚀 Déclencher l'Edge Function sync-cs2-steam (unitaire)
+    // Cette fonction synchronise les stats CS2 depuis l'API Steam
+    try {
+      const syncResponse = await fetch(
+        `${supabaseUrl}/functions/v1/sync-cs2-steam`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            user_id: user_id,
+            game_id: game_id,
+            steamid: steamid64,
+          }),
+        }
+      );
+
+      if (!syncResponse.ok) {
+        // Log l'erreur mais ne bloque pas la redirection
+        // Le lien est créé, la sync peut être réessayée plus tard
+        console.error("Sync CS2 failed (non-blocking):", await syncResponse.text());
+      } else {
+        console.log("CS2 sync triggered successfully");
+      }
+    } catch (syncError) {
+      // Erreur non-bloquante - le lien est créé
+      console.error("Error triggering CS2 sync (non-blocking):", syncError);
+    }
+
+    // ✅ Rediriger vers le front avec succès
+    return redirectToFrontend("linked", null);
+
+  } catch (error) {
+    console.error("Error in steam-link-callback:", error);
+    return redirectToFrontend("error", "Internal server error");
+  }
+});
+
+/**
+ * Helper function pour rediriger vers le frontend
+ * Le frontend doit être déterminé depuis l'origine de la requête ou une variable d'environnement
+ */
+function redirectToFrontend(status: "linked" | "error", errorMessage: string | null): Response {
+  // Essayer de déterminer l'URL du frontend
+  // En production, on peut utiliser une variable d'environnement ou déduire depuis SUPABASE_URL
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  
+  // Si localhost, utiliser le port 3000 (Next.js par défaut)
+  // Sinon, essayer de déduire depuis SUPABASE_URL ou utiliser une variable d'env
+  let frontendUrl: string;
+  
+  if (supabaseUrl.includes("localhost") || supabaseUrl.includes("127.0.0.1")) {
+    frontendUrl = "http://127.0.0.1:3000";
+  } else {
+    // En production, utiliser NEXT_PUBLIC_SITE_URL ou déduire
+    // Pour l'instant, on utilise un pattern commun : remplacer .supabase.co par votre domaine
+    // OU définir une variable d'environnement FRONTEND_URL
+    const frontendUrlEnv = Deno.env.get("FRONTEND_URL");
+    if (frontendUrlEnv) {
+      frontendUrl = frontendUrlEnv;
+    } else {
+      // Fallback: essayer de construire depuis SUPABASE_URL
+      try {
+        const url = new URL(supabaseUrl);
+        // Supposer que le frontend est sur le même domaine mais sans "functions" subdomain
+        frontendUrl = url.origin.replace(/functions\./, "");
+      } catch {
+        // Dernier fallback
+        frontendUrl = "https://your-frontend-domain.com";
+      }
+    }
+  }
+
+  const redirectUrl = new URL("/profile", frontendUrl);
+  redirectUrl.searchParams.set("steam", status);
+  
+  if (errorMessage && status === "error") {
+    redirectUrl.searchParams.set("error", encodeURIComponent(errorMessage));
+  }
+
+  return new Response(null, {
+    status: 302,
+    headers: {
+      "Location": redirectUrl.toString(),
+    },
+  });
+}

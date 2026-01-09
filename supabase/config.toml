@@ -391,3 +391,15 @@ entrypoint = "./functions/sync-all-cs2-steam/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/sync-all-cs2-steam/*.html" ]
+
+[functions.steam-link-start]
+enabled = true
+verify_jwt = true
+import_map = "./functions/steam-link-start/deno.json"
+entrypoint = "./functions/steam-link-start/index.ts"
+
+[functions.steam-link-callback]
+enabled = true
+verify_jwt = false
+import_map = "./functions/steam-link-callback/deno.json"
+entrypoint = "./functions/steam-link-callback/index.ts"
