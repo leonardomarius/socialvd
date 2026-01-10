@@ -21,12 +21,20 @@ serve(async (req) => {
       return new Response("Method not allowed", { status: 405 });
     }
 
+    // 1) Lecture de la clé Steam (OBLIGATOIRE)
+    const steamApiKey = Deno.env.get("STEAM_WEB_API_KEY");
+    if (!steamApiKey) {
+      throw new Error("STEAM_WEB_API_KEY is not set");
+    }
+    console.log("✅ Steam API key found");
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // 1️⃣ Récupérer tous les comptes Steam CS2 actifs
+    // 2) Récupérer tous les comptes Steam CS2 actifs
+    console.log("📥 Fetching Steam accounts from game_account_links...");
     const { data: links, error } = await supabase
       .from("game_account_links")
       .select("user_id, game_id, external_account_id")
@@ -34,65 +42,146 @@ serve(async (req) => {
       .is("revoked_at", null);
 
     if (error) {
-      console.error(error);
+      console.error("❌ Error fetching Steam accounts:", error);
       return new Response("Failed to fetch Steam accounts", { status: 500 });
     }
 
     if (!links || links.length === 0) {
+      console.log("ℹ️ No Steam accounts to sync");
       return new Response(
         JSON.stringify({ message: "No Steam accounts to sync" }),
         { headers: { "Content-Type": "application/json" } }
       );
     }
 
+    console.log(`📊 Found ${links.length} Steam account(s) to sync`);
+
     let synced = 0;
     let failed = 0;
 
-    // 2️⃣ Boucle sur chaque compte
+    // 3) Boucle sur chaque compte - Appel Steam API DIRECT
     for (const link of links) {
       const { user_id, game_id, external_account_id: steamid } = link;
+      console.log(`🔄 Processing SteamID: ${steamid} for user ${user_id}`);
 
       try {
-        // 🚫 TEMPORAIREMENT DÉSACTIVÉ — vérification DB du lien Steam
-        // await supabase.rpc("assert_steam_account_linked", {
-        //   p_user_id: user_id,
-        //   p_game_id: game_id,
-        //   p_steamid: steamid,
-        // });
+        // Appel DIRECT à l'API Steam CS2
+        const steamApiUrl = `https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v2/?key=${steamApiKey}&steamid=${steamid}&appid=730`;
+        
+        console.log(`📡 Calling Steam API for ${steamid}...`);
+        const steamResponse = await fetch(steamApiUrl);
 
-        // Appel de la fonction unitaire
-        const res = await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/sync-cs2-steam`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get(
-                "SUPABASE_SERVICE_ROLE_KEY"
-              )}`,
-            },
-            body: JSON.stringify({
-              user_id,
-              game_id,
-              steamid,
-            }),
-          }
-        );
-
-        if (!res.ok) {
+        if (!steamResponse.ok) {
+          const errorText = await steamResponse.text();
+          console.error(`❌ Steam API failed for ${steamid}:`, steamResponse.status, errorText);
           failed++;
-          console.error(`Sync failed for user ${user_id}`);
           continue;
         }
 
+        const steamData = await steamResponse.json();
+        console.log(`✅ Steam API OK for ${steamid}`);
+
+        // 4) Normalisation des stats CS2
+        const stats = steamData?.playerstats?.stats || [];
+        
+        const totalKills = stats.find((s: any) => s.name === "total_kills")?.value;
+        const totalDeaths = stats.find((s: any) => s.name === "total_deaths")?.value;
+        const totalWins = stats.find((s: any) => s.name === "total_wins")?.value;
+        const totalRounds = stats.find((s: any) => s.name === "total_rounds_played")?.value;
+
+        // Calcul K/D ratio
+        let kdRatio: string | null = null;
+        if (totalKills !== undefined && totalDeaths !== undefined) {
+          kdRatio = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : "0.00";
+        }
+
+        // Construire les performances
+        const performances: Array<{
+          user_id: string;
+          game_id: string;
+          performance_title: string;
+          performance_value: string | null;
+        }> = [];
+
+        if (totalKills !== undefined) {
+          performances.push({
+            user_id,
+            game_id,
+            performance_title: "Total Kills",
+            performance_value: totalKills.toString(),
+          });
+        }
+
+        if (kdRatio !== null) {
+          performances.push({
+            user_id,
+            game_id,
+            performance_title: "K/D Ratio",
+            performance_value: kdRatio,
+          });
+        }
+
+        if (totalWins !== undefined) {
+          performances.push({
+            user_id,
+            game_id,
+            performance_title: "Total Wins",
+            performance_value: totalWins.toString(),
+          });
+        }
+
+        if (totalRounds !== undefined) {
+          performances.push({
+            user_id,
+            game_id,
+            performance_title: "Rounds Played",
+            performance_value: totalRounds.toString(),
+          });
+        }
+
+        if (performances.length === 0) {
+          console.warn(`⚠️ No stats extracted for ${steamid}`);
+          failed++;
+          continue;
+        }
+
+        // 5) Écriture base de données
+        console.log(`💾 Writing ${performances.length} performance(s) for user ${user_id}...`);
+
+        // Supprimer les anciennes stats CS2 de l'utilisateur
+        const { error: deleteError } = await supabase
+          .from("latest_game_performances_verified")
+          .delete()
+          .eq("user_id", user_id)
+          .eq("game_id", game_id);
+
+        if (deleteError) {
+          console.error(`❌ Delete error for user ${user_id}:`, deleteError);
+          failed++;
+          continue;
+        }
+
+        // Insérer les nouvelles stats
+        const { error: insertError } = await supabase
+          .from("latest_game_performances_verified")
+          .insert(performances);
+
+        if (insertError) {
+          console.error(`❌ Insert error for user ${user_id}:`, insertError);
+          failed++;
+          continue;
+        }
+
+        console.log(`✅ Successfully synced stats for user ${user_id}`);
         synced++;
       } catch (e) {
+        console.error(`❌ Error syncing user ${user_id}:`, e);
         failed++;
-        console.error(`Error syncing user ${user_id}`, e);
       }
     }
 
-    // 3️⃣ Résumé
+    // 6) Résumé final
+    console.log(`📊 Sync complete: ${synced} succeeded, ${failed} failed out of ${links.length} total`);
     return new Response(
       JSON.stringify({
         total: links.length,
