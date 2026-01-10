@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const CS2_GAME_ID = "cs2"; // ⚠️ remplace par l’UUID réel si nécessaire
+const CS2_GAME_ID = "5aa21040-a772-4dc0-8d98-63dd32e17a84"; // ⚠️ remplace par l’UUID réel si nécessaire
 const CS2_APP_ID = 730;
 
 serve(async (req) => {
