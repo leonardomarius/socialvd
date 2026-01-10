@@ -103,6 +103,11 @@ serve(async (req) => {
       // Sans clé API, on peut utiliser l'endpoint de profil public
       // Mais les stats CS2 ne sont pas toujours disponibles sans clé
       console.warn("STEAM_API_KEY not set, using fallback method");
+
+      if (!steamApiKey) {
+  throw new Error("STEAM_WEB_API_KEY is not set")
+}
+
       
       // Fallback: utiliser l'endpoint de profil (informations limitées)
       try {
