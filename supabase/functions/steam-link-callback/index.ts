@@ -251,7 +251,7 @@ serve(async (req) => {
     // Cette fonction synchronise les stats CS2 depuis l'API Steam
     try {
       const syncResponse = await fetch(
-        `${supabaseUrl}/functions/v1/sync-cs2-steam`,
+        `${supabaseUrl}/functions/v1/sync-all-cs2-steam`,
         {
           method: "POST",
           headers: {
