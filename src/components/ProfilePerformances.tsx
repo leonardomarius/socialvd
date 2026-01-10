@@ -36,47 +36,115 @@ export default function ProfilePerformances({
   }, [userId]);
 
   async function fetchPerf() {
-    // Load non-CS2 performances from legacy table
-    const { data: legacyData } = await supabase
-      .from("game_performances")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(4);
+    try {
+      // Load non-CS2 performances from legacy table
+      const { data: legacyData } = await supabase
+        .from("game_performances")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(4);
 
-    // Load CS2 performances from verified table
-    const { data: cs2Data } = await supabase
-      .from("latest_game_performances_verified")
-      .select("*")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
-      .limit(4);
+      // Load verified performances from latest_game_performances_verified view
+      // La view retourne UNE ligne par (user_id, game_id) avec stats JSON
+      const { data: verifiedData, error: verifiedError } = await supabase
+        .from("latest_game_performances_verified")
+        .select("*")
+        .eq("user_id", userId);
 
-    // Combine and filter: CS2 from verified table, others from legacy
-    const legacyPerformances = (legacyData || []).filter(
-      (p) => !isCS2Performance(p.game_name)
-    ) as Performance[];
+      if (verifiedError) {
+        console.error("Error loading verified performances:", verifiedError);
+      }
 
-    const cs2Performances = (cs2Data || []).map((p) => ({
-      id: p.id || `cs2-${p.user_id}`,
-      user_id: p.user_id,
-      game_name: "CS2",
-      performance_title: p.performance_title || "",
-      performance_value: p.performance_value || null,
-    })) as Performance[];
+      // Récupérer les noms de jeux pour les game_id trouvés
+      const gameIds = verifiedData?.map(r => r.game_id).filter(Boolean) || [];
+      const gameMap: Record<string, string> = {};
+      
+      if (gameIds.length > 0) {
+        const { data: gamesData } = await supabase
+          .from("games")
+          .select("id, slug, name")
+          .in("id", gameIds);
+        
+        if (gamesData) {
+          for (const game of gamesData) {
+            gameMap[game.id] = game.name || game.slug || "Unknown";
+          }
+        }
+      }
 
-    // Merge and limit to 4 total
-    const allPerformances = [...cs2Performances, ...legacyPerformances]
-      .sort((a, b) => {
-        // CS2 first, then by date if available
-        if (isCS2Performance(a.game_name) && !isCS2Performance(b.game_name)) return -1;
-        if (!isCS2Performance(a.game_name) && isCS2Performance(b.game_name)) return 1;
-        return 0;
-      })
-      .slice(0, 4);
+      // Parser les performances vérifiées
+      const verifiedPerformances: Performance[] = [];
+      
+      if (verifiedData && verifiedData.length > 0) {
+        for (const row of verifiedData) {
+          const gameName = gameMap[row.game_id] || "Unknown";
+          
+          // Parser le champ stats (JSON)
+          let statsData: any = null;
+          try {
+            // Si stats est une string JSON, la parser
+            if (typeof row.stats === 'string') {
+              statsData = JSON.parse(row.stats);
+            } else {
+              statsData = row.stats;
+            }
+          } catch (e) {
+            console.warn("Failed to parse stats JSON:", e, row.stats);
+            continue;
+          }
 
-    setPerformances(allPerformances);
-    setLoading(false);
+          // Si stats est un objet avec title et value
+          if (statsData && typeof statsData === 'object') {
+            if (statsData.title && statsData.value !== undefined) {
+              // Structure : { title: string, value: string }
+              verifiedPerformances.push({
+                id: row.id || `verified-${row.user_id}-${row.game_id}`,
+                user_id: row.user_id,
+                game_name: gameName,
+                performance_title: statsData.title,
+                performance_value: statsData.value !== null ? String(statsData.value) : null,
+              });
+            } else if (Array.isArray(statsData)) {
+              // Si stats est un array d'objets { title, value }
+              for (const stat of statsData) {
+                if (stat && stat.title && stat.value !== undefined) {
+                  verifiedPerformances.push({
+                    id: `${row.id}-${stat.title}`,
+                    user_id: row.user_id,
+                    game_name: gameName,
+                    performance_title: stat.title,
+                    performance_value: stat.value !== null ? String(stat.value) : null,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Combine and filter: verified first, then legacy (non-CS2)
+      const legacyPerformances = (legacyData || []).filter(
+        (p) => !isCS2Performance(p.game_name)
+      ) as Performance[];
+
+      // Merge: verified performances first, then legacy
+      const allPerformances = [...verifiedPerformances, ...legacyPerformances]
+        .sort((a, b) => {
+          // CS2/verified first, then by date if available
+          if (isCS2Performance(a.game_name) && !isCS2Performance(b.game_name)) return -1;
+          if (!isCS2Performance(a.game_name) && isCS2Performance(b.game_name)) return 1;
+          return 0;
+        })
+        .slice(0, 4);
+
+      setPerformances(allPerformances);
+    } catch (error) {
+      console.error("Error in fetchPerf:", error);
+      setPerformances([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   // -----------------------------------------
@@ -175,7 +243,7 @@ export default function ProfilePerformances({
 
   if (loading) return <p>Chargement...</p>;
   if (performances.length === 0)
-    return <p>Aucune performance disponible pour le moment.</p>;
+    return <p>Aucune performance vérifiée disponible pour le moment.</p>;
 
   return (
     <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 18 }}>

@@ -81,38 +81,107 @@ export default function EditProfileForm({
   async function loadPerformances() {
     setLoadingPerf(true);
     
-    // Load non-CS2 performances from legacy table
-    const { data: legacyData } = await supabase
-      .from("game_performances")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+    try {
+      // Load non-CS2 performances from legacy table
+      const { data: legacyData } = await supabase
+        .from("game_performances")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
 
-    // Load CS2 performances from verified table
-    const { data: cs2Data } = await supabase
-      .from("latest_game_performances_verified")
-      .select("*")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false });
+      // Load verified performances from latest_game_performances_verified view
+      // La view retourne UNE ligne par (user_id, game_id) avec stats JSON
+      const { data: verifiedData, error: verifiedError } = await supabase
+        .from("latest_game_performances_verified")
+        .select("*")
+        .eq("user_id", userId);
 
-    // Combine: CS2 from verified table, others from legacy
-    const legacyPerformances = (legacyData || []).filter(
-      (p) => !isCS2Performance(p.game_name)
-    ) as Performance[];
+      if (verifiedError) {
+        console.error("Error loading verified performances:", verifiedError);
+      }
 
-    const cs2Performances = (cs2Data || []).map((p) => ({
-      id: p.id || `cs2-${p.user_id}`,
-      user_id: p.user_id,
-      game_name: "CS2",
-      performance_title: p.performance_title || "",
-      performance_value: p.performance_value || null,
-    })) as Performance[];
+      // Récupérer les noms de jeux pour les game_id trouvés
+      const gameIds = verifiedData?.map(r => r.game_id).filter(Boolean) || [];
+      const gameMap: Record<string, string> = {};
+      
+      if (gameIds.length > 0) {
+        const { data: gamesData } = await supabase
+          .from("games")
+          .select("id, slug, name")
+          .in("id", gameIds);
+        
+        if (gamesData) {
+          for (const game of gamesData) {
+            gameMap[game.id] = game.name || game.slug || "Unknown";
+          }
+        }
+      }
 
-    // Merge: CS2 first, then legacy
-    const allPerformances = [...cs2Performances, ...legacyPerformances];
+      // Parser les performances vérifiées
+      const verifiedPerformances: Performance[] = [];
+      
+      if (verifiedData && verifiedData.length > 0) {
+        for (const row of verifiedData) {
+          const gameName = gameMap[row.game_id] || "Unknown";
+          
+          // Parser le champ stats (JSON)
+          let statsData: any = null;
+          try {
+            // Si stats est une string JSON, la parser
+            if (typeof row.stats === 'string') {
+              statsData = JSON.parse(row.stats);
+            } else {
+              statsData = row.stats;
+            }
+          } catch (e) {
+            console.warn("Failed to parse stats JSON:", e, row.stats);
+            continue;
+          }
 
-    setPerformances(allPerformances);
-    setLoadingPerf(false);
+          // Si stats est un objet avec title et value
+          if (statsData && typeof statsData === 'object') {
+            if (statsData.title && statsData.value !== undefined) {
+              // Structure : { title: string, value: string }
+              verifiedPerformances.push({
+                id: row.id || `verified-${row.user_id}-${row.game_id}`,
+                user_id: row.user_id,
+                game_name: gameName,
+                performance_title: statsData.title,
+                performance_value: statsData.value !== null ? String(statsData.value) : null,
+              });
+            } else if (Array.isArray(statsData)) {
+              // Si stats est un array d'objets { title, value }
+              for (const stat of statsData) {
+                if (stat && stat.title && stat.value !== undefined) {
+                  verifiedPerformances.push({
+                    id: `${row.id}-${stat.title}`,
+                    user_id: row.user_id,
+                    game_name: gameName,
+                    performance_title: stat.title,
+                    performance_value: stat.value !== null ? String(stat.value) : null,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Combine: verified first, then legacy (non-CS2)
+      const legacyPerformances = (legacyData || []).filter(
+        (p) => !isCS2Performance(p.game_name)
+      ) as Performance[];
+
+      // Merge: verified performances first, then legacy
+      const allPerformances = [...verifiedPerformances, ...legacyPerformances];
+
+      setPerformances(allPerformances);
+    } catch (error) {
+      console.error("Error in loadPerformances:", error);
+      setPerformances([]);
+    } finally {
+      setLoadingPerf(false);
+    }
   }
 
   useEffect(() => {
