@@ -66,11 +66,15 @@ serve(async (req) => {
       console.log(`🔄 Processing SteamID: ${steamid} for user ${user_id}`);
 
       try {
-        // Appel DIRECT à l'API Steam CS2
-        const steamApiUrl = `https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v2/?key=${steamApiKey}&steamid=${steamid}&appid=730`;
+        // CS2 = appid 730, endpoint GetUserStatsForGame v2
+        // Appel STRICTEMENT IDENTIQUE au test navigateur fonctionnel
+        const steamUrl = "https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v2/" +
+          "?appid=730&steamid=" + steamid + "&key=" + steamApiKey;
         
-        console.log(`📡 Calling Steam API for ${steamid}...`);
-        const steamResponse = await fetch(steamApiUrl);
+        console.log("Calling Steam API:", steamUrl);
+        const steamResponse = await fetch(steamUrl);
+
+        console.log("Steam response status:", steamResponse.status);
 
         if (!steamResponse.ok) {
           const errorText = await steamResponse.text();
@@ -80,6 +84,7 @@ serve(async (req) => {
         }
 
         const steamData = await steamResponse.json();
+        console.log("Steam payload keys:", Object.keys(steamData || {}));
         console.log(`✅ Steam API OK for ${steamid}`);
 
         // 4) Normalisation des stats CS2
