@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image";
-import { isCS2Performance, isCS2Account, syncCS2Stats } from "@/lib/cs2-utils";
+import { isCS2Performance, isCS2Account } from "@/lib/cs2-utils";
 
 /* ---------------------------------------------
    Types
@@ -73,7 +73,6 @@ export default function EditProfileForm({
   const [accPlatform, setAccPlatform] = useState("PlayStation");
   const [gameAccounts, setGameAccounts] = useState<GameAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
-  const [syncingCS2, setSyncingCS2] = useState(false);
   const [hasSteamCS2Link, setHasSteamCS2Link] = useState(false);
 
   /* ---------------------------------------------
@@ -276,7 +275,7 @@ export default function EditProfileForm({
 
     // CS2 performances are read-only - synced from backend
     if (isCS2Performance(gameName)) {
-      alert("CS2 performances are automatically synced from Steam. Use the 'Sync CS2' button to update your stats.");
+      alert("CS2 performances are automatically synced from Steam. They update automatically after connection and every 12 hours.");
       setAdding(false);
       return;
     }
@@ -379,29 +378,6 @@ export default function EditProfileForm({
     window.location.href = url;
   };
 
-  /* ---------------------------------------------
-     Sync CS2 stats
-  --------------------------------------------- */
-  const handleSyncCS2 = async () => {
-    if (!hasSteamCS2Link) {
-      alert("Please connect your Steam account first.");
-      return;
-    }
-
-    setSyncingCS2(true);
-    const result = await syncCS2Stats(supabase, userId);
-    setSyncingCS2(false);
-
-    if (result.success) {
-      alert("CS2 stats sync initiated. Your stats will be updated shortly.");
-      // Reload performances after a short delay to allow sync to process
-      setTimeout(() => {
-        loadPerformances();
-      }, 2000);
-    } else {
-      alert(`Failed to sync CS2 stats: ${result.error || "Unknown error"}`);
-    }
-  };
 
   /* ---------------------------------------------
      UI
@@ -627,24 +603,30 @@ export default function EditProfileForm({
       {/* GAME ACCOUNTS */}
       <h2 style={{ marginTop: 40 }}>Game accounts</h2>
 
-      {/* CS2 Sync Button or Connect Steam */}
+      {/* CS2 Status or Connect Steam */}
       {hasSteamCS2Link ? (
         <div style={{ marginBottom: 20 }}>
-          <button
-            onClick={handleSyncCS2}
-            disabled={syncingCS2}
+          <div
             style={{
-              ...saveBtn,
-              background: syncingCS2 ? "rgba(80,80,80,0.5)" : "rgba(80,120,255,0.85)",
-              cursor: syncingCS2 ? "not-allowed" : "pointer",
-              opacity: syncingCS2 ? 0.6 : 1,
+              padding: "12px 16px",
+              borderRadius: 10,
+              background: "rgba(80, 200, 120, 0.1)",
+              border: "1px solid rgba(80, 200, 120, 0.3)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
             }}
           >
-            {syncingCS2 ? "Syncing CS2..." : "Sync CS2 Stats"}
-          </button>
-          <p style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}>
-            Sync your CS2 stats from Steam
-          </p>
+            <span style={{ fontSize: 16 }}>✓</span>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 500, margin: 0, color: "rgba(80, 200, 120, 0.9)" }}>
+                CS2 stats synchronisées automatiquement
+              </p>
+              <p style={{ fontSize: 12, opacity: 0.7, margin: "4px 0 0 0" }}>
+                Synchronisation automatique après connexion et toutes les 12 heures
+              </p>
+            </div>
+          </div>
         </div>
       ) : (
         <div style={{ marginBottom: 20 }}>
@@ -661,7 +643,7 @@ export default function EditProfileForm({
             Connect Steam
           </button>
           <p style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}>
-            Connect your Steam account to sync CS2 stats
+            Connect your Steam account to sync CS2 stats automatically
           </p>
         </div>
       )}
