@@ -79,7 +79,7 @@ serve(async (req) => {
     // Appeler Steam Web API pour récupérer les stats CS2
     // NOTE: Steam Web API nécessite une clé API (STEAM_API_KEY)
     // Pour l'instant, on utilise l'endpoint public qui ne nécessite pas de clé pour certaines stats
-    const steamApiKey = Deno.env.get("STEAM_API_KEY");
+    const steamApiKey = Deno.env.get("STEAM__WEB_API_KEY");
     
     // Endpoint: ISteamUserStats.GetUserStatsForGame
     // App ID CS2: 730
