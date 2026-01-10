@@ -5,6 +5,7 @@ serve(async (req) => {
   /* =====================================================
      🔥 DEBUG — TRACE D’INVOCATION (TOUT EN HAUT)
      ===================================================== */
+  console.log("🔥🔥🔥 SYNC-ALL-CS2-STEAM FUNCTION HIT 🔥🔥🔥");
   console.log("HEADERS:", Object.fromEntries(req.headers.entries()));
   console.log("🔥 FUNCTION HIT");
   console.log("METHOD:", req.method);
