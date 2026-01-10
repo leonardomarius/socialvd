@@ -1,0 +1,27 @@
+-- ======================================
+-- CRON JOB POUR SYNC CS2 (12 HEURES)
+-- ======================================
+-- 
+-- IMPORTANT : Cette migration configure le cron via pg_cron
+-- Pour Supabase Cloud, utilisez plutôt l'interface Dashboard > Database > Cron Jobs
+-- 
+-- Configuration manuelle requise :
+-- 1. Aller dans Supabase Dashboard > Database > Cron Jobs
+-- 2. Créer un nouveau cron job :
+--    - Nom: sync-cs2-stats
+--    - Schedule: 0 */12 * * * (toutes les 12 heures)
+--    - SQL Query: 
+--      SELECT net.http_post(
+--        url := current_setting('app.settings.supabase_url') || '/functions/v1/sync-all-cs2-steam',
+--        headers := jsonb_build_object(
+--          'Content-Type', 'application/json',
+--          'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)
+--        ),
+--        body := '{}'::jsonb
+--      ) AS request_id;
+--
+-- Alternative : Utiliser Supabase Edge Function Cron (si disponible)
+-- Configuration via supabase/config.toml ou Dashboard > Edge Functions > Cron
+
+-- Note: pg_cron nécessite l'extension pg_cron qui peut ne pas être disponible
+-- selon votre plan Supabase. Vérifiez avec SELECT * FROM pg_available_extensions WHERE name = 'pg_cron';

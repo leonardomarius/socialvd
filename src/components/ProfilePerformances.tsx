@@ -175,7 +175,7 @@ export default function ProfilePerformances({
 
   if (loading) return <p>Chargement...</p>;
   if (performances.length === 0)
-    return <p>Aucune performance ajoutée pour le moment.</p>;
+    return <p>Aucune performance disponible pour le moment.</p>;
 
   return (
     <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 18 }}>

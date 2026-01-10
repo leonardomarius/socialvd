@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const CS2_GAME_ID = "5aa21040-a772-4dc0-8d98-63dd32e17a84"; // ⚠️ remplace par l’UUID réel si nécessaire
 const CS2_APP_ID = 730;
 
 serve(async (req) => {
@@ -24,12 +23,33 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // 🎮 Récupérer le game_id pour CS2 (via slug "cs2")
+    const { data: cs2Game, error: gameError } = await supabase
+      .from("games")
+      .select("id")
+      .eq("slug", "cs2")
+      .single();
+
+    if (gameError || !cs2Game) {
+      console.error("CS2 game not found:", gameError);
+      return new Response(
+        JSON.stringify({ error: "CS2 game not found in database" }),
+        { 
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    }
+
+    const CS2_GAME_ID = cs2Game.id;
+
     // 🔍 Récupération des comptes Steam actifs
     console.log("📥 Fetching Steam accounts...");
     const { data: links, error } = await supabase
       .from("game_account_links")
-      .select("user_id, external_account_id")
+      .select("user_id, game_id, external_account_id")
       .eq("provider", "steam")
+      .eq("game_id", CS2_GAME_ID)
       .is("revoked_at", null);
 
     if (error) {
@@ -51,7 +71,7 @@ serve(async (req) => {
     let failed = 0;
 
     for (const link of links) {
-      const { user_id, external_account_id: steamid } = link;
+      const { user_id, game_id, external_account_id: steamid } = link;
       console.log(`🔄 Syncing CS2 for user ${user_id} (steamid ${steamid})`);
 
       try {
@@ -107,24 +127,29 @@ serve(async (req) => {
         }
 
         // 🧹 Suppression des anciennes stats CS2
-        await supabase
+        const { error: deleteError } = await supabase
           .from("game_performances_verified")
           .delete()
           .eq("user_id", user_id)
-          .eq("game_id", CS2_GAME_ID);
+          .eq("game_id", game_id);
+
+        if (deleteError) {
+          console.error(`❌ Delete error for user ${user_id}:`, deleteError);
+          failed++;
+          continue;
+        }
 
         // 💾 Insertion des nouvelles stats
+        // La view latest_game_performances_verified attend performance_title et performance_value
         const rows = performances.map(p => ({
           user_id,
-          game_id: CS2_GAME_ID,
+          game_id: game_id,
           provider: "steam",
           external_account_id: steamid,
           snapshot_at: new Date().toISOString(),
           season: null,
-          stats: {
-            title: p.title,
-            value: p.value
-          }
+          performance_title: p.title,
+          performance_value: p.value,
         }));
 
         const { error: insertError } = await supabase

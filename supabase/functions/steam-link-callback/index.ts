@@ -247,8 +247,8 @@ serve(async (req) => {
       return redirectToFrontend("error", "Failed to link Steam account");
     }
 
-    // 🚀 Déclencher l'Edge Function sync-cs2-steam (unitaire)
-    // Cette fonction synchronise les stats CS2 depuis l'API Steam
+    // 🚀 Déclencher l'Edge Function sync-all-cs2-steam (non-bloquant)
+    // Cette fonction synchronise les stats CS2 depuis l'API Steam pour tous les comptes Steam
     try {
       const syncResponse = await fetch(
         `${supabaseUrl}/functions/v1/sync-all-cs2-steam`,
@@ -258,11 +258,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${serviceRoleKey}`,
           },
-          body: JSON.stringify({
-            user_id: user_id,
-            game_id: game_id,
-            steamid: steamid64,
-          }),
+          // Pas de body nécessaire - la fonction sync tous les comptes Steam actifs
         }
       );
 
