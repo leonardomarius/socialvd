@@ -23,17 +23,30 @@ export default function LoginPage() {
 
     setGoogleLoading(true);
 
-    // Lancer OAuth - la redirection vers Google se fait automatiquement
-    // Ne pas utiliser try/catch car la redirection est un comportement normal
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    try {
+      // ✅ Lancer OAuth avec PKCE pour une sécurité optimale
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+        },
+      });
 
-    // Si pas d'erreur, la redirection vers Google se fait automatiquement
-    // L'utilisateur quitte cette page, donc pas besoin de réinitialiser googleLoading
+      if (error) {
+        console.error("OAuth error:", error);
+        alert("Error connecting to Google: " + error.message);
+        setGoogleLoading(false);
+        return;
+      }
+
+      // ✅ Si data.url existe, la redirection sera gérée par Supabase
+      // Sinon, la redirection se fait automatiquement via window.location
+      // Pas besoin de réinitialiser googleLoading car l'utilisateur quitte la page
+    } catch (err) {
+      console.error("Exception in Google login:", err);
+      alert("An error occurred. Please try again.");
+      setGoogleLoading(false);
+    }
   };
 
   const handleLogin = async () => {
