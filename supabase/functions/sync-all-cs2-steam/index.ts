@@ -126,6 +126,81 @@ serve(async (req) => {
           continue;
         }
 
+        // ✅ Vérifier que le game_account_link existe toujours (sécurité)
+        // Si le lien a été supprimé entre-temps, le recréer
+        let { data: existingLink } = await supabase
+          .from("game_account_links")
+          .select("id")
+          .eq("user_id", user_id)
+          .eq("game_id", game_id)
+          .eq("provider", "steam")
+          .eq("external_account_id", steamid)
+          .is("revoked_at", null)
+          .maybeSingle();
+
+        if (!existingLink) {
+          console.log(`⚠️ Game account link missing for user ${user_id}, creating it...`);
+          
+          // Récupérer le username Steam depuis l'API (optionnel, non-bloquant)
+          let steamUsername: string | null = null;
+          try {
+            const steamProfileUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${steamApiKey}&steamids=${steamid}`;
+            const steamProfileResponse = await fetch(steamProfileUrl);
+            
+            if (steamProfileResponse.ok) {
+              const steamProfileData = await steamProfileResponse.json();
+              steamUsername = steamProfileData?.response?.players?.[0]?.personaname || null;
+            }
+          } catch (e) {
+            console.warn("Failed to fetch Steam username (non-blocking):", e);
+          }
+          
+          const now = new Date().toISOString();
+          const { data: newLink, error: createError } = await supabase
+            .from("game_account_links")
+            .insert({
+              user_id: user_id,
+              game_id: game_id,
+              provider: "steam",
+              external_account_id: steamid,
+              username: steamUsername || steamid, // Fallback sur steamid si username non disponible
+              linked_at: now,
+              revoked_at: null,
+            })
+            .select("id")
+            .single();
+
+          if (createError) {
+            // Si l'erreur est une violation de contrainte unique, le lien existe peut-être déjà
+            if (createError.code === "23505") {
+              console.log("Link already exists (race condition), fetching it");
+              const { data: fetchedLink } = await supabase
+                .from("game_account_links")
+                .select("id")
+                .eq("user_id", user_id)
+                .eq("game_id", game_id)
+                .eq("provider", "steam")
+                .is("revoked_at", null)
+                .maybeSingle();
+              
+              if (fetchedLink) {
+                existingLink = fetchedLink;
+              } else {
+                console.error(`❌ Error creating game_account_link for user ${user_id}:`, createError);
+                failed++;
+                continue;
+              }
+            } else {
+              console.error(`❌ Error creating game_account_link for user ${user_id}:`, createError);
+              failed++;
+              continue;
+            }
+          } else {
+            existingLink = newLink;
+            console.log(`✅ Successfully created game_account_link for user ${user_id}`);
+          }
+        }
+
         // 🧹 Suppression des anciennes stats CS2
         const { error: deleteError } = await supabase
           .from("game_performances_verified")

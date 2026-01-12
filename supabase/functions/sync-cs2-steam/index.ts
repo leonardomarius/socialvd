@@ -45,7 +45,7 @@ serve(async (req) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     // Vérifier que le lien Steam existe et est valide
-    const { data: link, error: linkError } = await adminClient
+    let { data: link, error: linkError } = await adminClient
       .from("game_account_links")
       .select("id, external_account_id")
       .eq("user_id", user_id)
@@ -66,56 +66,112 @@ serve(async (req) => {
       );
     }
 
+    // Si le lien n'existe pas, le créer automatiquement
     if (!link) {
+      console.log(`Creating missing game_account_link for user ${user_id}, game ${game_id}, steamid ${steamid}`);
+      
+      // Récupérer le username Steam depuis l'API (optionnel, non-bloquant)
+      let steamUsername: string | null = null;
+      const steamApiKey = Deno.env.get("STEAM_WEB_API_KEY");
+      
+      if (steamApiKey) {
+        try {
+          const steamProfileUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${steamApiKey}&steamids=${steamid}`;
+          const steamProfileResponse = await fetch(steamProfileUrl);
+          
+          if (steamProfileResponse.ok) {
+            const steamProfileData = await steamProfileResponse.json();
+            steamUsername = steamProfileData?.response?.players?.[0]?.personaname || null;
+          }
+        } catch (e) {
+          console.warn("Failed to fetch Steam username (non-blocking):", e);
+        }
+      }
+      
+      const now = new Date().toISOString();
+      const { data: newLink, error: createError } = await adminClient
+        .from("game_account_links")
+        .insert({
+          user_id: user_id,
+          game_id: game_id,
+          provider: "steam",
+          external_account_id: steamid,
+          username: steamUsername || steamid, // Fallback sur steamid si username non disponible
+          linked_at: now,
+          revoked_at: null,
+        })
+        .select("id, external_account_id")
+        .single();
+
+      if (createError) {
+        // Si l'erreur est une violation de contrainte unique, essayer de récupérer le lien existant
+        if (createError.code === "23505") {
+          console.log("Link already exists (race condition), fetching it");
+          const { data: existingLink } = await adminClient
+            .from("game_account_links")
+            .select("id, external_account_id")
+            .eq("user_id", user_id)
+            .eq("game_id", game_id)
+            .eq("provider", "steam")
+            .is("revoked_at", null)
+            .maybeSingle();
+          
+          if (existingLink) {
+            link = existingLink;
+          } else {
+            console.error("Error creating game_account_link:", createError);
+            return new Response(
+              JSON.stringify({ error: "Failed to create Steam account link" }),
+              { 
+                status: 500,
+                headers: { "Content-Type": "application/json" }
+              }
+            );
+          }
+        } else {
+          console.error("Error creating game_account_link:", createError);
+          return new Response(
+            JSON.stringify({ error: "Failed to create Steam account link" }),
+            { 
+              status: 500,
+              headers: { "Content-Type": "application/json" }
+            }
+          );
+        }
+      } else {
+        link = newLink;
+        console.log(`Successfully created game_account_link for user ${user_id}`);
+      }
+    }
+
+    // Appeler Steam Web API pour récupérer les stats CS2
+    // NOTE: Steam Web API nécessite une clé API (STEAM_WEB_API_KEY)
+    const steamApiKey = Deno.env.get("STEAM_WEB_API_KEY");
+    
+    if (!steamApiKey) {
       return new Response(
-        JSON.stringify({ error: "Steam account not linked or revoked" }),
+        JSON.stringify({ error: "STEAM_WEB_API_KEY is not set" }),
         { 
-          status: 404,
+          status: 500,
           headers: { "Content-Type": "application/json" }
         }
       );
     }
-
-    // Appeler Steam Web API pour récupérer les stats CS2
-    // NOTE: Steam Web API nécessite une clé API (STEAM_API_KEY)
-    // Pour l'instant, on utilise l'endpoint public qui ne nécessite pas de clé pour certaines stats
-    const steamApiKey = Deno.env.get("STEAM__WEB_API_KEY");
     
     // Endpoint: ISteamUserStats.GetUserStatsForGame
     // App ID CS2: 730
     let statsData: any = null;
+    const steamApiUrl = `https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v2/?appid=730&key=${steamApiKey}&steamid=${steamid}`;
     
-    if (steamApiKey) {
-      // Avec clé API (recommandé)
-      const steamApiUrl = `https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v2/?appid=730&key=${steamApiKey}&steamid=${steamid}`;
-      
-      try {
-        const steamResponse = await fetch(steamApiUrl);
-        if (steamResponse.ok) {
-          statsData = await steamResponse.json();
-        } else {
-          console.error("Steam API error:", steamResponse.status, await steamResponse.text());
-        }
-      } catch (e) {
-        console.error("Error calling Steam API:", e);
+    try {
+      const steamResponse = await fetch(steamApiUrl);
+      if (steamResponse.ok) {
+        statsData = await steamResponse.json();
+      } else {
+        console.error("Steam API error:", steamResponse.status, await steamResponse.text());
       }
-    } else {
-      // Sans clé API, on peut utiliser l'endpoint de profil public
-      // Mais les stats CS2 ne sont pas toujours disponibles sans clé
-      console.warn("STEAM_API_KEY not set, using fallback method");
-
-      if (!steamApiKey) {
-  throw new Error("STEAM_WEB_API_KEY is not set")
-}
-
-      
-      // Fallback: utiliser l'endpoint de profil (informations limitées)
-      try {
-        const profileUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${steamApiKey || "demo"}&steamids=${steamid}`;
-        // Pour l'instant, on va créer des stats par défaut si l'API n'est pas disponible
-      } catch (e) {
-        console.error("Error in fallback Steam API call:", e);
-      }
+    } catch (e) {
+      console.error("Error calling Steam API:", e);
     }
 
     // Normaliser les stats CS2 depuis la réponse Steam
