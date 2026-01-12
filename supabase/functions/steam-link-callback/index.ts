@@ -229,6 +229,24 @@ serve(async (req) => {
     // Sinon, on crée un nouveau lien
     const now = new Date().toISOString();
     
+    // Récupérer le username Steam depuis l'API Steam (optionnel, non-bloquant)
+    let steamUsername: string | null = null;
+    const steamApiKey = Deno.env.get("STEAM_WEB_API_KEY");
+    
+    if (steamApiKey) {
+      try {
+        const steamProfileUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${steamApiKey}&steamids=${steamid64}`;
+        const steamProfileResponse = await fetch(steamProfileUrl);
+        
+        if (steamProfileResponse.ok) {
+          const steamProfileData = await steamProfileResponse.json();
+          steamUsername = steamProfileData?.response?.players?.[0]?.personaname || null;
+        }
+      } catch (e) {
+        console.warn("Failed to fetch Steam username (non-blocking):", e);
+      }
+    }
+    
     const { error: upsertError } = await adminClient
       .from("game_account_links")
       .upsert({
@@ -236,6 +254,7 @@ serve(async (req) => {
         game_id: game_id,
         provider: "steam",
         external_account_id: steamid64,
+        username: steamUsername || steamid64, // Fallback sur steamid64 si username non disponible
         linked_at: now,
         revoked_at: null,
       }, {
