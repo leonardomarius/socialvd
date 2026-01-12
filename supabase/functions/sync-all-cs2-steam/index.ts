@@ -213,6 +213,7 @@ serve(async (req) => {
         const insertRow = {
           user_id,
           game_id: game_id,
+          provider: "steam",
           stats: statsArray,
         };
 

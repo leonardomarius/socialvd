@@ -237,24 +237,8 @@ serve(async (req) => {
 });
 
 function redirectToFrontend(status: "linked" | "error", errorMessage: string | null): Response {
-  const frontendUrl = Deno.env.get("FRONTEND_URL");
+  const frontendUrl = Deno.env.get("FRONTEND_URL") || "https://socialvd.com";
   
-  if (!frontendUrl) {
-    console.error("[steam-link-callback] FRONTEND_URL environment variable is not set");
-    const fallbackUrl = "https://socialvd.com";
-    const redirectUrl = new URL("/profile", fallbackUrl);
-    redirectUrl.searchParams.set("steam", status);
-    if (errorMessage && status === "error") {
-      redirectUrl.searchParams.set("error", encodeURIComponent(errorMessage));
-    }
-    return new Response(null, {
-      status: 302,
-      headers: {
-        "Location": redirectUrl.toString(),
-      },
-    });
-  }
-
   const redirectUrl = new URL("/profile", frontendUrl);
   redirectUrl.searchParams.set("steam", status);
   

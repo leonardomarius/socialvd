@@ -19,6 +19,11 @@ serve(async (req) => {
     console.log(`[steam-link-start] Method: ${req.method}`);
     
     const url = new URL(req.url);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    let userId: string | null = null;
     const authHeader = req.headers.get("Authorization");
     let accessToken: string | null = null;
     
@@ -28,48 +33,29 @@ serve(async (req) => {
       accessToken = url.searchParams.get("access_token");
     }
     
-    if (!accessToken) {
-      const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
-      accessToken = body.access_token || null;
+    if (!accessToken && req.method === "POST") {
+      try {
+        const body = await req.json().catch(() => ({}));
+        accessToken = body.access_token || null;
+      } catch (e) {
+        console.warn("[steam-link-start] Could not parse POST body:", e);
+      }
     }
     
-    if (!accessToken) {
-      return new Response(
-        JSON.stringify({ error: "Missing authentication token" }),
-        { 
-          status: 401,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          }
-        }
-      );
+    if (accessToken) {
+      const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const client = createClient(supabaseUrl, supabaseAnonKey);
+      const { data: { user }, error: authError } = await client.auth.getUser(accessToken);
+      
+      if (!authError && user) {
+        userId = user.id;
+        console.log(`[steam-link-start] User ID from token: ${userId}`);
+      } else {
+        console.warn("[steam-link-start] Invalid or expired token, proceeding without user context");
+      }
+    } else {
+      console.warn("[steam-link-start] No access token provided, proceeding without user context");
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    
-    const client = createClient(supabaseUrl, supabaseAnonKey);
-    const { data: { user }, error: authError } = await client.auth.getUser(accessToken);
-    
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired authentication token" }),
-        { 
-          status: 401,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          }
-        }
-      );
-    }
-
-    const userId = user.id;
-    console.log(`[steam-link-start] User ID: ${userId}`);
-
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: cs2Game, error: gameError } = await adminClient
       .from("games")
@@ -95,7 +81,7 @@ serve(async (req) => {
 
     const timestamp = Date.now();
     const stateData = {
-      user_id: userId,
+      user_id: userId || "anonymous",
       game_id: gameId,
       timestamp: timestamp,
     };
