@@ -120,11 +120,11 @@ type Comment = {
 
   type GameAccount = {
     id: string;
+    user_id: string;
     game: string;
     username: string;
     platform: string | null;
     verified: boolean;
-    verification_code: string | null;
   };
 
   export default function ProfilePage() {
@@ -423,54 +423,31 @@ setLocalLikes(selectedPost.likes ?? 0);
     const loadGameAccounts = async () => {
       setLoadingGames(true);
 
-      // Load non-CS2 accounts from legacy table
-      const { data: legacyAccounts } = await supabase
-        .from("game_accounts")
-        .select("*")
-        .eq("user_id", id)
-        .order("created_at", { ascending: false });
-
-      // Load CS2 account from game_account_links
-      const { data: cs2Game } = await supabase
-        .from("games")
-        .select("id")
-        .eq("slug", "cs2")
-        .single();
-
-      let cs2Account: GameAccount | null = null;
-      if (cs2Game) {
-        const { data: cs2Link } = await supabase
-          .from("game_account_links")
-          .select("external_account_id, created_at")
+      try {
+        // Load all game accounts from VIEW (includes CS2 and legacy)
+        const { data: accounts, error } = await supabase
+          .from("game_accounts")
+          .select("*")
           .eq("user_id", id)
-          .eq("game_id", cs2Game.id)
-          .eq("provider", "steam")
-          .is("revoked_at", null)
-          .single();
+          .order("created_at", { ascending: false });
 
-        if (cs2Link) {
-          cs2Account = {
-            id: `cs2-link-${id}`,
-            game: "CS2",
-            username: cs2Link.external_account_id || "Steam Account",
-            platform: "Steam",
-            verified: true, // Steam links are always verified
-            verification_code: null,
-          };
+        if (error) {
+          // Only log if error has meaningful content (message, code, or non-empty object)
+          const hasContent = error.message || error.code || (typeof error === 'object' && Object.keys(error).length > 0);
+          if (hasContent) {
+            console.error("Error loading game accounts:", error);
+          }
+          setGameAccounts([]);
+        } else {
+          setGameAccounts(accounts || []);
         }
+      } catch (error) {
+        console.error("Error in loadGameAccounts:", error);
+        setGameAccounts([]);
+      } finally {
+        // TOUJOURS désactiver le loading, même en cas d'erreur
+        setLoadingGames(false);
       }
-
-      // Combine: CS2 from links, others from legacy
-      const legacyAccountsList = (legacyAccounts || []).filter(
-        (acc) => !isCS2Account(acc.game)
-      ) as GameAccount[];
-
-      const allAccounts = cs2Account 
-        ? [cs2Account, ...legacyAccountsList]
-        : legacyAccountsList;
-
-      setGameAccounts(allAccounts);
-      setLoadingGames(false);
     };
 
     // Follows count
@@ -1396,7 +1373,7 @@ const handleToggleFollow = async () => {
                     className="btn"
                     type="button"
                   >
-                    {showEdit ? "Close" : "Profile & Co"}
+                    {showEdit ? "Close" : "Profile settings"}
                   </button>
                 )}
               </div>
@@ -1589,7 +1566,7 @@ const handleToggleFollow = async () => {
               fontWeight: 500,
             }}
           >
-            Connect your stats
+            Connect a game
           </button>
         )}
       </div>
@@ -1647,7 +1624,7 @@ const handleToggleFollow = async () => {
               fontWeight: 500,
             }}
           >
-            Connect your stats
+            Connect a game
           </button>
         )}
       </div>

@@ -62,7 +62,6 @@ export default function EditProfileForm({
   --------------------------------------------- */
   const [gameAccounts, setGameAccounts] = useState<GameAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
-  const [hasSteamCS2Link, setHasSteamCS2Link] = useState(false);
 
   /* ---------------------------------------------
      Load performances (verified only)
@@ -159,91 +158,39 @@ export default function EditProfileForm({
   useEffect(() => {
     loadPerformances();
     loadGameAccounts();
-    checkSteamCS2Link();
   }, []);
 
   /* ---------------------------------------------
-     Check if user has Steam CS2 link
-  --------------------------------------------- */
-  async function checkSteamCS2Link() {
-    // Get CS2 game_id (assuming slug is 'cs2')
-    const { data: cs2Game } = await supabase
-      .from("games")
-      .select("id")
-      .eq("slug", "cs2")
-      .single();
-
-    if (!cs2Game) {
-      setHasSteamCS2Link(false);
-      return;
-    }
-
-    const { data: link } = await supabase
-      .from("game_account_links")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("game_id", cs2Game.id)
-      .eq("provider", "steam")
-      .is("revoked_at", null)
-      .single();
-
-    setHasSteamCS2Link(!!link);
-  }
-
-  /* ---------------------------------------------
-     Load game accounts
+     Load game accounts (from VIEW game_accounts)
   --------------------------------------------- */
   async function loadGameAccounts() {
     setLoadingAccounts(true);
     
-    // Load non-CS2 accounts from legacy table
-    const { data: legacyAccounts } = await supabase
-      .from("game_accounts")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-
-    // Load CS2 account from game_account_links
-    const { data: cs2Game } = await supabase
-      .from("games")
-      .select("id")
-      .eq("slug", "cs2")
-      .single();
-
-    let cs2Account: GameAccount | null = null;
-    if (cs2Game) {
-      const { data: cs2Link } = await supabase
-        .from("game_account_links")
-        .select("external_account_id, created_at")
+    try {
+      // Load all game accounts from VIEW (includes CS2 and legacy)
+      const { data: accounts, error } = await supabase
+        .from("game_accounts")
+        .select("*")
         .eq("user_id", userId)
-        .eq("game_id", cs2Game.id)
-        .eq("provider", "steam")
-        .is("revoked_at", null)
-        .single();
+        .order("created_at", { ascending: false });
 
-      if (cs2Link) {
-        cs2Account = {
-          id: `cs2-link-${userId}`,
-          user_id: userId,
-          game: "CS2",
-          username: cs2Link.external_account_id || "Steam Account",
-          platform: "Steam",
-          verified: true, // Steam links are always verified
-        };
+      if (error) {
+        // Only log if error has meaningful content (message, code, or non-empty object)
+        const hasContent = error.message || error.code || (typeof error === 'object' && Object.keys(error).length > 0);
+        if (hasContent) {
+          console.error("Error loading game accounts:", error);
+        }
+        setGameAccounts([]);
+      } else {
+        setGameAccounts(accounts || []);
       }
+    } catch (error) {
+      console.error("Error in loadGameAccounts:", error);
+      setGameAccounts([]);
+    } finally {
+      // TOUJOURS désactiver le loading, même en cas d'erreur
+      setLoadingAccounts(false);
     }
-
-    // Combine: CS2 from links, others from legacy
-    const legacyAccountsList = (legacyAccounts || []).filter(
-      (acc) => !isCS2Account(acc.game)
-    ) as GameAccount[];
-
-    const allAccounts = cs2Account 
-      ? [cs2Account, ...legacyAccountsList]
-      : legacyAccountsList;
-
-    setGameAccounts(allAccounts);
-    setLoadingAccounts(false);
   }
 
   /* ---------------------------------------------
@@ -324,7 +271,7 @@ export default function EditProfileForm({
         boxShadow: "0 0 22px rgba(0,0,0,0.4)",
       }}
     >
-      <h2 style={{ marginBottom: 16 }}>Edit my profile</h2>
+      <h2 style={{ marginBottom: 16 }}>Profile settings</h2>
 
       {/* Avatar */}
       {avatarUrl ? (
@@ -448,7 +395,7 @@ export default function EditProfileForm({
       <h2 style={{ marginTop: 40 }}>Game accounts</h2>
 
       {/* CS2 Status (if connected) */}
-      {hasSteamCS2Link && (
+      {gameAccounts.some((acc) => isCS2Account(acc.game)) && (
         <div style={{ marginBottom: 20 }}>
           <div
             style={{
