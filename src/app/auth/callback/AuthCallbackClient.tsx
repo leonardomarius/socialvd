@@ -110,11 +110,11 @@ export default function AuthCallbackClient() {
               return;
             }
 
-            // Profil complet → rediriger vers /
+            // Profil complet → rediriger vers /feed
             if (subscriptionRef.current) {
               subscriptionRef.current.unsubscribe();
             }
-            router.replace("/");
+            router.replace("/feed");
           } else if (event === "SIGNED_OUT" || (event === "TOKEN_REFRESHED" && !session)) {
             // Session invalide ou expirée
             hasProcessedRef.current = true;

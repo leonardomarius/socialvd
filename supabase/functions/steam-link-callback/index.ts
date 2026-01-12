@@ -12,7 +12,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * - Extraire le steamid64 depuis openid.claimed_id
  * - Valider et décoder le state (HMAC)
  * - UPSERT dans game_account_links (NE JAMAIS modifier un steamid existant)
- * - Déclencher l'Edge Function sync-cs2-steam (unitaire)
+ * - Déclencher l'Edge Function sync-all-cs2-steam (non-bloquant)
  * - Rediriger vers le front : succès → /profile?steam=linked, erreur → /profile?steam=error
  * 
  * Contraintes :
@@ -38,8 +38,12 @@ serve(async (req) => {
   }
 
   try {
-    // 🔒 Vérifier que la méthode est GET
+    // 🔒 Logger la méthode reçue
+    console.log(`[steam-link-callback] Method: ${req.method}`);
+    
+    // 🔒 Accepter GET uniquement (OAuth Steam callback utilise GET)
     if (req.method !== "GET") {
+      console.error(`[steam-link-callback] Method ${req.method} not allowed - only GET is supported`);
       return new Response("Method not allowed", { 
         status: 405,
         headers: {
@@ -137,6 +141,7 @@ serve(async (req) => {
     }
 
     const { user_id, game_id } = stateData;
+    console.log(`[steam-link-callback] User ID from state: ${user_id}, Game ID: ${game_id}`);
 
     // ✅ Valider la signature OpenID auprès de Steam
     // Steam OpenID 2.0 nécessite un appel à check_authentication
@@ -192,6 +197,7 @@ serve(async (req) => {
     }
 
     const steamid64 = steamIdMatch[1];
+    console.log(`[steam-link-callback] Steam ID received: ${steamid64}`);
 
     // 🔐 Créer le client Supabase avec service_role
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -262,9 +268,11 @@ serve(async (req) => {
       });
 
     if (upsertError) {
-      console.error("Error upserting game_account_link:", upsertError);
+      console.error(`[steam-link-callback] Error upserting game_account_link for user ${user_id}:`, upsertError);
       return redirectToFrontend("error", "Failed to link Steam account");
     }
+
+    console.log(`[steam-link-callback] Successfully linked Steam account ${steamid64} for user ${user_id}`);
 
     // 🚀 Déclencher l'Edge Function sync-all-cs2-steam (non-bloquant)
     // Cette fonction synchronise les stats CS2 depuis l'API Steam pour tous les comptes Steam

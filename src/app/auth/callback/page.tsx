@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AmbientGlow from "@/components/background/AmbientGlow";
@@ -11,51 +11,76 @@ export const dynamic = "force-dynamic";
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const hasProcessedRef = useRef(false);
+  const subscriptionRef = useRef<any>(null);
 
   useEffect(() => {
-    const handleCallback = async () => {
+    if (hasProcessedRef.current) return;
+
+    // ✅ Vérifier les erreurs OAuth dans l'URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const errorParam = urlParams.get("error") || hashParams.get("error");
+    const errorDescription = urlParams.get("error_description") || hashParams.get("error_description");
+
+    if (errorParam) {
+      const errorMsg = errorDescription || "Google authentication failed. Please try again.";
+      hasProcessedRef.current = true;
+      window.history.replaceState(null, "", window.location.pathname);
+      router.replace(`/login?error=${encodeURIComponent(errorMsg)}`);
+      return;
+    }
+
+    // ✅ Utiliser onAuthStateChange pour attendre la confirmation de session
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (hasProcessedRef.current) return;
+
       try {
-        // ✅ Avec detectSessionInUrl: true, Supabase traite automatiquement le hash au chargement
-        // On attend un peu pour que Supabase ait le temps de traiter le hash
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        // ✅ Appeler getSession() pour vérifier la session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-        // ✅ Nettoyer l'URL après avoir récupéré la session (supprimer tout #access_token)
-        if (typeof window !== "undefined" && window.location.hash) {
+        if (event === "SIGNED_IN" && session?.user) {
+          hasProcessedRef.current = true;
+          
+          // Nettoyer l'URL
           window.history.replaceState(null, "", window.location.pathname);
-        }
+          
+          if (subscriptionRef.current) {
+            subscriptionRef.current.unsubscribe();
+          }
 
-        if (sessionError) {
-          console.error("Session error:", sessionError);
-          setError("Authentication failed");
-          setTimeout(() => {
-            router.replace("/login");
-          }, 2000);
-          return;
+          // ✅ Session OK → rediriger vers /feed
+          router.replace("/feed");
+        } else if (event === "SIGNED_OUT" || (event === "TOKEN_REFRESHED" && !session)) {
+          hasProcessedRef.current = true;
+          setError("Authentication failed. Please try again.");
+          window.history.replaceState(null, "", window.location.pathname);
+          
+          if (subscriptionRef.current) {
+            subscriptionRef.current.unsubscribe();
+          }
+          
+          router.replace(`/login?error=${encodeURIComponent("Google authentication failed. Please try again.")}`);
         }
-
-        if (!session || !session.user) {
-          setError("No session found");
-          setTimeout(() => {
-            router.replace("/login");
-          }, 2000);
-          return;
-        }
-
-        // ✅ Session OK → rediriger vers /
-        router.replace("/");
       } catch (err) {
         console.error("Exception in auth callback:", err);
-        setError("An unexpected error occurred");
-        setTimeout(() => {
-          router.replace("/login");
-        }, 2000);
+        hasProcessedRef.current = true;
+        setError("An unexpected error occurred. Please try again.");
+        window.history.replaceState(null, "", window.location.pathname);
+        
+        if (subscriptionRef.current) {
+          subscriptionRef.current.unsubscribe();
+        }
+        
+        router.replace(`/login?error=${encodeURIComponent("An error occurred. Please try again.")}`);
+      }
+    });
+
+    subscriptionRef.current = subscription;
+
+    // Cleanup
+    return () => {
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
       }
     };
-
-    handleCallback();
   }, [router]);
 
   return (

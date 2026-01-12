@@ -40,8 +40,12 @@ serve(async (req) => {
   }
 
   try {
-    // 🔒 Vérifier que la méthode est GET
+    // 🔒 Logger la méthode reçue
+    console.log(`[steam-link-start] Method: ${req.method}`);
+    
+    // 🔒 Accepter GET uniquement (OAuth Steam nécessite GET)
     if (req.method !== "GET") {
+      console.error(`[steam-link-start] Method ${req.method} not allowed - only GET is supported`);
       return new Response("Method not allowed", { 
         status: 405,
         headers: {
@@ -98,6 +102,7 @@ serve(async (req) => {
     }
 
     const userId = user.id;
+    console.log(`[steam-link-start] User ID: ${userId}`);
 
     // 🎮 Récupérer le game_id pour CS2 (via slug "cs2")
     // Utiliser service_role pour la lecture DB
@@ -182,6 +187,8 @@ serve(async (req) => {
     openIdParams.set("openid.return_to", returnToWithState);
 
     const steamAuthUrl = `${steamOpenIdUrl}?${openIdParams.toString()}`;
+
+    console.log(`[steam-link-start] Redirecting to Steam OpenID: ${steamAuthUrl}`);
 
     // 🔄 Rediriger vers Steam (HTTP 302)
     return new Response(null, {

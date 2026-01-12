@@ -24,7 +24,7 @@ export default function LoginPage() {
     setGoogleLoading(true);
 
     try {
-      // ✅ Lancer OAuth avec PKCE pour une sécurité optimale
+      // ✅ Lancer OAuth avec PKCE - Supabase gère automatiquement même avec session existante
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -39,9 +39,19 @@ export default function LoginPage() {
         return;
       }
 
-      // ✅ Si data.url existe, la redirection sera gérée par Supabase
-      // Sinon, la redirection se fait automatiquement via window.location
-      // Pas besoin de réinitialiser googleLoading car l'utilisateur quitte la page
+      // ✅ signInWithOAuth ne redirige PAS automatiquement
+      // Il faut rediriger MANUELLEMENT vers l'URL Google OAuth
+      if (data?.url) {
+        // Redirection IMMÉDIATE vers Google OAuth (externe)
+        window.location.href = data.url;
+        // Pas besoin de réinitialiser googleLoading car l'utilisateur quitte la page
+        return;
+      }
+
+      // Si pas d'URL, erreur inattendue
+      console.error("No OAuth URL returned");
+      alert("An error occurred. Please try again.");
+      setGoogleLoading(false);
     } catch (err) {
       console.error("Exception in Google login:", err);
       alert("An error occurred. Please try again.");

@@ -215,21 +215,23 @@ serve(async (req) => {
         }
 
         // 💾 Insertion des nouvelles stats
-        // La view latest_game_performances_verified attend performance_title et performance_value
-        const rows = performances.map(p => ({
+        // La table game_performances_verified utilise un champ stats (JSONB) qui contient un array d'objets { title, value }
+        const statsArray = performances.map(p => ({
+          title: p.title,
+          value: p.value,
+        }));
+
+        const insertRow = {
           user_id,
           game_id: game_id,
-          provider: "steam",
-          external_account_id: steamid,
-          snapshot_at: new Date().toISOString(),
-          season: null,
-          performance_title: p.title,
-          performance_value: p.value,
-        }));
+          stats: statsArray,
+        };
+
+        console.log(`📝 Inserting stats for user ${user_id}:`, JSON.stringify(insertRow));
 
         const { error: insertError } = await supabase
           .from("game_performances_verified")
-          .insert(rows);
+          .insert(insertRow);
 
         if (insertError) {
           console.error("❌ Insert error:", insertError);
