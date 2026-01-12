@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image";
-import { isCS2Performance, isCS2Account } from "@/lib/cs2-utils";
+import { isCS2Account } from "@/lib/cs2-utils";
 
 /* ---------------------------------------------
    Types
@@ -43,6 +44,7 @@ export default function EditProfileForm({
   currentAvatar,
   onUpdated,
 }: EditProfileFormProps) {
+  const router = useRouter();
   const [pseudo, setPseudo] = useState(currentPseudo || "");
 
   // 🔥 REMPLACEMENT — bio → mindset
@@ -51,46 +53,25 @@ export default function EditProfileForm({
   const [avatarUrl, setAvatarUrl] = useState(currentAvatar || null);
   const [uploading, setUploading] = useState(false);
 
-  // performances
+  // performances (verified only)
   const [performances, setPerformances] = useState<Performance[]>([]);
   const [loadingPerf, setLoadingPerf] = useState(true);
 
-  const [gameName, setGameName] = useState("");
-  const [title, setTitle] = useState("");
-  const [value, setValue] = useState("");
-  const [adding, setAdding] = useState(false);
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editGameName, setEditGameName] = useState("");
-  const [editTitle, setEditTitle] = useState("");
-  const [editValue, setEditValue] = useState("");
-
   /* ---------------------------------------------
-     GAME ACCOUNTS — STATES
+     GAME ACCOUNTS — STATES (READ-ONLY)
   --------------------------------------------- */
-  const [accGame, setAccGame] = useState("");
-  const [accUsername, setAccUsername] = useState("");
-  const [accPlatform, setAccPlatform] = useState("PlayStation");
   const [gameAccounts, setGameAccounts] = useState<GameAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [hasSteamCS2Link, setHasSteamCS2Link] = useState(false);
 
   /* ---------------------------------------------
-     Load performances
+     Load performances (verified only)
   --------------------------------------------- */
   async function loadPerformances() {
     setLoadingPerf(true);
     
     try {
-      // Load non-CS2 performances from legacy table
-      const { data: legacyData } = await supabase
-        .from("game_performances")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
-
       // Load verified performances from latest_game_performances_verified view
-      // La view retourne UNE ligne par (user_id, game_id) avec stats JSON
       const { data: verifiedData, error: verifiedError } = await supabase
         .from("latest_game_performances_verified")
         .select("*")
@@ -98,6 +79,9 @@ export default function EditProfileForm({
 
       if (verifiedError) {
         console.error("Error loading verified performances:", verifiedError);
+        setPerformances([]);
+        setLoadingPerf(false);
+        return;
       }
 
       // Récupérer les noms de jeux pour les game_id trouvés
@@ -127,7 +111,6 @@ export default function EditProfileForm({
           // Parser le champ stats (JSON)
           let statsData: any = null;
           try {
-            // Si stats est une string JSON, la parser
             if (typeof row.stats === 'string') {
               statsData = JSON.parse(row.stats);
             } else {
@@ -138,10 +121,8 @@ export default function EditProfileForm({
             continue;
           }
 
-          // Si stats est un objet avec title et value
           if (statsData && typeof statsData === 'object') {
             if (statsData.title && statsData.value !== undefined) {
-              // Structure : { title: string, value: string }
               verifiedPerformances.push({
                 id: row.id || `verified-${row.user_id}-${row.game_id}`,
                 user_id: row.user_id,
@@ -150,7 +131,6 @@ export default function EditProfileForm({
                 performance_value: statsData.value !== null ? String(statsData.value) : null,
               });
             } else if (Array.isArray(statsData)) {
-              // Si stats est un array d'objets { title, value }
               for (const stat of statsData) {
                 if (stat && stat.title && stat.value !== undefined) {
                   verifiedPerformances.push({
@@ -167,15 +147,7 @@ export default function EditProfileForm({
         }
       }
 
-      // Combine: verified first, then legacy (non-CS2)
-      const legacyPerformances = (legacyData || []).filter(
-        (p) => !isCS2Performance(p.game_name)
-      ) as Performance[];
-
-      // Merge: verified performances first, then legacy
-      const allPerformances = [...verifiedPerformances, ...legacyPerformances];
-
-      setPerformances(allPerformances);
+      setPerformances(verifiedPerformances);
     } catch (error) {
       console.error("Error in loadPerformances:", error);
       setPerformances([]);
@@ -335,117 +307,6 @@ export default function EditProfileForm({
     }
   };
 
-  /* ---------------------------------------------
-     Add performance
-  --------------------------------------------- */
-  const handleAddPerformance = async (e: any) => {
-    e.preventDefault();
-    setAdding(true);
-
-    // CS2 performances are read-only - synced from backend
-    if (isCS2Performance(gameName)) {
-      alert("CS2 performances are automatically synced from Steam. They update automatically after connection and every 12 hours.");
-      setAdding(false);
-      return;
-    }
-
-    if (performances.length >= 4) {
-      alert("You can only add up to 4 performances.");
-      setAdding(false);
-      return;
-    }
-
-    const { error } = await supabase.from("game_performances").insert({
-      user_id: userId,
-      game_name: gameName,
-      performance_title: title,
-      performance_value: value,
-    });
-
-    setAdding(false);
-
-    if (!error) {
-      setGameName("");
-      setTitle("");
-      setValue("");
-      loadPerformances();
-    }
-  };
-
-  /* ---------------------------------------------
-     Delete performance
-  --------------------------------------------- */
-  const deletePerformance = async (id: string) => {
-    const perf = performances.find((p) => p.id === id);
-    if (perf && isCS2Performance(perf.game_name)) {
-      alert("CS2 performances are read-only and cannot be deleted manually.");
-      return;
-    }
-
-    const ok = confirm("Delete this performance?");
-    if (!ok) return;
-
-    await supabase.from("game_performances").delete().eq("id", id);
-
-    loadPerformances();
-  };
-
-  /* ---------------------------------------------
-     Edit performance
-  --------------------------------------------- */
-  const startEdit = (p: Performance) => {
-    // CS2 performances are read-only
-    if (isCS2Performance(p.game_name)) {
-      alert("CS2 performances are read-only and synced from Steam.");
-      return;
-    }
-
-    setEditingId(p.id);
-    setEditGameName(p.game_name);
-    setEditTitle(p.performance_title);
-    setEditValue(p.performance_value || "");
-  };
-
-  const saveEdit = async () => {
-    if (!editingId) return;
-
-    // CS2 performances are read-only
-    if (isCS2Performance(editGameName)) {
-      alert("CS2 performances are read-only and cannot be edited manually.");
-      setEditingId(null);
-      return;
-    }
-
-    const { error } = await supabase
-      .from("game_performances")
-      .update({
-        game_name: editGameName,
-        performance_title: editTitle,
-        performance_value: editValue,
-      })
-      .eq("id", editingId);
-
-    if (!error) {
-      setEditingId(null);
-      loadPerformances();
-    }
-  };
-
-  /* ---------------------------------------------
-     Connect Steam
-  --------------------------------------------- */
-  const handleConnectSteam = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session?.access_token) {
-      alert("Please log in to connect your Steam account.");
-      return;
-    }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const url = `${supabaseUrl}/functions/v1/steam-link-start?access_token=${session.access_token}`;
-    window.location.href = url;
-  };
 
 
   /* ---------------------------------------------
@@ -542,138 +403,52 @@ export default function EditProfileForm({
 
       <h2 style={{ marginTop: 40 }}>Verified performances</h2>
 
-{/* --- ADD PERFORMANCE FORM --- */}
-<form onSubmit={handleAddPerformance} style={addBox}>
-  <div style={{ marginBottom: 10 }}>
-    <label>Game</label>
-    <input
-      type="text"
-      value={gameName}
-      onChange={(e) => setGameName(e.target.value)}
-      required
-      style={inputField}
-    />
-  </div>
-
-  <div style={{ marginBottom: 10 }}>
-    <label>Performance</label>
-    <input
-      type="text"
-      value={title}
-      onChange={(e) => setTitle(e.target.value)}
-      required
-      style={inputField}
-    />
-  </div>
-
-  <div style={{ marginBottom: 10 }}>
-    <label>Details (optional)</label>
-    <input
-      type="text"
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      style={inputField}
-    />
-  </div>
-
-  <button
-    type="submit"
-    disabled={adding}
-    style={saveBtn}
-  >
-    {adding ? "Adding..." : "Add performance"}
-  </button>
-</form>
-
-{/* --- LIST EXISTING PERFORMANCES --- */}
-<div
-  style={{
-    marginTop: 30,
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  }}
->
-  {performances.length === 0 && (
-    <p style={{ opacity: 0.7 }}>No performance yet.</p>
-  )}
-
-  {performances.map((p) => (
-    <div key={p.id} style={perfCard}>
-      {editingId !== p.id ? (
-        <>
-          <strong style={{ fontSize: 16 }}>{p.game_name}</strong>
-          <p>{p.performance_title}</p>
-          {p.performance_value && (
-            <p style={{ opacity: 0.7 }}>{p.performance_value}</p>
-          )}
-
-          {/* Buttons - Hidden for CS2 performances (read-only) */}
-          {!isCS2Performance(p.game_name) && (
-            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-              <button onClick={() => startEdit(p)} style={btnIcon}>✏</button>
-              <button onClick={() => deletePerformance(p.id)} style={btnDelete}>🗑</button>
-            </div>
-          )}
-          {/* CS2 badge for read-only performances */}
-          {isCS2Performance(p.game_name) && (
-            <div style={{ 
-              marginTop: 10, 
-              fontSize: 12, 
-              color: "rgba(80, 200, 120, 0.9)",
-              fontWeight: 500,
-              display: "flex",
-              alignItems: "center",
-              gap: 6
-            }}>
-              <span style={{ fontSize: 14 }}>✓</span>
-              <span>Verified • Official Steam Data</span>
-            </div>
-          )}
-        </>
+      {/* Verified performances display (read-only) */}
+      {loadingPerf ? (
+        <p style={{ opacity: 0.7, marginTop: 20 }}>Loading...</p>
+      ) : performances.length === 0 ? (
+        <p style={{ opacity: 0.7, marginTop: 20 }}>
+          No verified performances yet. Connect your game accounts to sync stats automatically.
+        </p>
       ) : (
-        <>
-          <input
-            value={editGameName}
-            onChange={(e) => setEditGameName(e.target.value)}
-            style={inputField}
-          />
-
-          <input
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            style={inputField}
-          />
-
-          <input
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            style={inputField}
-          />
-
-          <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={saveEdit} style={saveBtn}>
-              Save
-            </button>
-            <button
-              onClick={() => setEditingId(null)}
-              style={cancelBtn}
-            >
-              Cancel
-            </button>
-          </div>
-        </>
+        <div
+          style={{
+            marginTop: 20,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          {performances.map((p) => (
+            <div key={p.id} style={perfCard}>
+              <strong style={{ fontSize: 16 }}>{p.game_name}</strong>
+              <p>{p.performance_title}</p>
+              {p.performance_value && (
+                <p style={{ opacity: 0.7 }}>{p.performance_value}</p>
+              )}
+              <div style={{ 
+                marginTop: 10, 
+                fontSize: 12, 
+                color: "rgba(80, 200, 120, 0.9)",
+                fontWeight: 500,
+                display: "flex",
+                alignItems: "center",
+                gap: 6
+              }}>
+                <span style={{ fontSize: 14 }}>✓</span>
+                <span>Verified • Official API Data</span>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
-    </div>
-  ))}
-</div>
 
 
       {/* GAME ACCOUNTS */}
       <h2 style={{ marginTop: 40 }}>Game accounts</h2>
 
-      {/* CS2 Status or Connect Steam */}
-      {hasSteamCS2Link ? (
+      {/* CS2 Status (if connected) */}
+      {hasSteamCS2Link && (
         <div style={{ marginBottom: 20 }}>
           <div
             style={{
@@ -697,168 +472,82 @@ export default function EditProfileForm({
             </div>
           </div>
         </div>
-      ) : (
-        <div style={{ marginBottom: 20 }}>
-          <button
-            type="button"
-            onClick={handleConnectSteam}
-            style={{
-              ...saveBtn,
-              background: "rgba(80,120,255,0.85)",
-              cursor: "pointer",
-              opacity: 1,
-            }}
-          >
-            Connect Steam
-          </button>
-          <p style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}>
-            Connect your Steam account to sync CS2 stats automatically
-          </p>
-        </div>
       )}
 
-      {/* Display existing CS2 accounts (read-only) */}
-      {gameAccounts.filter((acc) => isCS2Account(acc.game)).length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 16, marginBottom: 10 }}>CS2 Account (Read-only)</h3>
-          {gameAccounts
-            .filter((acc) => isCS2Account(acc.game))
-            .map((acc) => (
-              <div
-                key={acc.id}
-                style={{
-                  ...perfCard,
-                  opacity: 0.8,
-                  borderColor: "rgba(80, 200, 120, 0.3)",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <strong>{acc.game}</strong>
-                    <p style={{ margin: "4px 0", opacity: 0.8 }}>Username: {acc.username}</p>
-                    <p style={{ margin: "4px 0", opacity: 0.8 }}>Platform: {acc.platform || "Steam"}</p>
-                    <p style={{ 
-                      margin: "4px 0", 
-                      fontSize: 12, 
-                      color: "rgba(80, 200, 120, 0.9)",
-                      fontWeight: 500,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6
-                    }}>
-                      <span style={{ fontSize: 14 }}>✓</span>
-                      <span>Verified • Official Steam Data</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-        </div>
-      )}
-
-      {/* Add non-CS2 game accounts */}
-      <div
-        style={{
-          display: "flex",
-          gap: "10px",
-          marginTop: "15px",
-          marginBottom: "20px",
-          flexWrap: "wrap",
-        }}
-      >
-        <input
-          placeholder="Game (not CS2)"
-          value={accGame}
-          onChange={(e) => {
-            const value = e.target.value;
-            // Prevent CS2 from being entered manually
-            if (isCS2Account(value)) {
-              alert("CS2 accounts must be connected via Steam. Use the sync button if you already have a CS2 account linked.");
-              return;
-            }
-            setAccGame(value);
-          }}
-          style={{
-            ...inputField,
-            flex: "1",
-            minWidth: "120px",
-          }}
-        />
-
-        <input
-          placeholder="Username"
-          value={accUsername}
-          onChange={(e) => setAccUsername(e.target.value)}
-          style={{
-            ...inputField,
-            flex: "1",
-            minWidth: "120px",
-          }}
-        />
-
-        <select
-          value={accPlatform}
-          onChange={(e) => setAccPlatform(e.target.value)}
-          style={{
-            ...inputField,
-            flex: "1",
-            minWidth: "120px",
-            height: "44px",
-            cursor: "pointer",
-          }}
-        >
-          <option value="PlayStation">PlayStation</option>
-          <option value="Xbox">Xbox</option>
-          <option value="Steam">Steam</option>
-          <option value="EA (Origin)">EA (Origin)</option>
-        </select>
-
+      {/* Connect your stats button - ALWAYS VISIBLE */}
+      <div style={{ marginBottom: 20 }}>
         <button
-          onClick={async () => {
-            if (!accGame || !accUsername) {
-              alert("Game and username are required.");
-              return;
-            }
-
-            // Prevent CS2 from being added manually
-            if (isCS2Account(accGame)) {
-              alert("CS2 accounts must be connected via Steam. CS2 accounts are managed automatically.");
-              return;
-            }
-
-            await supabase.from("game_accounts").insert({
-              user_id: userId,
-              game: accGame,
-              username: accUsername,
-              platform: accPlatform,
-              verified: false,
-            });
-
-            setAccGame("");
-            setAccUsername("");
-            setAccPlatform("PlayStation");
-
-            alert("Account successfully registered in your game accounts.");
-            loadGameAccounts();
-          }}
+          type="button"
+          onClick={() => router.push("/profile/stats")}
           style={{
-            padding: "10px 16px",
+            ...saveBtn,
             background: "rgba(80,120,255,0.85)",
-            border: "none",
-            color: "white",
-            borderRadius: 10,
             cursor: "pointer",
-            minWidth: "90px",
+            opacity: 1,
           }}
         >
-          Add
+          Connect your stats
         </button>
+        <p style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}>
+          Connect your game accounts to sync stats automatically
+        </p>
       </div>
 
-      <p style={{ opacity: 0.6, marginTop: 10 }}>
-        {gameAccounts.some((acc) => isCS2Account(acc.game))
-          ? "CS2 accounts are synced from Steam. Other game accounts can be added manually."
-          : "Your game accounts are successfully stored."}
+      {/* Display all game accounts (read-only) */}
+      {loadingAccounts ? (
+        <p style={{ opacity: 0.7, marginTop: 20 }}>Loading game accounts...</p>
+      ) : gameAccounts.length === 0 ? (
+        <p style={{ opacity: 0.6, marginTop: 10 }}>
+          No game accounts connected yet. Use the "Connect your stats" button above to link your game accounts.
+        </p>
+      ) : (
+        <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+          {gameAccounts.map((acc) => (
+            <div
+              key={acc.id}
+              style={{
+                ...perfCard,
+                opacity: 0.8,
+                borderColor: isCS2Account(acc.game) 
+                  ? "rgba(80, 200, 120, 0.3)" 
+                  : "rgba(255,255,255,0.07)",
+              }}
+            >
+              <div>
+                <strong>{acc.game}</strong>
+                <p style={{ margin: "4px 0", opacity: 0.8 }}>Username: {acc.username}</p>
+                <p style={{ margin: "4px 0", opacity: 0.8 }}>Platform: {acc.platform || (isCS2Account(acc.game) ? "Steam" : "N/A")}</p>
+                {isCS2Account(acc.game) ? (
+                  <p style={{ 
+                    margin: "4px 0", 
+                    fontSize: 12, 
+                    color: "rgba(80, 200, 120, 0.9)",
+                    fontWeight: 500,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}>
+                    <span style={{ fontSize: 14 }}>✓</span>
+                    <span>Verified • Official Steam Data</span>
+                  </p>
+                ) : (
+                  <p style={{ 
+                    margin: "4px 0", 
+                    fontSize: 12, 
+                    color: acc.verified ? "rgba(80, 200, 120, 0.9)" : "rgba(255, 200, 80, 0.9)",
+                    fontWeight: 500,
+                  }}>
+                    {acc.verified ? "✓ Verified" : "⚠ Not verified"}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p style={{ opacity: 0.6, marginTop: 10, fontSize: 12 }}>
+        Game accounts are managed through the Stats Hub. Connect your accounts to sync stats automatically.
       </p>
     </div>
   );
@@ -889,46 +578,10 @@ const saveBtn: React.CSSProperties = {
   fontSize: 15,
 };
 
-const cancelBtn: React.CSSProperties = {
-  padding: "10px 18px",
-  background: "rgba(90,90,90,0.25)",
-  border: "1px solid rgba(255,255,255,0.1)",
-  color: "white",
-  borderRadius: 10,
-  cursor: "pointer",
-};
-
-const addBox: React.CSSProperties = {
-  padding: 20,
-  marginTop: 10,
-  background: "rgba(0,0,0,0.35)",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.08)",
-  boxShadow: "0 0 16px rgba(0,0,0,0.3)",
-};
-
 const perfCard: React.CSSProperties = {
   padding: 16,
   borderRadius: 12,
   background: "linear-gradient(135deg, rgba(10,10,18,0.9), rgba(6,6,10,0.92))",
   border: "1px solid rgba(255,255,255,0.07)",
   boxShadow: "0 0 14px rgba(0,0,0,0.4)",
-};
-
-const btnIcon: React.CSSProperties = {
-  padding: "4px 10px",
-  background: "rgba(255,255,255,0.06)",
-  borderRadius: 6,
-  border: "1px solid rgba(255,255,255,0.15)",
-  cursor: "pointer",
-  color: "white",
-};
-
-const btnDelete: React.CSSProperties = {
-  padding: "4px 10px",
-  background: "rgba(160,0,30,0.85)",
-  borderRadius: 6,
-  border: "1px solid rgba(255,255,255,0.15)",
-  cursor: "pointer",
-  color: "white",
 };

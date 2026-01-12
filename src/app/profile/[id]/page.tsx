@@ -13,8 +13,7 @@
 
   // 🔥 AJOUT — IMPORT
   import MateSessionButton from "@/components/MateSessionButton";
-  import ProfilePerformances from "@/components/ProfilePerformances";
-  import AddPerformanceForm from "@/components/AddPerformanceForm";
+  import PerformancePreview from "@/components/PerformancePreview";
 
   // ---------------------
   // FORMATAGE DATE POST
@@ -135,6 +134,7 @@ type Comment = {
 
     const [myId, setMyId] = useState<string | null>(null);
     const [showEdit, setShowEdit] = useState(false);
+    const [activeTab, setActiveTab] = useState<"posts" | "performances">("posts");
 
     const [profile, setProfile] = useState<Profile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
@@ -162,13 +162,8 @@ type Comment = {
     const [gameAccounts, setGameAccounts] = useState<GameAccount[]>([]);
     const [loadingGames, setLoadingGames] = useState(true);
 
-    const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
-    const [editGame, setEditGame] = useState("apex");
-    const [editUsername, setEditUsername] = useState("");
-    const [editPlatform, setEditPlatform] = useState("psn");
-    const [savingEdit, setSavingEdit] = useState(false);
-  // UI toggle for Game Accounts card
-  const [showAccountsCard, setShowAccountsCard] = useState(false);
+    // UI toggle for Game Accounts card
+    const [showAccountsCard, setShowAccountsCard] = useState(false);
 
   // Blocage du scroll quand la modal est ouverte
   useEffect(() => {
@@ -710,97 +705,6 @@ const handleToggleFollow = async () => {
 
 
 
-    // ⭐ FIX : missing function re-added
-    const markAccountVerified = async (accountId: string) => {
-      if (!myId) return;
-
-      const { error } = await supabase
-        .from("game_accounts")
-        .update({ verified: true })
-        .eq("id", accountId)
-        .eq("user_id", myId);
-
-      if (error) {
-        alert("Error during verification: " + error.message);
-        return;
-      }
-
-      loadGameAccounts();
-    };
-
-    // Game account editing
-    const startEditAccount = (acc: GameAccount) => {
-      // CS2 accounts are read-only
-      if (isCS2Account(acc.game)) {
-        alert("CS2 accounts are read-only and synced from Steam.");
-        return;
-      }
-
-      setEditingAccountId(acc.id);
-      setEditGame(acc.game);
-      setEditUsername(acc.username);
-      setEditPlatform(acc.platform || "psn");
-    };
-
-    const cancelEditAccount = () => {
-      setEditingAccountId(null);
-      setSavingEdit(false);
-    };
-
-    const saveEditAccount = async () => {
-      if (!editingAccountId) return;
-
-      // CS2 accounts are read-only
-      if (isCS2Account(editGame)) {
-        alert("CS2 accounts are read-only and cannot be edited manually.");
-        setEditingAccountId(null);
-        setSavingEdit(false);
-        return;
-      }
-
-      setSavingEdit(true);
-
-      const { error } = await supabase
-        .from("game_accounts")
-        .update({
-          game: editGame,
-          username: editUsername,
-          platform: editPlatform,
-        })
-        .eq("id", editingAccountId)
-        .eq("user_id", myId);
-
-      setSavingEdit(false);
-
-      if (error) {
-        alert("Error: " + error.message);
-        return;
-      }
-
-      setEditingAccountId(null);
-      loadGameAccounts();
-    };
-
-    const deleteAccount = async (accountId: string) => {
-      const acc = gameAccounts.find((a) => a.id === accountId);
-      if (acc && isCS2Account(acc.game)) {
-        alert("CS2 accounts are read-only and cannot be deleted manually.");
-        return;
-      }
-
-      const confirmDelete = window.confirm(
-        "Delete this game account? This action is permanent."
-      );
-      if (!confirmDelete) return;
-
-      await supabase
-        .from("game_accounts")
-        .delete()
-        .eq("id", accountId)
-        .eq("user_id", myId);
-
-      loadGameAccounts();
-    };
 
     // 🔥 AJOUT — WRAPPER SESSION (detect mate & show button)
     function MatesSessionWrapper({
@@ -1492,7 +1396,7 @@ const handleToggleFollow = async () => {
                     className="btn"
                     type="button"
                   >
-                    {showEdit ? "Close" : "Edit my profile"}
+                    {showEdit ? "Close" : "Profile & Co"}
                   </button>
                 )}
               </div>
@@ -1548,6 +1452,94 @@ const handleToggleFollow = async () => {
             />
           )}
 
+          {/* TAB SWITCHER */}
+          <div
+            style={{
+              marginTop: 40,
+              borderBottom: "1px solid rgba(255,255,255,0.1)",
+              position: "relative",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: 0,
+              }}
+            >
+              <button
+                onClick={() => setActiveTab("posts")}
+                type="button"
+                style={{
+                  flex: 1,
+                  padding: "16px 0",
+                  background: "transparent",
+                  border: "none",
+                  color: activeTab === "posts" ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.6)",
+                  fontSize: 14,
+                  fontWeight: activeTab === "posts" ? 600 : 400,
+                  letterSpacing: "0.3px",
+                  cursor: "pointer",
+                  transition: "color 0.2s ease",
+                  position: "relative",
+                }}
+                onMouseEnter={(e) => {
+                  if (activeTab !== "posts") {
+                    e.currentTarget.style.color = "rgba(255,255,255,0.8)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab !== "posts") {
+                    e.currentTarget.style.color = "rgba(255,255,255,0.6)";
+                  }
+                }}
+              >
+                Posts
+              </button>
+              <button
+                onClick={() => setActiveTab("performances")}
+                type="button"
+                style={{
+                  flex: 1,
+                  padding: "16px 0",
+                  background: "transparent",
+                  border: "none",
+                  color: activeTab === "performances" ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.6)",
+                  fontSize: 14,
+                  fontWeight: activeTab === "performances" ? 600 : 400,
+                  letterSpacing: "0.3px",
+                  cursor: "pointer",
+                  transition: "color 0.2s ease",
+                  position: "relative",
+                }}
+                onMouseEnter={(e) => {
+                  if (activeTab !== "performances") {
+                    e.currentTarget.style.color = "rgba(255,255,255,0.8)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeTab !== "performances") {
+                    e.currentTarget.style.color = "rgba(255,255,255,0.6)";
+                  }
+                }}
+              >
+                Performances
+              </button>
+            </div>
+            {/* Animated indicator */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: activeTab === "posts" ? "0%" : "50%",
+                width: "50%",
+                height: "2px",
+                background: "rgba(250,204,21,0.9)",
+                transition: "left 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                boxShadow: "0 0 8px rgba(250,204,21,0.5)",
+              }}
+            />
+          </div>
+
  {/* GAME ACCOUNTS CARD — VERSION OVERLAY DROITE */}
 {showAccountsCard && (
   <div
@@ -1581,7 +1573,26 @@ const handleToggleFollow = async () => {
     {loadingGames ? (
       <p>Loading...</p>
     ) : gameAccounts.length === 0 ? (
-      <p>No accounts found.</p>
+      <div>
+        <p style={{ marginBottom: 16 }}>No accounts found.</p>
+        {myId === id && (
+          <button
+            onClick={() => router.push("/profile/stats")}
+            style={{
+              padding: "10px 18px",
+              background: "rgba(80,120,255,0.85)",
+              color: "white",
+              border: "none",
+              borderRadius: 10,
+              cursor: "pointer",
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            Connect your stats
+          </button>
+        )}
+      </div>
     ) : (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {gameAccounts.map((acc) => (
@@ -1621,6 +1632,24 @@ const handleToggleFollow = async () => {
             )}
           </div>
         ))}
+        {myId === id && (
+          <button
+            onClick={() => router.push("/profile/stats")}
+            style={{
+              marginTop: 12,
+              padding: "10px 18px",
+              background: "rgba(80,120,255,0.85)",
+              color: "white",
+              border: "none",
+              borderRadius: 10,
+              cursor: "pointer",
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            Connect your stats
+          </button>
+        )}
       </div>
     )}
   </div>
@@ -1628,94 +1657,92 @@ const handleToggleFollow = async () => {
 
 
 
-          {/* POSTS GRID (Instagram-like) */}
-<section style={{ marginTop: 40 }}>
-  <h2
-    style={{
-      fontSize: 20,
-      marginBottom: 16,
-      letterSpacing: "0.4px",
-    }}
-  >
-    Posts
-  </h2>
+          {/* TAB CONTENT */}
+          <div style={{ marginTop: 0 }}>
+            {activeTab === "posts" ? (
+              /* POSTS PANEL */
+              <section>
+                {loadingPosts ? (
+                  <p style={{ padding: "40px 0", textAlign: "center", opacity: 0.7 }}>Loading...</p>
+                ) : userPosts.length === 0 ? (
+                  <p style={{ padding: "40px 0", textAlign: "center", opacity: 0.7 }}>No posts yet.</p>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, 1fr)",
+                      gap: 6,
+                      marginTop: 0,
+                    }}
+                  >
+                    {userPosts.map((post) => (
+                      <div
+                        key={post.id}
+                        onClick={() => setSelectedPost(post)}
+                        style={{
+                          aspectRatio: "1 / 1",
+                          background: "rgba(20,20,30,0.8)",
+                          borderRadius: 6,
+                          overflow: "hidden",
+                          cursor: "pointer",
+                          position: "relative",
+                        }}
+                      >
+                        <div
+                          className="profile-post-media-wrapper"
+                          onMouseEnter={(e) => {
+                            const video = e.currentTarget.querySelector("video") as HTMLVideoElement;
+                            if (video) {
+                              video.play().catch(() => {
+                                // Ignore play() errors (autoplay restrictions, etc.)
+                              });
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            const video = e.currentTarget.querySelector("video") as HTMLVideoElement;
+                            if (video) {
+                              try {
+                                video.pause();
+                                video.currentTime = 0;
+                              } catch (err) {
+                                // Ignore pause() errors
+                              }
+                            }
+                          }}
+                        >
+                          {post.media_type === "image" && post.media_url && (
+                            <img src={post.media_url} alt="" style={{ pointerEvents: "none" }} />
+                          )}
 
-  {loadingPosts ? (
-    <p>Loading...</p>
-  ) : userPosts.length === 0 ? (
-    <p>No posts yet.</p>
-  ) : (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(3, 1fr)",
-        gap: 6,
-      }}
-    >
-      {userPosts.map((post) => (
-  <div
-    key={post.id}
-    onClick={() => setSelectedPost(post)}
-    style={{
-      aspectRatio: "1 / 1",
-      background: "rgba(20,20,30,0.8)",
-      borderRadius: 6,
-      overflow: "hidden",
-      cursor: "pointer",
-      position: "relative",
-    }}
-  >
-    <div
-      className="profile-post-media-wrapper"
-      onMouseEnter={(e) => {
-        const video = e.currentTarget.querySelector("video") as HTMLVideoElement;
-        if (video) {
-          video.play().catch(() => {
-            // Ignore play() errors (autoplay restrictions, etc.)
-          });
-        }
-      }}
-      onMouseLeave={(e) => {
-        const video = e.currentTarget.querySelector("video") as HTMLVideoElement;
-        if (video) {
-          try {
-            video.pause();
-            video.currentTime = 0;
-          } catch (err) {
-            // Ignore pause() errors
-          }
-        }
-      }}
-    >
-      {post.media_type === "image" && post.media_url && (
-        <img src={post.media_url} alt="" style={{ pointerEvents: "none" }} />
-      )}
-
-      {post.media_type === "video" && post.media_url && (
-        <video
-          src={post.media_url}
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          style={{ pointerEvents: "none" }}
-          onPlay={(e) => {
-            // Prevent play errors from bubbling
-            e.stopPropagation();
-          }}
-          onPause={(e) => {
-            // Prevent pause errors from bubbling
-            e.stopPropagation();
-          }}
-        />
-      )}
-    </div>
-  </div>
-))}
-
-    </div>
-  )}
-</section>
+                          {post.media_type === "video" && post.media_url && (
+                            <video
+                              src={post.media_url}
+                              muted
+                              loop
+                              playsInline
+                              preload="metadata"
+                              style={{ pointerEvents: "none" }}
+                              onPlay={(e) => {
+                                // Prevent play errors from bubbling
+                                e.stopPropagation();
+                              }}
+                              onPause={(e) => {
+                                // Prevent pause errors from bubbling
+                                e.stopPropagation();
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : (
+              /* PERFORMANCES PANEL */
+              <PerformancePreview userId={id} />
+            )}
+          </div>
 
         </div>
       </>

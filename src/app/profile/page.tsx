@@ -244,7 +244,7 @@ export default function ProfilePage({ params }: any) {
 
                 
               >
-                {showEdit ? "Close" : "Edit"}
+                {showEdit ? "Close" : "Profile & Co"}
               </button>
             )}
 
