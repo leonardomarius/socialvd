@@ -12,7 +12,6 @@ serve(async (req) => {
       return new Response("Method not allowed", { status: 405 });
     }
 
-    // 🔑 Steam API Key
     const steamApiKey = Deno.env.get("STEAM_WEB_API_KEY");
     if (!steamApiKey) {
       throw new Error("STEAM_WEB_API_KEY is not set");
@@ -23,7 +22,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // 🎮 Récupérer le game_id pour CS2 (via slug "cs2")
     const { data: cs2Game, error: gameError } = await supabase
       .from("games")
       .select("id")
@@ -43,7 +41,6 @@ serve(async (req) => {
 
     const CS2_GAME_ID = cs2Game.id;
 
-    // 🔍 Récupération des comptes Steam actifs
     console.log("[sync-all-cs2-steam] Fetching Steam accounts...");
     const { data: links, error } = await supabase
       .from("game_account_links")
@@ -75,7 +72,6 @@ serve(async (req) => {
       console.log(`[sync-all-cs2-steam] Syncing CS2 for user ${user_id} (steamid ${steamid})`);
 
       try {
-        // 🎯 Appel Steam API CS2
         const steamUrl =
           `https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v2/` +
           `?appid=${CS2_APP_ID}&steamid=${steamid}&key=${steamApiKey}`;
@@ -126,7 +122,6 @@ serve(async (req) => {
           continue;
         }
 
-        // ✅ Vérifier que le game_account_link existe toujours (sécurité)
         let { data: existingLink } = await supabase
           .from("game_account_links")
           .select("id")
@@ -140,7 +135,6 @@ serve(async (req) => {
         if (!existingLink) {
           console.log(`[sync-all-cs2-steam] Game account link missing for user ${user_id}, creating it...`);
           
-          // Récupérer le username Steam depuis l'API (optionnel, non-bloquant)
           let steamUsername: string | null = null;
           try {
             const steamProfileUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${steamApiKey}&steamids=${steamid}`;
@@ -199,7 +193,6 @@ serve(async (req) => {
           }
         }
 
-        // 🧹 Suppression des anciennes stats CS2
         const { error: deleteError } = await supabase
           .from("game_performances_verified")
           .delete()
@@ -212,8 +205,6 @@ serve(async (req) => {
           continue;
         }
 
-        // 💾 Insertion des nouvelles stats
-        // Structure: stats (JSONB) contenant un array d'objets { title, value }
         const statsArray = performances.map(p => ({
           title: p.title,
           value: p.value,
