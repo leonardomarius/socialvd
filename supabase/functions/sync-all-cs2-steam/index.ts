@@ -4,8 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const CS2_APP_ID = 730;
 
 serve(async (req) => {
-  console.log("🔥🔥🔥 SYNC-ALL-CS2-STEAM FUNCTION HIT 🔥🔥🔥");
-  console.log("METHOD:", req.method);
+  console.log("[sync-all-cs2-steam] Function called");
+  console.log("[sync-all-cs2-steam] Method:", req.method);
 
   try {
     if (req.method !== "POST") {
@@ -31,7 +31,7 @@ serve(async (req) => {
       .single();
 
     if (gameError || !cs2Game) {
-      console.error("CS2 game not found:", gameError);
+      console.error("[sync-all-cs2-steam] CS2 game not found:", gameError);
       return new Response(
         JSON.stringify({ error: "CS2 game not found in database" }),
         { 
@@ -44,7 +44,7 @@ serve(async (req) => {
     const CS2_GAME_ID = cs2Game.id;
 
     // 🔍 Récupération des comptes Steam actifs
-    console.log("📥 Fetching Steam accounts...");
+    console.log("[sync-all-cs2-steam] Fetching Steam accounts...");
     const { data: links, error } = await supabase
       .from("game_account_links")
       .select("user_id, game_id, external_account_id")
@@ -53,40 +53,40 @@ serve(async (req) => {
       .is("revoked_at", null);
 
     if (error) {
-      console.error("❌ Error fetching Steam accounts:", error);
+      console.error("[sync-all-cs2-steam] Error fetching Steam accounts:", error);
       return new Response("Failed to fetch Steam accounts", { status: 500 });
     }
 
     if (!links || links.length === 0) {
-      console.log("ℹ️ No Steam accounts to sync");
+      console.log("[sync-all-cs2-steam] No Steam accounts to sync");
       return new Response(
         JSON.stringify({ message: "No Steam accounts to sync" }),
         { headers: { "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`📊 Found ${links.length} Steam account(s)`);
+    console.log(`[sync-all-cs2-steam] Found ${links.length} Steam account(s)`);
 
     let synced = 0;
     let failed = 0;
 
     for (const link of links) {
       const { user_id, game_id, external_account_id: steamid } = link;
-      console.log(`🔄 Syncing CS2 for user ${user_id} (steamid ${steamid})`);
+      console.log(`[sync-all-cs2-steam] Syncing CS2 for user ${user_id} (steamid ${steamid})`);
 
       try {
-        // 🎯 Appel Steam API CS2 (EXACT)
+        // 🎯 Appel Steam API CS2
         const steamUrl =
           `https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v2/` +
           `?appid=${CS2_APP_ID}&steamid=${steamid}&key=${steamApiKey}`;
 
-        console.log("Calling Steam API:", steamUrl);
+        console.log(`[sync-all-cs2-steam] Calling Steam API for user ${user_id}`);
         const steamResponse = await fetch(steamUrl);
-        console.log("Steam response status:", steamResponse.status);
+        console.log(`[sync-all-cs2-steam] Steam API response status for user ${user_id}:`, steamResponse.status);
 
         if (!steamResponse.ok) {
           const errorText = await steamResponse.text();
-          console.error(`❌ Steam API failed:`, steamResponse.status, errorText);
+          console.error(`[sync-all-cs2-steam] Steam API failed for user ${user_id}:`, steamResponse.status, errorText);
           failed++;
           continue;
         }
@@ -121,13 +121,12 @@ serve(async (req) => {
           performances.push({ title: "Rounds Played", value: totalRounds.toString() });
 
         if (performances.length === 0) {
-          console.warn("⚠️ No CS2 stats extracted");
+          console.warn(`[sync-all-cs2-steam] No CS2 stats extracted for user ${user_id}`);
           failed++;
           continue;
         }
 
         // ✅ Vérifier que le game_account_link existe toujours (sécurité)
-        // Si le lien a été supprimé entre-temps, le recréer
         let { data: existingLink } = await supabase
           .from("game_account_links")
           .select("id")
@@ -139,7 +138,7 @@ serve(async (req) => {
           .maybeSingle();
 
         if (!existingLink) {
-          console.log(`⚠️ Game account link missing for user ${user_id}, creating it...`);
+          console.log(`[sync-all-cs2-steam] Game account link missing for user ${user_id}, creating it...`);
           
           // Récupérer le username Steam depuis l'API (optionnel, non-bloquant)
           let steamUsername: string | null = null;
@@ -152,7 +151,7 @@ serve(async (req) => {
               steamUsername = steamProfileData?.response?.players?.[0]?.personaname || null;
             }
           } catch (e) {
-            console.warn("Failed to fetch Steam username (non-blocking):", e);
+            console.warn(`[sync-all-cs2-steam] Failed to fetch Steam username for user ${user_id} (non-blocking):`, e);
           }
           
           const now = new Date().toISOString();
@@ -163,7 +162,7 @@ serve(async (req) => {
               game_id: game_id,
               provider: "steam",
               external_account_id: steamid,
-              username: steamUsername || steamid, // Fallback sur steamid si username non disponible
+              username: steamUsername || steamid,
               linked_at: now,
               revoked_at: null,
             })
@@ -171,9 +170,8 @@ serve(async (req) => {
             .single();
 
           if (createError) {
-            // Si l'erreur est une violation de contrainte unique, le lien existe peut-être déjà
             if (createError.code === "23505") {
-              console.log("Link already exists (race condition), fetching it");
+              console.log(`[sync-all-cs2-steam] Link already exists for user ${user_id} (race condition), fetching it`);
               const { data: fetchedLink } = await supabase
                 .from("game_account_links")
                 .select("id")
@@ -186,18 +184,18 @@ serve(async (req) => {
               if (fetchedLink) {
                 existingLink = fetchedLink;
               } else {
-                console.error(`❌ Error creating game_account_link for user ${user_id}:`, createError);
+                console.error(`[sync-all-cs2-steam] Error creating game_account_link for user ${user_id}:`, createError);
                 failed++;
                 continue;
               }
             } else {
-              console.error(`❌ Error creating game_account_link for user ${user_id}:`, createError);
+              console.error(`[sync-all-cs2-steam] Error creating game_account_link for user ${user_id}:`, createError);
               failed++;
               continue;
             }
           } else {
             existingLink = newLink;
-            console.log(`✅ Successfully created game_account_link for user ${user_id}`);
+            console.log(`[sync-all-cs2-steam] Successfully created game_account_link for user ${user_id}`);
           }
         }
 
@@ -209,13 +207,13 @@ serve(async (req) => {
           .eq("game_id", game_id);
 
         if (deleteError) {
-          console.error(`❌ Delete error for user ${user_id}:`, deleteError);
+          console.error(`[sync-all-cs2-steam] Delete error for user ${user_id}:`, deleteError);
           failed++;
           continue;
         }
 
         // 💾 Insertion des nouvelles stats
-        // La table game_performances_verified utilise un champ stats (JSONB) qui contient un array d'objets { title, value }
+        // Structure: stats (JSONB) contenant un array d'objets { title, value }
         const statsArray = performances.map(p => ({
           title: p.title,
           value: p.value,
@@ -227,34 +225,36 @@ serve(async (req) => {
           stats: statsArray,
         };
 
-        console.log(`📝 Inserting stats for user ${user_id}:`, JSON.stringify(insertRow));
+        console.log(`[sync-all-cs2-steam] Inserting stats for user ${user_id}:`, JSON.stringify(insertRow));
 
         const { error: insertError } = await supabase
           .from("game_performances_verified")
           .insert(insertRow);
 
         if (insertError) {
-          console.error("❌ Insert error:", insertError);
+          console.error(`[sync-all-cs2-steam] Insert error for user ${user_id}:`, insertError);
+          console.error(`[sync-all-cs2-steam] Insert error code: ${insertError.code}, message: ${insertError.message}`);
+          console.error(`[sync-all-cs2-steam] Insert error details:`, JSON.stringify(insertError));
           failed++;
           continue;
         }
 
-        console.log(`✅ CS2 stats synced for user ${user_id}`);
+        console.log(`[sync-all-cs2-steam] CS2 stats synced successfully for user ${user_id}`);
         synced++;
       } catch (e) {
-        console.error(`❌ Error syncing user ${user_id}:`, e);
+        console.error(`[sync-all-cs2-steam] Error syncing user ${user_id}:`, e);
         failed++;
       }
     }
 
-    console.log(`📊 Sync complete: ${synced} succeeded, ${failed} failed`);
+    console.log(`[sync-all-cs2-steam] Sync complete: ${synced} succeeded, ${failed} failed`);
 
     return new Response(
       JSON.stringify({ total: links.length, synced, failed }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (e) {
-    console.error(e);
+    console.error("[sync-all-cs2-steam] Fatal error:", e);
     return new Response("Internal server error", { status: 500 });
   }
 });

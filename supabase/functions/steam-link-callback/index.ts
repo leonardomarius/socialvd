@@ -69,7 +69,7 @@ serve(async (req) => {
 
     // 🔐 Vérifier que les paramètres OpenID essentiels sont présents
     if (!openIdParams["openid.mode"] || !openIdParams["openid.return_to"]) {
-      console.error("Missing required OpenID parameters");
+      console.error("[steam-link-callback] Missing required OpenID parameters");
       return redirectToFrontend("error", "Missing OpenID parameters");
     }
 
@@ -77,7 +77,7 @@ serve(async (req) => {
     // Mais vérifions aussi que nous avons bien les paramètres nécessaires
     const openIdMode = openIdParams["openid.mode"];
     if (openIdMode !== "id_res" && openIdMode !== "cancel") {
-      console.error("Invalid OpenID mode:", openIdMode);
+      console.error("[steam-link-callback] Invalid OpenID mode:", openIdMode);
       return redirectToFrontend("error", "Invalid OpenID mode");
     }
     
@@ -88,14 +88,14 @@ serve(async (req) => {
 
     // 🔓 Décoder et valider le state (HMAC)
     if (!signedState) {
-      console.error("Missing state parameter");
+      console.error("[steam-link-callback] Missing state parameter");
       return redirectToFrontend("error", "Missing state parameter");
     }
 
     const [statePayload, signatureB64] = signedState.split(".");
     
     if (!statePayload || !signatureB64) {
-      console.error("Invalid state format");
+      console.error("[steam-link-callback] Invalid state format");
       return redirectToFrontend("error", "Invalid state format");
     }
 
@@ -118,7 +118,7 @@ serve(async (req) => {
     
     // Comparaison sécurisée des signatures (timing-safe)
     if (signatureB64 !== expectedSignatureB64) {
-      console.error("Invalid state signature");
+      console.error("[steam-link-callback] Invalid state signature");
       return redirectToFrontend("error", "Invalid state signature");
     }
 
@@ -127,7 +127,7 @@ serve(async (req) => {
     try {
       stateData = JSON.parse(atob(statePayload));
     } catch (e) {
-      console.error("Failed to decode state:", e);
+      console.error("[steam-link-callback] Failed to decode state:", e);
       return redirectToFrontend("error", "Failed to decode state");
     }
 
@@ -136,7 +136,7 @@ serve(async (req) => {
     const MAX_STATE_AGE = 10 * 60 * 1000; // 10 minutes
     
     if (stateAge > MAX_STATE_AGE) {
-      console.error("State expired");
+      console.error("[steam-link-callback] State expired");
       return redirectToFrontend("error", "State expired");
     }
 
@@ -170,7 +170,7 @@ serve(async (req) => {
     });
 
     if (!validationResponse.ok) {
-      console.error("Steam validation request failed:", validationResponse.status);
+      console.error("[steam-link-callback] Steam validation request failed:", validationResponse.status);
       return redirectToFrontend("error", "Steam validation failed");
     }
 
@@ -178,7 +178,7 @@ serve(async (req) => {
     
     // Steam répond avec "is_valid:true" ou "is_valid:false"
     if (!validationText.includes("is_valid:true")) {
-      console.error("Steam OpenID validation failed:", validationText);
+      console.error("[steam-link-callback] Steam OpenID validation failed:", validationText);
       return redirectToFrontend("error", "Steam OpenID validation failed");
     }
 
@@ -186,13 +186,13 @@ serve(async (req) => {
     // Format: https://steamcommunity.com/openid/id/76561198012345678
     const claimedId = openIdParams["openid.claimed_id"];
     if (!claimedId) {
-      console.error("Missing openid.claimed_id");
+      console.error("[steam-link-callback] Missing openid.claimed_id");
       return redirectToFrontend("error", "Missing Steam ID");
     }
 
     const steamIdMatch = claimedId.match(/\/id\/(\d+)$/);
     if (!steamIdMatch || !steamIdMatch[1]) {
-      console.error("Invalid Steam ID format:", claimedId);
+      console.error("[steam-link-callback] Invalid Steam ID format:", claimedId);
       return redirectToFrontend("error", "Invalid Steam ID format");
     }
 
@@ -214,7 +214,7 @@ serve(async (req) => {
       .maybeSingle();
 
     if (checkError) {
-      console.error("Error checking existing link:", checkError);
+      console.error("[steam-link-callback] Error checking existing link:", checkError);
       return redirectToFrontend("error", "Database error");
     }
 
@@ -222,10 +222,10 @@ serve(async (req) => {
     if (existingLink && !existingLink.revoked_at) {
       if (existingLink.external_account_id === steamid64) {
         // Même compte Steam, pas besoin de modifier
-        console.log("Steam account already linked");
+        console.log("[steam-link-callback] Steam account already linked");
       } else {
         // Compte Steam différent - NE PAS MODIFIER (règle stricte)
-        console.error("Steam account already linked to different ID");
+        console.error("[steam-link-callback] Steam account already linked to different ID");
         return redirectToFrontend("error", "Steam account already linked");
       }
     }
@@ -249,7 +249,7 @@ serve(async (req) => {
           steamUsername = steamProfileData?.response?.players?.[0]?.personaname || null;
         }
       } catch (e) {
-        console.warn("Failed to fetch Steam username (non-blocking):", e);
+        console.warn("[steam-link-callback] Failed to fetch Steam username (non-blocking):", e);
       }
     }
     
@@ -285,27 +285,26 @@ serve(async (req) => {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${serviceRoleKey}`,
           },
-          // Pas de body nécessaire - la fonction sync tous les comptes Steam actifs
         }
       );
 
       if (!syncResponse.ok) {
         // Log l'erreur mais ne bloque pas la redirection
         // Le lien est créé, la sync peut être réessayée plus tard
-        console.error("Sync CS2 failed (non-blocking):", await syncResponse.text());
+        console.error("[steam-link-callback] Sync CS2 failed (non-blocking):", await syncResponse.text());
       } else {
-        console.log("CS2 sync triggered successfully");
+        console.log("[steam-link-callback] CS2 sync triggered successfully");
       }
     } catch (syncError) {
       // Erreur non-bloquante - le lien est créé
-      console.error("Error triggering CS2 sync (non-blocking):", syncError);
+      console.error("[steam-link-callback] Error triggering CS2 sync (non-blocking):", syncError);
     }
 
     // ✅ Rediriger vers le front avec succès
     return redirectToFrontend("linked", null);
 
   } catch (error) {
-    console.error("Error in steam-link-callback:", error);
+    console.error("[steam-link-callback] Error:", error);
     return redirectToFrontend("error", "Internal server error");
   }
 });
@@ -319,7 +318,7 @@ function redirectToFrontend(status: "linked" | "error", errorMessage: string | n
   const frontendUrl = Deno.env.get("FRONTEND_URL");
   
   if (!frontendUrl) {
-    console.error("FRONTEND_URL environment variable is not set");
+    console.error("[steam-link-callback] FRONTEND_URL environment variable is not set");
     // Fallback vers socialvd.com en cas d'erreur de configuration
     const fallbackUrl = "https://socialvd.com";
     const redirectUrl = new URL("/profile", fallbackUrl);

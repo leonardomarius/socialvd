@@ -43,7 +43,7 @@ serve(async (req) => {
     // 🔒 Logger la méthode reçue
     console.log(`[steam-link-start] Method: ${req.method}`);
     
-    // 🔒 Accepter GET uniquement (OAuth Steam nécessite GET)
+    // 🔒 Accepter GET uniquement (OAuth Steam nécessite GET depuis le navigateur)
     if (req.method !== "GET") {
       console.error(`[steam-link-start] Method ${req.method} not allowed - only GET is supported`);
       return new Response("Method not allowed", { 
@@ -116,7 +116,7 @@ serve(async (req) => {
       .single();
 
     if (gameError || !cs2Game) {
-      console.error("CS2 game not found:", gameError);
+      console.error("[steam-link-start] CS2 game not found:", gameError);
       return new Response(
         JSON.stringify({ error: "CS2 game not found in database" }),
         { 
@@ -199,15 +199,13 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error("Error in steam-link-start:", error);
+    console.error("[steam-link-start] Error:", error);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
       { 
         status: 500,
         headers: {
-          "Access-Control-Allow-Origin": "https://socialvd.com",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Authorization, Content-Type",
+          ...corsHeaders,
           "Content-Type": "application/json",
         }
       }
