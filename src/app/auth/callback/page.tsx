@@ -7,7 +7,6 @@ import AmbientGlow from "@/components/background/AmbientGlow";
 
 // ✅ Force la page à être dynamique (pas de prerendering)
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export default function AuthCallbackPage() {
   const router = useRouter();
