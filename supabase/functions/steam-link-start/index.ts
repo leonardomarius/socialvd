@@ -106,18 +106,18 @@ serve(async (req) => {
     const signedState = `${statePayload}.${signatureB64}`;
 
     const steamOpenIdUrl = "https://steamcommunity.com/openid/login";
-    const callbackUrl = `${supabaseUrl}/functions/v1/steam-link-callback`;
+    const frontendCallbackUrl = "https://socialvd.com/api/steam/callback";
     
     const openIdParams = new URLSearchParams({
       "openid.ns": "http://specs.openid.net/auth/2.0",
       "openid.mode": "checkid_setup",
-      "openid.return_to": callbackUrl,
+      "openid.return_to": frontendCallbackUrl,
       "openid.realm": "https://socialvd.com",
       "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
       "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
     });
 
-    const returnToWithState = `${callbackUrl}?state=${encodeURIComponent(signedState)}`;
+    const returnToWithState = `${frontendCallbackUrl}?state=${encodeURIComponent(signedState)}`;
     openIdParams.set("openid.return_to", returnToWithState);
 
     const steamAuthUrl = `${steamOpenIdUrl}?${openIdParams.toString()}`;
