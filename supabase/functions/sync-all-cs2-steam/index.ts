@@ -210,12 +210,18 @@ serve(async (req) => {
           value: p.value,
         }));
 
-        const insertRow = {
-          user_id,
-          game_id: game_id,
-          provider: "steam",
-          stats: statsArray,
-        };
+        const now = new Date().toISOString();
+
+const insertRow = {
+  user_id,
+  game_id: game_id,
+  provider: "steam",
+  external_account_id: steamid,
+  snapshot_at: now,
+  created_at: now,
+  stats: statsArray,
+};
+
 
         console.log(`[sync-all-cs2-steam] Inserting stats for user ${user_id}:`, JSON.stringify(insertRow));
 
