@@ -424,28 +424,46 @@ setLocalLikes(selectedPost.likes ?? 0);
       setLoadingGames(true);
 
       try {
-        // Load all game accounts from VIEW (includes CS2 and legacy)
-        const { data: accounts, error } = await supabase
-          .from("game_accounts")
-          .select("*")
+        const { data: links, error } = await supabase
+          .from("game_account_links")
+          .select(`
+            id,
+            provider,
+            external_account_id,
+            username,
+            linked_at,
+            game_id,
+            games (
+              id,
+              name,
+              slug
+            )
+          `)
           .eq("user_id", id)
-          .order("created_at", { ascending: false });
+          .is("revoked_at", null)
+          .order("linked_at", { ascending: false });
 
         if (error) {
-          // Only log if error has meaningful content (message, code, or non-empty object)
           const hasContent = error.message || error.code || (typeof error === 'object' && Object.keys(error).length > 0);
           if (hasContent) {
             console.error("Error loading game accounts:", error);
           }
           setGameAccounts([]);
         } else {
-          setGameAccounts(accounts || []);
+          const accounts: GameAccount[] = (links || []).map((link: any) => ({
+            id: link.id,
+            user_id: id,
+            game: link.games?.name || link.games?.slug || "Unknown",
+            username: link.username || link.external_account_id,
+            platform: link.provider === "steam" ? "Steam" : link.provider || null,
+            verified: link.provider === "steam",
+          }));
+          setGameAccounts(accounts);
         }
       } catch (error) {
         console.error("Error in loadGameAccounts:", error);
         setGameAccounts([]);
       } finally {
-        // TOUJOURS désactiver le loading, même en cas d'erreur
         setLoadingGames(false);
       }
     };
