@@ -16,64 +16,90 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     if (hasProcessedRef.current) return;
+    console.log("[AUTH CALLBACK] Starting callback processing");
 
-    // ✅ Vérifier les erreurs OAuth dans l'URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const hashParams = new URLSearchParams(window.location.hash.substring(1));
-    const errorParam = urlParams.get("error") || hashParams.get("error");
-    const errorDescription = urlParams.get("error_description") || hashParams.get("error_description");
+    const handleCallback = async () => {
+      // ✅ Vérifier les erreurs OAuth dans l'URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const errorParam = urlParams.get("error") || hashParams.get("error");
+      const errorDescription = urlParams.get("error_description") || hashParams.get("error_description");
 
-    if (errorParam) {
-      const errorMsg = errorDescription || "Google authentication failed. Please try again.";
-      hasProcessedRef.current = true;
-      window.history.replaceState(null, "", window.location.pathname);
-      router.replace(`/login?error=${encodeURIComponent(errorMsg)}`);
-      return;
-    }
-
-    // ✅ Utiliser onAuthStateChange pour attendre la confirmation de session
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (hasProcessedRef.current) return;
-
-      try {
-        if (event === "SIGNED_IN" && session?.user) {
-          hasProcessedRef.current = true;
-          
-          // Nettoyer l'URL
-          window.history.replaceState(null, "", window.location.pathname);
-          
-          if (subscriptionRef.current) {
-            subscriptionRef.current.unsubscribe();
-          }
-
-          // ✅ Session OK → rediriger vers /feed
-          router.replace("/feed");
-        } else if (event === "SIGNED_OUT" || (event === "TOKEN_REFRESHED" && !session)) {
-          hasProcessedRef.current = true;
-          setError("Authentication failed. Please try again.");
-          window.history.replaceState(null, "", window.location.pathname);
-          
-          if (subscriptionRef.current) {
-            subscriptionRef.current.unsubscribe();
-          }
-          
-          router.replace(`/login?error=${encodeURIComponent("Google authentication failed. Please try again.")}`);
-        }
-      } catch (err) {
-        console.error("Exception in auth callback:", err);
+      if (errorParam) {
+        console.log("[AUTH CALLBACK] OAuth error detected:", errorParam);
+        const errorMsg = errorDescription || "Google authentication failed. Please try again.";
         hasProcessedRef.current = true;
-        setError("An unexpected error occurred. Please try again.");
+        window.history.replaceState(null, "", window.location.pathname);
+        router.replace(`/login?error=${encodeURIComponent(errorMsg)}`);
+        return;
+      }
+
+      // ✅ Vérifier immédiatement si une session existe déjà (cas où Supabase a déjà traité le hash)
+      const { data: { session: existingSession }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (existingSession?.user) {
+        console.log("[AUTH CALLBACK] Session already exists, redirecting to /feed");
+        hasProcessedRef.current = true;
         window.history.replaceState(null, "", window.location.pathname);
         
         if (subscriptionRef.current) {
           subscriptionRef.current.unsubscribe();
         }
         
-        router.replace(`/login?error=${encodeURIComponent("An error occurred. Please try again.")}`);
+        router.replace("/feed");
+        return;
       }
-    });
 
-    subscriptionRef.current = subscription;
+      // ✅ Utiliser onAuthStateChange pour attendre la confirmation de session
+      console.log("[AUTH CALLBACK] Waiting for SIGNED_IN event");
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (hasProcessedRef.current) return;
+        console.log("[AUTH CALLBACK] Auth state change event:", event, session?.user ? "has session" : "no session");
+
+        try {
+          if (event === "SIGNED_IN" && session?.user) {
+            console.log("[AUTH CALLBACK] SIGNED_IN confirmed, redirecting to /feed");
+            hasProcessedRef.current = true;
+            
+            // Nettoyer l'URL
+            window.history.replaceState(null, "", window.location.pathname);
+            
+            if (subscriptionRef.current) {
+              subscriptionRef.current.unsubscribe();
+            }
+
+            // ✅ Session OK → rediriger vers /feed
+            router.replace("/feed");
+          } else if (event === "SIGNED_OUT" || (event === "TOKEN_REFRESHED" && !session)) {
+            console.log("[AUTH CALLBACK] Authentication failed");
+            hasProcessedRef.current = true;
+            setError("Authentication failed. Please try again.");
+            window.history.replaceState(null, "", window.location.pathname);
+            
+            if (subscriptionRef.current) {
+              subscriptionRef.current.unsubscribe();
+            }
+            
+            router.replace(`/login?error=${encodeURIComponent("Google authentication failed. Please try again.")}`);
+          }
+        } catch (err) {
+          console.error("[AUTH CALLBACK] Exception:", err);
+          hasProcessedRef.current = true;
+          setError("An unexpected error occurred. Please try again.");
+          window.history.replaceState(null, "", window.location.pathname);
+          
+          if (subscriptionRef.current) {
+            subscriptionRef.current.unsubscribe();
+          }
+          
+          router.replace(`/login?error=${encodeURIComponent("An error occurred. Please try again.")}`);
+        }
+      });
+
+      subscriptionRef.current = subscription;
+    };
+
+    handleCallback();
 
     // Cleanup
     return () => {

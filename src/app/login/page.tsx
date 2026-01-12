@@ -22,18 +22,24 @@ export default function LoginPage() {
     }
 
     setGoogleLoading(true);
+    console.log("[LOGIN] Google OAuth button clicked");
 
     try {
-      // ✅ Lancer OAuth avec PKCE - Supabase gère automatiquement même avec session existante
+      // ✅ Construire l'URL de callback (fallback si NEXT_PUBLIC_SITE_URL n'est pas défini)
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "");
+      const redirectTo = `${siteUrl}/auth/callback`;
+      console.log("[LOGIN] RedirectTo URL:", redirectTo);
+
+      // ✅ Lancer OAuth avec PKCE
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+          redirectTo,
         },
       });
 
       if (error) {
-        console.error("OAuth error:", error);
+        console.error("[LOGIN] OAuth error:", error);
         alert("Error connecting to Google: " + error.message);
         setGoogleLoading(false);
         return;
@@ -42,6 +48,7 @@ export default function LoginPage() {
       // ✅ signInWithOAuth ne redirige PAS automatiquement
       // Il faut rediriger MANUELLEMENT vers l'URL Google OAuth
       if (data?.url) {
+        console.log("[LOGIN] OAuth URL received, redirecting to Google OAuth");
         // Redirection IMMÉDIATE vers Google OAuth (externe)
         window.location.href = data.url;
         // Pas besoin de réinitialiser googleLoading car l'utilisateur quitte la page
@@ -49,11 +56,11 @@ export default function LoginPage() {
       }
 
       // Si pas d'URL, erreur inattendue
-      console.error("No OAuth URL returned");
+      console.error("[LOGIN] No OAuth URL returned from signInWithOAuth");
       alert("An error occurred. Please try again.");
       setGoogleLoading(false);
     } catch (err) {
-      console.error("Exception in Google login:", err);
+      console.error("[LOGIN] Exception in Google login:", err);
       alert("An error occurred. Please try again.");
       setGoogleLoading(false);
     }
