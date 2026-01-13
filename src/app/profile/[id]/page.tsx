@@ -162,7 +162,6 @@ type Comment = {
 
     const [gameAccounts, setGameAccounts] = useState<GameAccount[]>([]);
     const [loadingGames, setLoadingGames] = useState(true);
-    const [sessionReady, setSessionReady] = useState(false);
 
     // UI toggle for Game Accounts card
     const [showAccountsCard, setShowAccountsCard] = useState(false);
@@ -280,11 +279,11 @@ setLocalLikes(selectedPost.likes ?? 0);
 
     // Load current user
     useEffect(() => {
-      const getUser = async () => {
-        const { data } = await supabase.auth.getUser();
-        setMyId(data.user?.id || null);
+      const init = async () => {
+        const { data: userData } = await supabase.auth.getUser();
+        setMyId(userData.user?.id || null);
       };
-      getUser();
+      init();
     }, []);
 
     // ✅ Load profile first
@@ -309,29 +308,43 @@ setLocalLikes(selectedPost.likes ?? 0);
       };
     }, [id]);
 
-    // ✅ Load other data after profile is loaded
+    // ✅ Load game accounts — PUBLIC ACCESS
     useEffect(() => {
-      if (!id || profileLoading || !profile) return;
-
-      loadUserPosts();
-      loadFollowCounts();
-      loadMatesCount();
-    }, [id, profileLoading, profile]);
-
-    // ✅ Load game accounts after session is ready
-    useEffect(() => {
-      if (
-        !sessionReady ||
-        !myId ||
-        !id ||
-        profileLoading ||
-        !profile
-      ) {
+      if (!id) {
         return;
       }
 
+      let cancelled = false;
+
+      const loadGameAccountsData = async () => {
+        setLoadingGames(true);
+
+        try {
+          const accounts = await loadGameAccounts(supabase, id);
+
+          if (!cancelled) {
+            setGameAccounts(Array.isArray(accounts) ? accounts : []);
+          }
+        } catch (error) {
+          console.error("[loadGameAccountsData] Fatal error:", error);
+
+          if (!cancelled) {
+            setGameAccounts([]);
+          }
+        } finally {
+          if (!cancelled) {
+            setLoadingGames(false);
+          }
+        }
+      };
+
       loadGameAccountsData();
-    }, [sessionReady, myId, id, profileLoading, profile]);
+
+      return () => {
+        cancelled = true;
+      };
+    }, [id]);
+
 
     // ✅ Check follow status when myId is available
     useEffect(() => {
@@ -433,22 +446,6 @@ setLocalLikes(selectedPost.likes ?? 0);
   setUserPosts(formattedPosts);
   setLoadingPosts(false);
 };
-
-
-    // Game accounts
-    const loadGameAccountsData = async () => {
-      setLoadingGames(true);
-
-      try {
-        const accounts = await loadGameAccounts(supabase, id);
-        setGameAccounts(accounts);
-      } catch (error: any) {
-        console.error("[loadGameAccountsData] Exception:", error);
-        setGameAccounts([]);
-      } finally {
-        setLoadingGames(false);
-      }
-    };
 
     // Follows count
     const loadFollowCounts = async () => {
