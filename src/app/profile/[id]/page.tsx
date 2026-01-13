@@ -345,7 +345,6 @@ setLocalLikes(selectedPost.likes ?? 0);
       };
     }, [id]);
 
-
     // ✅ Check follow status when myId is available
     useEffect(() => {
       if (!id || !myId || profileLoading || !profile) return;
@@ -390,62 +389,97 @@ setLocalLikes(selectedPost.likes ?? 0);
 
     // Posts
    const loadUserPosts = async () => {
-  setLoadingPosts(true);
-
-  let postsQuery = supabase
-    .from("posts")
-    .select(`
-      *,
-      games (
-        id,
-        name,
-        slug
-      ),
-      likes(count)
-    `)
-    .eq("user_id", id)
-    .order("created_at", { ascending: false });
-
-  const { data: postsData, error } = await postsQuery;
-
-  if (error) {
-    console.error(error);
+  if (!id) {
     setLoadingPosts(false);
     return;
   }
 
-  // récupérer les likes du user connecté
-  let myLikesMap: Record<string, boolean> = {};
-  if (myId) {
-    const { data: myLikes } = await supabase
-      .from("likes")
-      .select("post_id")
-      .eq("user_id", myId);
+  setLoadingPosts(true);
 
-    myLikesMap =
-      myLikes?.reduce((acc: any, row: any) => {
-        acc[row.post_id] = true;
-        return acc;
-      }, {}) || {};
+  try {
+    let postsQuery = supabase
+      .from("posts")
+      .select(`
+        *,
+        games (
+          id,
+          name,
+          slug
+        ),
+        likes(count)
+      `)
+      .eq("user_id", id)
+      .order("created_at", { ascending: false });
+
+    const { data: postsData, error } = await postsQuery;
+
+    if (error) {
+      console.error("[loadUserPosts] Error fetching posts:", error);
+      setUserPosts([]);
+      return;
+    }
+
+    // récupérer les likes du user connecté
+    let myLikesMap: Record<string, boolean> = {};
+    if (myId) {
+      const { data: myLikes } = await supabase
+        .from("likes")
+        .select("post_id")
+        .eq("user_id", myId);
+
+      myLikesMap =
+        myLikes?.reduce((acc: any, row: any) => {
+          acc[row.post_id] = true;
+          return acc;
+        }, {}) || {};
+    }
+
+    const formattedPosts = (postsData || []).map((p: any) => {
+      const likesArray = p.likes || [];
+      const likesCount =
+        Array.isArray(likesArray) && likesArray[0]?.count
+          ? likesArray[0].count
+          : 0;
+
+      return {
+        ...p,
+        likes: likesCount,
+        isLikedByMe: !!myLikesMap[p.id],
+      };
+    });
+
+    setUserPosts(formattedPosts);
+  } catch (err) {
+    console.error("[loadUserPosts] Exception:", err);
+    setUserPosts([]);
+  } finally {
+    setLoadingPosts(false);
   }
-
-  const formattedPosts = (postsData || []).map((p: any) => {
-    const likesArray = p.likes || [];
-    const likesCount =
-      Array.isArray(likesArray) && likesArray[0]?.count
-        ? likesArray[0].count
-        : 0;
-
-    return {
-      ...p,
-      likes: likesCount,
-      isLikedByMe: !!myLikesMap[p.id],
-    };
-  });
-
-  setUserPosts(formattedPosts);
-  setLoadingPosts(false);
 };
+
+    // ✅ Load user posts
+    useEffect(() => {
+      if (!id) {
+        setLoadingPosts(false);
+        return;
+      }
+
+      let cancelled = false;
+
+      const loadPostsData = async () => {
+        await loadUserPosts();
+        if (cancelled) {
+          // Ne pas mettre à jour l'état si le composant est démonté
+          return;
+        }
+      };
+
+      loadPostsData();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [id, myId]);
 
     // Follows count
     const loadFollowCounts = async () => {
