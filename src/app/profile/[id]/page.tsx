@@ -10,6 +10,7 @@
   import { XMarkIcon, HeartIcon } from "@heroicons/react/24/outline";
   import { HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
   import { isCS2Account } from "@/lib/cs2-utils";
+  import { loadGameAccounts } from "@/lib/gameAccounts";
 
   // 🔥 AJOUT — IMPORT
   import MateSessionButton from "@/components/MateSessionButton";
@@ -313,8 +314,14 @@ setLocalLikes(selectedPost.likes ?? 0);
 
       loadUserPosts();
       loadFollowCounts();
-      loadGameAccounts();
       loadMatesCount();
+    }, [id, profileLoading, profile]);
+
+    // ✅ Load game accounts after session is ready
+    useEffect(() => {
+      if (!id || profileLoading || !profile) return;
+
+      loadGameAccountsData();
     }, [id, profileLoading, profile]);
 
     // ✅ Check follow status when myId is available
@@ -420,60 +427,14 @@ setLocalLikes(selectedPost.likes ?? 0);
 
 
     // Game accounts
-    const loadGameAccounts = async () => {
+    const loadGameAccountsData = async () => {
       setLoadingGames(true);
 
       try {
-        const { data: links, error } = await supabase
-          .from("game_account_links")
-          .select(`
-            id,
-            provider,
-            external_account_id,
-            username,
-            linked_at,
-            game_id,
-            games (
-              id,
-              name,
-              slug
-            )
-          `)
-          .eq("user_id", id)
-          .is("revoked_at", null)
-          .order("linked_at", { ascending: false });
-
-        if (Array.isArray(links)) {
-          const accounts: GameAccount[] = links.map((link: any) => ({
-            id: link.id,
-            user_id: id,
-            game: link.games?.name || link.games?.slug || "Unknown",
-            username: link.username || link.external_account_id,
-            platform: link.provider === "steam" ? "Steam" : link.provider || null,
-            verified: link.provider === "steam",
-          }));
-          setGameAccounts(accounts);
-          setLoadingGames(false);
-          return;
-        }
-
-        if (links === null || links === undefined) {
-          setGameAccounts([]);
-          setLoadingGames(false);
-          return;
-        }
-
-        if (error && typeof error === 'object') {
-          const hasRealError = (typeof error.message === 'string' && error.message.length > 0) ||
-                              (typeof error.code === 'string' && error.code.length > 0);
-          if (hasRealError) {
-            console.error("[loadGameAccounts] Error loading game accounts:", error);
-          }
-        }
-
-        setGameAccounts([]);
-      } catch (error) {
-        console.error("[loadGameAccounts] Exception in loadGameAccounts:", error);
+        const accounts = await loadGameAccounts(supabase, id);
+        setGameAccounts(accounts);
+      } catch (error: any) {
+        console.error("[loadGameAccountsData] Exception:", error);
         setGameAccounts([]);
       } finally {
         setLoadingGames(false);

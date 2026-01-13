@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image";
 import { isCS2Account } from "@/lib/cs2-utils";
+import { loadGameAccounts } from "@/lib/gameAccounts";
 
 /* ---------------------------------------------
    Types
@@ -157,66 +158,20 @@ export default function EditProfileForm({
 
   useEffect(() => {
     loadPerformances();
-    loadGameAccounts();
+    loadGameAccountsData();
   }, []);
 
   /* ---------------------------------------------
      Load game accounts (from game_account_links)
   --------------------------------------------- */
-  async function loadGameAccounts() {
+  async function loadGameAccountsData() {
     setLoadingAccounts(true);
     
     try {
-      const { data: links, error } = await supabase
-        .from("game_account_links")
-        .select(`
-          id,
-          provider,
-          external_account_id,
-          username,
-          linked_at,
-          game_id,
-          games (
-            id,
-            name,
-            slug
-          )
-        `)
-        .eq("user_id", userId)
-        .is("revoked_at", null)
-        .order("linked_at", { ascending: false });
-
-      if (Array.isArray(links)) {
-        const accounts: GameAccount[] = links.map((link: any) => ({
-          id: link.id,
-          user_id: userId,
-          game: link.games?.name || link.games?.slug || "Unknown",
-          username: link.username || link.external_account_id,
-          platform: link.provider === "steam" ? "Steam" : link.provider || null,
-          verified: link.provider === "steam",
-        }));
-        setGameAccounts(accounts);
-        setLoadingAccounts(false);
-        return;
-      }
-
-      if (links === null || links === undefined) {
-        setGameAccounts([]);
-        setLoadingAccounts(false);
-        return;
-      }
-
-      if (error && typeof error === 'object') {
-        const hasRealError = (typeof error.message === 'string' && error.message.length > 0) ||
-                            (typeof error.code === 'string' && error.code.length > 0);
-        if (hasRealError) {
-          console.error("[loadGameAccounts] Error loading game accounts:", error);
-        }
-      }
-
-      setGameAccounts([]);
-    } catch (error) {
-      console.error("[loadGameAccounts] Exception in loadGameAccounts:", error);
+      const accounts = await loadGameAccounts(supabase, userId);
+      setGameAccounts(accounts);
+    } catch (error: any) {
+      console.error("[loadGameAccountsData] Exception:", error);
       setGameAccounts([]);
     } finally {
       setLoadingAccounts(false);
