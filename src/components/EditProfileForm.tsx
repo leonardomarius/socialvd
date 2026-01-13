@@ -186,13 +186,9 @@ export default function EditProfileForm({
         .is("revoked_at", null)
         .order("linked_at", { ascending: false });
 
-      if (error) {
-        const hasContent = error.message || error.code || (typeof error === 'object' && Object.keys(error).length > 0);
-        if (hasContent) {
-          console.error("Error loading game accounts:", error);
-        }
-        setGameAccounts([]);
-      } else {
+      console.log("[loadGameAccounts] Response - data:", links, "error:", error);
+
+      if (links !== null && links !== undefined) {
         const accounts: GameAccount[] = (links || []).map((link: any) => ({
           id: link.id,
           user_id: userId,
@@ -202,9 +198,17 @@ export default function EditProfileForm({
           verified: link.provider === "steam",
         }));
         setGameAccounts(accounts);
+        if (error && (error.message || error.code)) {
+          console.warn("[loadGameAccounts] Warning (data still processed):", error);
+        }
+      } else if (error && (error.message || error.code)) {
+        console.error("[loadGameAccounts] Error loading game accounts:", error);
+        setGameAccounts([]);
+      } else {
+        setGameAccounts([]);
       }
     } catch (error) {
-      console.error("Error in loadGameAccounts:", error);
+      console.error("[loadGameAccounts] Exception in loadGameAccounts:", error);
       setGameAccounts([]);
     } finally {
       setLoadingAccounts(false);
