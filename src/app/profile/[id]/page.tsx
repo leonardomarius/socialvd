@@ -162,6 +162,7 @@ type Comment = {
 
     const [gameAccounts, setGameAccounts] = useState<GameAccount[]>([]);
     const [loadingGames, setLoadingGames] = useState(true);
+    const [sessionReady, setSessionReady] = useState(false);
 
     // UI toggle for Game Accounts card
     const [showAccountsCard, setShowAccountsCard] = useState(false);
@@ -319,10 +320,18 @@ setLocalLikes(selectedPost.likes ?? 0);
 
     // ✅ Load game accounts after session is ready
     useEffect(() => {
-      if (!id || profileLoading || !profile) return;
+      if (
+        !sessionReady ||
+        !myId ||
+        !id ||
+        profileLoading ||
+        !profile
+      ) {
+        return;
+      }
 
       loadGameAccountsData();
-    }, [id, profileLoading, profile]);
+    }, [sessionReady, myId, id, profileLoading, profile]);
 
     // ✅ Check follow status when myId is available
     useEffect(() => {
