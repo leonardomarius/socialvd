@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 /* =====================
    TYPES
@@ -9,21 +10,18 @@ import Link from "next/link";
 
 export type GameStatus = "open" | "locked" | "full" | "running";
 
-export type GameType = "Battle Royale" | "Team Match" | "Ranked" | "Tournament";
-
-export type Game = {
+export type Match = {
   id: string;
-  game: string; // "CS2", "Apex Legends", etc.
-  format: string; // "5v5", "Trio", etc.
-  level: string; // "Gold+", "Plat+", etc.
-  buyIn: number; // 0.25, 0.50, 1.00, 2.00
-  players: {
-    current: number;
-    max: number;
-  };
-  startTime: string; // "20:30", "21:00", etc.
-  prizePool: number; // Total prize pool in euros
-  type: GameType;
+  game_name: string; // From games.name
+  format: string;
+  level_min: string | null;
+  level_max: string | null;
+  buy_in: number;
+  players_current: number; // Calculated from game_participants
+  max_players: number;
+  start_time: string;
+  prize_pool: number;
+  match_type: string;
   status: GameStatus;
 };
 
@@ -63,69 +61,138 @@ export default function GamesLobby() {
     apex: false,
   });
 
-  // Mock games data
-  const [games] = useState<Game[]>([
-    {
-      id: "1",
-      game: "Apex Legends",
-      format: "Trio",
-      level: "Plat+",
-      buyIn: 1.0,
-      players: { current: 52, max: 60 },
-      startTime: "21:00",
-      prizePool: 100,
-      type: "Battle Royale",
-      status: "open",
-    },
-    {
-      id: "2",
-      game: "CS2",
-      format: "5v5",
-      level: "Gold+",
-      buyIn: 0.5,
-      players: { current: 8, max: 10 },
-      startTime: "20:30",
-      prizePool: 50,
-      type: "Team Match",
-      status: "open",
-    },
-    {
-      id: "3",
-      game: "Apex Legends",
-      format: "Solo",
-      level: "Diamond+",
-      buyIn: 2.0,
-      players: { current: 60, max: 60 },
-      startTime: "22:00",
-      prizePool: 200,
-      type: "Battle Royale",
-      status: "full",
-    },
-    {
-      id: "4",
-      game: "CS2",
-      format: "5v5",
-      level: "Plat+",
-      buyIn: 1.0,
-      players: { current: 10, max: 10 },
-      startTime: "19:00",
-      prizePool: 100,
-      type: "Ranked",
-      status: "locked",
-    },
-    {
-      id: "5",
-      game: "Apex Legends",
-      format: "Duo",
-      level: "Gold+",
-      buyIn: 0.25,
-      players: { current: 38, max: 40 },
-      startTime: "21:30",
-      prizePool: 25,
-      type: "Battle Royale",
-      status: "open",
-    },
-  ]);
+  // Matches state
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  /* =====================
+     LOAD MATCHES FROM SUPABASE
+  ===================== */
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadMatches = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // 1. Load matches with game names
+        const { data: matchesData, error: matchesError } = await supabase
+          .from("matches")
+          .select(`
+            id,
+            format,
+            level_min,
+            level_max,
+            buy_in,
+            max_players,
+            start_time,
+            prize_pool,
+            match_type,
+            status,
+            games (
+              name
+            )
+          `)
+          .order("start_time", { ascending: true });
+
+        if (!mounted) return;
+
+        if (matchesError) {
+          console.error("Error loading matches:", matchesError);
+          console.error("Error details:", {
+            message: matchesError.message,
+            details: matchesError.details,
+            hint: matchesError.hint,
+            code: matchesError.code,
+          });
+          setError(`Failed to load matches: ${matchesError.message || "Unknown error"}`);
+          setMatches([]);
+          setLoading(false);
+          return;
+        }
+
+        if (!matchesData || matchesData.length === 0) {
+          setMatches([]);
+          setLoading(false);
+          return;
+        }
+
+        // 2. For each match, count participants
+        const matchesWithCounts = await Promise.all(
+          matchesData.map(async (match: any) => {
+            const { count, error: countError } = await supabase
+              .from("game_participants")
+              .select("*", { count: "exact", head: true })
+              .eq("match_id", match.id);
+
+            if (countError) {
+              console.error(`Error counting participants for match ${match.id}:`, countError);
+              return null;
+            }
+
+            // Format level display
+            const levelDisplay =
+              match.level_min && match.level_max
+                ? `${match.level_min}+`
+                : match.level_min
+                ? `${match.level_min}+`
+                : match.level_max
+                ? `≤${match.level_max}`
+                : "Any";
+
+            // Format start time (HH:MM from ISO string)
+            const startDate = match.start_time ? new Date(match.start_time) : null;
+            const startTimeFormatted = startDate
+              ? `${startDate.getHours().toString().padStart(2, "0")}:${startDate.getMinutes().toString().padStart(2, "0")}`
+              : "—";
+
+            return {
+              id: match.id,
+              game_name: match.games?.name || "Unknown Game",
+              format: match.format || "—",
+              level_min: match.level_min,
+              level_max: match.level_max,
+              level_display: levelDisplay,
+              buy_in: match.buy_in || 0,
+              players_current: count || 0,
+              max_players: match.max_players || 0,
+              start_time: match.start_time,
+              start_time_formatted: startTimeFormatted,
+              prize_pool: match.prize_pool || 0,
+              match_type: match.match_type || "—",
+              status: (match.status as GameStatus) || "open",
+            };
+          })
+        );
+
+        if (!mounted) return;
+
+        // Filter out null results
+        const validMatches = matchesWithCounts.filter((m): m is Match & { level_display: string; start_time_formatted: string } => m !== null);
+
+        setMatches(validMatches as any);
+      } catch (err) {
+        console.error("Unexpected error loading matches:", err);
+        if (mounted) {
+          setError("An unexpected error occurred. Please refresh the page.");
+          setMatches([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadMatches();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   /* =====================
      FILTER HANDLERS
@@ -228,11 +295,21 @@ export default function GamesLobby() {
         </div>
 
         <div className="games-table-wrapper">
-          {games.length === 0 ? (
+          {loading ? (
             <div className="empty-state">
-              <div className="empty-state-title">No games available</div>
+              <div className="empty-state-title">Loading matches...</div>
+            </div>
+          ) : error ? (
+            <div className="empty-state">
+              <div className="empty-state-title" style={{ color: "#f87171" }}>
+                {error}
+              </div>
+            </div>
+          ) : matches.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-title">No matches available</div>
               <div className="empty-state-text">
-                Games will appear here once the system is connected.
+                No matches are currently scheduled. Check back later.
               </div>
             </div>
           ) : (
@@ -252,54 +329,54 @@ export default function GamesLobby() {
                 </tr>
               </thead>
               <tbody>
-                {games.map((game) => (
+                {matches.map((match) => (
                   <tr
-                    key={game.id}
+                    key={match.id}
                     className="game-row-clickable"
                     onClick={() => {
-                      window.location.href = `/feed/${game.id}`;
+                      window.location.href = `/matches/${match.id}`;
                     }}
                   >
                     <td>
                       <Link
-                        href={`/feed/${game.id}`}
+                        href={`/matches/${match.id}`}
                         className="game-name-link"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <span className="game-name">{game.game}</span>
+                        <span className="game-name">{match.game_name}</span>
                       </Link>
                     </td>
                     <td>
-                      <span className="game-format">{game.format}</span>
+                      <span className="game-format">{match.format}</span>
                     </td>
                     <td>
-                      <span className="game-level">{game.level}</span>
+                      <span className="game-level">{(match as any).level_display || "—"}</span>
                     </td>
                     <td>
-                      <span className="game-buyin">{game.buyIn.toFixed(2)} €</span>
+                      <span className="game-buyin">{match.buy_in.toFixed(2)} €</span>
                     </td>
                     <td>
                       <span className="game-players">
-                        {game.players.current} / {game.players.max}
+                        {match.players_current} / {match.max_players}
                       </span>
                     </td>
                     <td>
-                      <span className="game-start-time">{game.startTime}</span>
+                      <span className="game-start-time">{(match as any).start_time_formatted || "—"}</span>
                     </td>
                     <td>
-                      <span className="game-prizepool">{game.prizePool} €</span>
+                      <span className="game-prizepool">{match.prize_pool} €</span>
                     </td>
                     <td>
-                      <span className="game-type">{game.type}</span>
+                      <span className="game-type">{match.match_type}</span>
                     </td>
                     <td>
-                      <span className={`game-status ${game.status}`}>
-                        {game.status}
+                      <span className={`game-status ${match.status}`}>
+                        {match.status}
                       </span>
                     </td>
                     <td className="game-action" onClick={(e) => e.stopPropagation()}>
-                      {game.status === "open" ? (
-                        <Link href={`/feed/${game.id}`}>
+                      {match.status === "open" ? (
+                        <Link href={`/matches/${match.id}`}>
                           <button className="btn-join">Join</button>
                         </Link>
                       ) : (

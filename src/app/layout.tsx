@@ -32,9 +32,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {/* ✅ Main content - toujours rendu, même si loading */}
             <main
               style={{
-                maxWidth: "800px",
-                margin: "0 auto",
+                width: "100%",
+                maxWidth: "100%",
+                margin: "0",
                 padding: "0",
+                overflowX: "hidden",
               }}
             >
               {children}

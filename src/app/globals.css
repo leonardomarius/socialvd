@@ -15,6 +15,16 @@
   font-family: "Space Grotesk", sans-serif !important;
 }
 
+html {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+body {
+  overflow-x: hidden;
+  width: 100%;
+}
+
 /* ======================================
    🎮 FOND GRIS FONCÉ — STYLE PREMIUM
    — CSS pur, performance-friendly
@@ -967,14 +977,18 @@ a.game-link:active {
   display: flex;
   gap: 24px;
   padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   min-height: calc(100vh - 200px);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* Sidebar */
 .games-lobby-sidebar {
   width: 280px;
+  min-width: 280px;
   flex-shrink: 0;
   background: rgba(30, 30, 30, 0.8);
   border: 1px solid rgba(100, 100, 100, 0.3);
@@ -985,6 +999,7 @@ a.game-link:active {
   height: fit-content;
   position: sticky;
   top: 24px;
+  box-sizing: border-box;
 }
 
 .filter-section {
@@ -1065,12 +1080,17 @@ a.game-link:active {
 /* Main content */
 .games-lobby-main {
   flex: 1;
+  min-width: 0; /* Important pour flex */
   background: rgba(30, 30, 30, 0.8);
   border: 1px solid rgba(100, 100, 100, 0.3);
   border-radius: 12px;
   padding: 24px;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .games-lobby-header {
@@ -1091,13 +1111,20 @@ a.game-link:active {
 
 /* Table */
 .games-table-wrapper {
-  overflow-x: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  flex: 1;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .games-table {
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
+  table-layout: fixed; /* Force les colonnes à respecter les largeurs */
 }
 
 .games-table thead {
@@ -1130,8 +1157,79 @@ a.game-link:active {
 }
 
 .games-table td {
-  padding: 16px;
+  padding: 16px 8px;
   color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.games-table td:first-child {
+  padding-left: 16px;
+}
+
+.games-table td:last-child {
+  padding-right: 16px;
+}
+
+/* Colonnes avec largeurs optimisées en pourcentage */
+.games-table th:nth-child(1),
+.games-table td:nth-child(1) {
+  width: 11%; /* Jeu - réduit de 12% */
+}
+
+.games-table th:nth-child(2),
+.games-table td:nth-child(2) {
+  width: 7%; /* Format - réduit de 8% */
+}
+
+.games-table th:nth-child(3),
+.games-table td:nth-child(3) {
+  width: 8%; /* Niveau - réduit de 9% */
+}
+
+.games-table th:nth-child(4),
+.games-table td:nth-child(4) {
+  width: 7%; /* Buy-in - réduit de 8% */
+}
+
+.games-table th:nth-child(5),
+.games-table td:nth-child(5) {
+  width: 8%; /* Joueurs - réduit de 9% */
+}
+
+.games-table th:nth-child(6),
+.games-table td:nth-child(6) {
+  width: 6%; /* Début - réduit de 7% */
+}
+
+.games-table th:nth-child(7),
+.games-table td:nth-child(7) {
+  width: 9%; /* Prize Pool - réduit de 10% */
+}
+
+.games-table th:nth-child(8),
+.games-table td:nth-child(8) {
+  width: 11%; /* Type - réduit de 12% */
+}
+
+.games-table th:nth-child(9),
+.games-table td:nth-child(9) {
+  width: 8%; /* Statut - réduit de 9% */
+}
+
+.games-table th:nth-child(10),
+.games-table td:nth-child(10) {
+  width: 10%; /* Action - augmenté pour le bouton Join */
+  min-width: 90px; /* Largeur minimale pour garantir la visibilité */
+}
+
+/* Colonne ACTION : pas de troncature */
+.games-table td:nth-child(10) {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  padding: 12px 8px !important; /* Padding ajusté pour la colonne ACTION */
 }
 
 .game-name {
@@ -1220,10 +1318,12 @@ a.game-link:active {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 8px 4px !important; /* Padding réduit pour la colonne ACTION */
+  white-space: nowrap;
 }
 
 .btn-join {
-  padding: 8px 20px;
+  padding: 8px 16px;
   background: rgba(34, 197, 94, 0.2);
   border: 1px solid rgba(34, 197, 94, 0.5);
   color: #4ade80;
@@ -1232,6 +1332,9 @@ a.game-link:active {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0; /* Empêche le bouton de rétrécir */
+  min-width: fit-content;
 }
 
 .btn-join:hover {
@@ -1265,11 +1368,26 @@ a.game-link:active {
 @media (max-width: 1024px) {
   .games-lobby-container {
     flex-direction: column;
+    padding: 16px;
   }
 
   .games-lobby-sidebar {
     width: 100%;
+    min-width: 100%;
     position: static;
+  }
+
+  .games-lobby-main {
+    padding: 16px;
+  }
+
+  .games-table-wrapper {
+    overflow-x: auto; /* Sur mobile, autoriser le scroll horizontal si nécessaire */
+  }
+
+  .games-table {
+    table-layout: auto; /* Sur mobile, laisser le tableau s'adapter */
+    min-width: 800px; /* Largeur minimale pour garder la lisibilité */
   }
 }
 
